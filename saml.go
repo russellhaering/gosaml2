@@ -15,6 +15,7 @@ type SAMLServiceProvider struct {
 	SPKeyStore                  dsig.X509KeyStore
 	NameIdFormat                string
 	SkipSignatureValidation     bool
+	IsOkta                      bool
 }
 
 func (sp *SAMLServiceProvider) SigningContext() *dsig.SigningContext {

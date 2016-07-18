@@ -11,7 +11,7 @@ import (
 )
 
 func (sp *SAMLServiceProvider) validationContext() *dsig.ValidationContext {
-	return dsig.NewDefaultValidationContext(sp.IDPCertificateStore)
+	return dsig.NewDefaultValidationContext(sp.IDPCertificateStore, sp.IsOkta)
 }
 
 //ValidateEncodedResponse both decodes and validates, based on SP
