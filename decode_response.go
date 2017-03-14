@@ -33,7 +33,20 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 
 	response, err := sp.validationContext().Validate(doc.Root())
 	if err != nil && !sp.SkipSignatureValidation || response == nil {
-		return nil, err
+		// Attempt to verify the assertion's signature
+		assertionElement := doc.Root().FindElement(AssertionTag)
+		if assertionElement == nil {
+			return nil, err
+		}
+
+		response, err = sp.validationContext().Validate(assertionElement)
+		if err != nil && !sp.SkipSignatureValidation || response == nil {
+			return nil, err
+		}
+
+		doc.RemoveChild(assertionElement)
+		doc.AddChild(response)
+		response = doc.Root()
 	}
 
 	err = sp.Validate(response)
