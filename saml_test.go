@@ -88,7 +88,7 @@ func TestSAML(t *testing.T) {
 	// valid. We have to re-sign them here before validating them
 	raw := signResponse(t, rawResponse, sp)
 
-	el, err := sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(raw)))
+	el, err := sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(raw)), &WarningInfo{})
 	require.NoError(t, err)
 	require.NotEmpty(t, el)
 
@@ -154,47 +154,47 @@ func TestSAML(t *testing.T) {
 	require.Equal(t, "Simon", assertionInfo.Values.Get("LastName"))
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.Values.Get("Login"))
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(manInTheMiddledResponse)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(manInTheMiddledResponse)), &WarningInfo{})
 	require.Error(t, err)
 	require.Equal(t, "Signature could not be verified", err.Error())
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredReferenceURIResponse)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredReferenceURIResponse)), &WarningInfo{})
 	require.Error(t, err)
 	// require.IsType(t, ErrInvalidValue{}, err, err.Error())
 	require.Equal(t, "Could not verify certificate against trusted certs", err.Error())
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSignedInfoResponse)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSignedInfoResponse)), &WarningInfo{})
 	require.Error(t, err)
 	require.Equal(t, "Could not verify certificate against trusted certs", err.Error())
 
 	alteredRecipient := signResponse(t, alteredRecipientResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredRecipient)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredRecipient)), &WarningInfo{})
 	require.Error(t, err)
 	require.IsType(t, err, ErrInvalidValue{})
 	require.Contains(t, err.Error(), "Recipient")
 
 	alteredDestination := signResponse(t, alteredDestinationResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredDestination)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredDestination)), &WarningInfo{})
 	require.Error(t, err)
 	require.IsType(t, err, ErrInvalidValue{})
 	require.Equal(t, err.(ErrInvalidValue).Key, "Destination")
 
 	alteredSubjectConfirmationMethod := signResponse(t, alteredSubjectConfirmationMethodResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSubjectConfirmationMethod)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSubjectConfirmationMethod)), &WarningInfo{})
 	require.Error(t, err)
 	require.IsType(t, err, ErrInvalidValue{})
 	require.Equal(t, err.(ErrInvalidValue).Reason, ReasonUnsupported)
 	require.Equal(t, err.(ErrInvalidValue).Key, SubjectConfirmationTag)
 
 	alteredVersion := signResponse(t, alteredVersionResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredVersion)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredVersion)), &WarningInfo{})
 	require.Error(t, err)
 	require.IsType(t, err, ErrInvalidValue{})
 	require.Equal(t, err.(ErrInvalidValue).Reason, ReasonUnsupported)
 	require.Equal(t, err.(ErrInvalidValue).Key, "SAML version")
 	require.Contains(t, err.Error(), "Unsupported SAML version")
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(missingIDResponse)))
+	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(missingIDResponse)), &WarningInfo{})
 	require.Error(t, err)
 	require.Equal(t, "Missing ID attribute", err.Error())
 }
@@ -202,7 +202,7 @@ func TestSAML(t *testing.T) {
 func TestInvalidResponseBadBase64(t *testing.T) {
 	sp := &SAMLServiceProvider{}
 
-	response, err := sp.ValidateEncodedResponse("invalid-base64")
+	response, err := sp.ValidateEncodedResponse("invalid-base64", &WarningInfo{})
 	require.EqualError(t, err, "illegal base64 data at input byte 7")
 	require.Nil(t, response)
 }
@@ -216,7 +216,7 @@ func TestInvalidResponseBadCompression(t *testing.T) {
 
 	b64Response := base64.StdEncoding.EncodeToString(rawResponse)
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(b64Response, &WarningInfo{})
 	require.EqualError(t, err, "flate: corrupt input before offset 3")
 	require.Nil(t, response)
 }
@@ -234,7 +234,7 @@ func TestInvalidResponseBadXML(t *testing.T) {
 
 	b64Response := base64.StdEncoding.EncodeToString(compressed.Bytes())
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(b64Response, &WarningInfo{})
 	require.EqualError(t, err, "XML syntax error on line 1: invalid character entity &Invalid (no semicolon)")
 	require.Nil(t, response)
 }
@@ -244,7 +244,7 @@ func TestInvalidResponseNoElement(t *testing.T) {
 
 	b64Response := base64.StdEncoding.EncodeToString([]byte("no-element-here"))
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(b64Response, &WarningInfo{})
 	require.EqualError(t, err, "unable to parse response")
 	require.Nil(t, response)
 }

@@ -45,22 +45,21 @@ const (
 
 //VerifyAssertionConditions inspects an assertion element and makes sure that
 //all SAML2 contracts are upheld.
-func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion) (*WarningInfo, error) {
-	warningInfo := &WarningInfo{}
+func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion, warningInfo *WarningInfo) error {
 	now := sp.Clock.Now()
 
 	conditions := assertion.Conditions
 	if conditions == nil {
-		return nil, ErrMissingElement{Tag: ConditionsTag}
+		return ErrMissingElement{Tag: ConditionsTag}
 	}
 
 	if conditions.NotBefore == "" {
-		return nil, ErrMissingElement{Tag: ConditionsTag, Attribute: NotBeforeAttr}
+		return ErrMissingElement{Tag: ConditionsTag, Attribute: NotBeforeAttr}
 	}
 
 	notBefore, err := time.Parse(time.RFC3339, conditions.NotBefore)
 	if err != nil {
-		return nil, ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
+		return ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
 	}
 
 	if now.Before(notBefore) {
@@ -68,12 +67,12 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 	}
 
 	if conditions.NotOnOrAfter == "" {
-		return nil, ErrMissingElement{Tag: ConditionsTag, Attribute: NotOnOrAfterAttr}
+		return ErrMissingElement{Tag: ConditionsTag, Attribute: NotOnOrAfterAttr}
 	}
 
 	notOnOrAfter, err := time.Parse(time.RFC3339, conditions.NotOnOrAfter)
 	if err != nil {
-		return nil, ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
+		return ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
 	}
 
 	if now.After(notOnOrAfter) {
@@ -114,12 +113,12 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		warningInfo.ProxyRestriction = proxyRestrictionInfo
 	}
 
-	return warningInfo, nil
+	return nil
 }
 
 //Validate ensures that the assertion passed is valid for the current Service
 //Provider.
-func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
+func (sp *SAMLServiceProvider) Validate(response *types.Response, warningInfo *WarningInfo) error {
 	err := sp.validateResponseAttributes(response)
 	if err != nil {
 		return err
@@ -204,12 +203,7 @@ func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
 
 		now := sp.Clock.Now()
 		if now.After(notOnOrAfter) {
-			return ErrInvalidValue{
-				Reason:   ReasonExpired,
-				Key:      NotOnOrAfterAttr,
-				Expected: now.Format(time.RFC3339),
-				Actual:   subjectConfirmationData.NotOnOrAfter,
-			}
+			warningInfo.InvalidTime = true
 		}
 
 	}
