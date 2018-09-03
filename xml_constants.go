@@ -50,6 +50,7 @@ const (
 
 	BindingHttpPost     = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
 	BindingHttpRedirect = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+	BindingHttpArtifact = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact"
 )
 
 const (
