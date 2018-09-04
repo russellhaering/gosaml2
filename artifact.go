@@ -21,7 +21,7 @@ func (sp *SAMLServiceProvider) ResolveArtifact(artifact string) (*AssertionInfo,
 	if err != nil {
 		return nil, err
 	}
-	post, err := http.NewRequest(http.MethodPost, sp.IdentityProviderArtifactResolutionServiceURL, request)
+	post, err := http.NewRequest("POST", sp.IdentityProviderArtifactResolutionServiceURL, request)
 	if err != nil {
 		return nil, err
 	}
