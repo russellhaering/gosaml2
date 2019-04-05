@@ -2,6 +2,7 @@ package saml2
 
 import (
 	"encoding/base64"
+	"net/http"
 	"sync"
 	"time"
 
@@ -23,8 +24,9 @@ func (serr ErrSaml) Error() string {
 }
 
 type SAMLServiceProvider struct {
-	IdentityProviderSSOURL string
-	IdentityProviderIssuer string
+	IdentityProviderSSOURL                       string
+	IdentityProviderIssuer                       string
+	IdentityProviderArtifactResolutionServiceURL string
 
 	AssertionConsumerServiceURL string
 	ServiceProviderIssuer       string
@@ -32,6 +34,7 @@ type SAMLServiceProvider struct {
 	SignAuthnRequests              bool
 	SignAuthnRequestsAlgorithm     string
 	SignAuthnRequestsCanonicalizer dsig.Canonicalizer
+	RequestedBinding               string
 
 	// RequestedAuthnContext allows service providers to require that the identity
 	// provider use specific authentication mechanisms. Leaving this unset will
@@ -42,6 +45,7 @@ type SAMLServiceProvider struct {
 	IDPCertificateStore     dsig.X509CertificateStore
 	SPKeyStore              dsig.X509KeyStore // Required encryption key, default signing key
 	SPSigningKeyStore       dsig.X509KeyStore // Optional signing key
+	HTTPClient              *http.Client      // Optional client for artifact resolution
 	NameIdFormat            string
 	ValidateEncryptionCert  bool
 	SkipSignatureValidation bool
@@ -114,6 +118,10 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 				Binding:  BindingHttpPost,
 				Location: sp.AssertionConsumerServiceURL,
 				Index:    1,
+			}, {
+				Binding:  BindingHttpArtifact,
+				Location: sp.AssertionConsumerServiceURL,
+				Index:    2,
 			}},
 		},
 	}, nil

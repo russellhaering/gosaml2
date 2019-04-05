@@ -27,7 +27,14 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 
 	authnRequest.CreateAttr("ID", "_"+arId.String())
 	authnRequest.CreateAttr("Version", "2.0")
-	authnRequest.CreateAttr("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")
+	switch sp.RequestedBinding {
+	case "", BindingHttpPost:
+		authnRequest.CreateAttr("ProtocolBinding", BindingHttpPost)
+	case BindingHttpArtifact:
+		authnRequest.CreateAttr("ProtocolBinding", BindingHttpArtifact)
+	default:
+		return nil, fmt.Errorf("invalid RequestedBinding, %s", sp.RequestedBinding)
+	}
 	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
 	authnRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
 	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
@@ -179,7 +186,7 @@ func (sp *SAMLServiceProvider) BuildAuthURL(relayState string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return sp.BuildAuthURLFromDocument(relayState, doc)
+	return sp.BuildAuthURLRedirect(relayState, doc)
 }
 
 // AuthRedirect takes a ResponseWriter and Request from an http interaction and
