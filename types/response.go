@@ -15,6 +15,7 @@ package types
 
 import (
 	"encoding/xml"
+	"github.com/beevik/etree"
 	"time"
 )
 
@@ -44,6 +45,7 @@ type Response struct {
 	Assertions          []Assertion          `xml:"Assertion"`
 	EncryptedAssertions []EncryptedAssertion `xml:"EncryptedAssertion"`
 	SignatureValidated  bool                 `xml:"-"` // not read, not dumped
+	Document            *etree.Document       `xml:"-"` // not read, not dumped
 }
 
 type LogoutResponse struct {
