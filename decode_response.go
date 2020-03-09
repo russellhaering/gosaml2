@@ -294,7 +294,9 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 	}
 
 	decodedResponse := &types.Response{}
-	decodedResponse.Document = doc
+	decrypted := etree.NewDocument()
+	decrypted.SetRoot(el)
+	decodedResponse.Document = decrypted
 	err = xmlUnmarshalElement(el, decodedResponse)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal response: %v", err)
