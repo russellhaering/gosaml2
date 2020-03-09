@@ -295,7 +295,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 
 	decodedResponse := &types.Response{}
 	decrypted := etree.NewDocument()
-	decrypted.SetRoot(el)
+	decrypted.SetRoot(el.Copy())
 	decodedResponse.Document = decrypted
 	err = xmlUnmarshalElement(el, decodedResponse)
 	if err != nil {
