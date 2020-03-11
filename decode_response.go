@@ -279,6 +279,8 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 		return nil, err
 	}
 
+	decrypted := etree.NewDocument()
+	decrypted.SetRoot(el.Copy())
 	var assertionSignaturesValidated bool
 	if !sp.SkipSignatureValidation {
 		err = sp.validateAssertionSignatures(el)
@@ -294,8 +296,6 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 	}
 
 	decodedResponse := &types.Response{}
-	decrypted := etree.NewDocument()
-	decrypted.SetRoot(el.Copy())
 	decodedResponse.Document = decrypted
 	err = xmlUnmarshalElement(el, decodedResponse)
 	if err != nil {
