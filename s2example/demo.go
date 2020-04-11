@@ -129,6 +129,7 @@ func main() {
 	println(authURL)
 
 	println("Supply:")
+	fmt.Printf("      Issuer      : %s\n", sp.IdentityProviderIssuer)
 	fmt.Printf("  SP ACS URL      : %s\n", sp.AssertionConsumerServiceURL)
 
 	err = http.ListenAndServe(":8080", nil)
