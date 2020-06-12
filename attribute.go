@@ -26,7 +26,7 @@ func (vals Values) Get(k string) string {
 		return ""
 	}
 	if v, ok := vals[k]; ok && len(v.Values) > 0 {
-		if len(v.Values[0].Value) == 0 {
+		if len(v.Values[0].ValueXML) != 0 {
 			return string(v.Values[0].ValueXML)
 		} else {
 			return string(v.Values[0].Value)
@@ -61,7 +61,7 @@ func (vals Values) GetAll(k string) []string {
 
 	if v, ok := vals[k]; ok && len(v.Values) > 0 {
 		for i := 0; i < len(v.Values); i++ {
-			if len(v.Values[i].Value) == 0 {
+			if len(v.Values[i].ValueXML) != 0 {
 				av = append(av, string(v.Values[i].ValueXML))
 			} else {
 				av = append(av, string(v.Values[i].Value))
