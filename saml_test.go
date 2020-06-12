@@ -180,6 +180,7 @@ func TestSAML(t *testing.T) {
 	require.Equal(t, "Phoebe", assertionInfo.Values.Get("FirstName"))
 	require.Equal(t, "Simon", assertionInfo.Values.Get("LastName"))
 	require.Equal(t, "phoebesimon", assertionInfo.Values.Get("Login"))
+	require.Equal(t, "<emailAddress><sales>sales@acme.com</sales><support>support@acme.com</support></emailAddress>", assertionInfo.Values.Get("emailAddress"))
 
 	assertionInfoModifiedAudience := signResponse(t, assertionInfoModifiedAudienceResponse, sp)
 
