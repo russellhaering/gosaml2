@@ -175,6 +175,10 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 		qs.Add("Signature", base64.StdEncoding.EncodeToString(rawSignature))
 	}
 
+	if (sp.IncludeSigAlg) {
+		qs.Set("SigAlg", ctx.GetSignatureMethodIdentifier())
+	}
+
 	//Here the parameters may appear in any order.
 	parsedUrl.RawQuery = qs.Encode()
 	return parsedUrl.String(), nil
