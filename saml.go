@@ -50,7 +50,7 @@ type SAMLServiceProvider struct {
 	SignAuthnRequestsAlgorithm     string
 	SignAuthnRequestsCanonicalizer dsig.Canonicalizer
 
-	IncludeSigAlg bool
+	IncludeSignatureParameters bool
 
 	// RequestedAuthnContext allows service providers to require that the identity
 	// provider use specific authentication mechanisms. Leaving this unset will
