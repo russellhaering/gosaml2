@@ -176,6 +176,7 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 	}
 
 	if (sp.IncludeSigAlg) {
+		ctx := sp.SigningContext()
 		qs.Set("SigAlg", ctx.GetSignatureMethodIdentifier())
 	}
 
