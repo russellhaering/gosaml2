@@ -66,6 +66,7 @@ type SAMLServiceProvider struct {
 	Clock                   *dsig.Clock
 	signingContextMu        sync.RWMutex
 	signingContext          *dsig.SigningContext
+	ClockSkew               time.Duration
 }
 
 // RequestedAuthnContext controls which authentication mechanisms are requested of
