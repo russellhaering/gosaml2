@@ -15,7 +15,9 @@ package types
 
 import (
 	"bytes"
+	"crypto/aes"
 	"crypto/cipher"
+	"crypto/des"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
@@ -43,13 +45,17 @@ func (ea *EncryptedAssertion) DecryptBytes(certs []*tls.Certificate) ([]byte, er
 		// https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/Overview.html#sec-Extensions-to-KeyInfo
 		ek = &ea.DetEncryptedKey
 	}
-	k, err := ek.DecryptSymmetricKey(certs)
+	keyBytes, err := ek.DecryptSymmetricKey(certs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot decrypt, error retrieving private key: %s", err)
 	}
 
 	switch ea.EncryptionMethod.Algorithm {
 	case MethodAES128GCM:
+		k, err := aes.NewCipher(keyBytes)
+		if err != nil {
+			return nil, err
+		}
 		c, err := cipher.NewGCM(k)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create AES-GCM: %s", err)
@@ -62,6 +68,15 @@ func (ea *EncryptedAssertion) DecryptBytes(certs []*tls.Certificate) ([]byte, er
 		}
 		return plainText, nil
 	case MethodAES128CBC, MethodAES256CBC, MethodTripleDESCBC:
+		var k cipher.Block
+		if ea.EncryptionMethod.Algorithm == MethodTripleDESCBC {
+			k, err = des.NewTripleDESCipher(keyBytes)
+		} else {
+			k, err = aes.NewCipher(keyBytes)
+		}
+		if err != nil {
+			return nil, err
+		}
 		nonce, data := data[:k.BlockSize()], data[k.BlockSize():]
 		c := cipher.NewCBCDecrypter(k, nonce)
 		c.CryptBlocks(data, data)

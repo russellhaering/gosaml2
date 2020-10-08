@@ -15,9 +15,6 @@ package types
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/des"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -99,9 +96,9 @@ func debugKeyFp(keyBytes []byte) string {
 }
 
 //DecryptSymmetricKey returns the private key contained in the EncryptedKey document
-func (ek *EncryptedKey) DecryptSymmetricKey(certs []*tls.Certificate) (cipher.Block, error) {
+func (ek *EncryptedKey) DecryptSymmetricKey(certs []*tls.Certificate) ([]byte, error) {
 
-	decryptSymmetricKey := func(cert *tls.Certificate) (cipher.Block, error) {
+	decryptSymmetricKey := func(cert *tls.Certificate) ([]byte, error) {
 
 		if len(certs[0].Certificate) < 1 {
 			return nil, fmt.Errorf("decryption tls.Certificate has no public certs attached")
@@ -143,12 +140,7 @@ func (ek *EncryptedKey) DecryptSymmetricKey(certs []*tls.Certificate) (cipher.Bl
 					return nil, fmt.Errorf("rsa internal error: %v", err)
 				}
 
-				b, err := aes.NewCipher(pt)
-				if err != nil {
-					return nil, err
-				}
-
-				return b, nil
+				return pt, nil
 			case MethodRSAv1_5:
 				pt, err := rsa.DecryptPKCS1v15(rand.Reader, pk, cipherText)
 				if err != nil {
@@ -157,18 +149,7 @@ func (ek *EncryptedKey) DecryptSymmetricKey(certs []*tls.Certificate) (cipher.Bl
 
 				//From https://docs.oasis-open.org/security/saml/v2.0/saml-core-2.0-os.pdf the xml encryption
 				//methods to be supported are from http://www.w3.org/2001/04/xmlenc#Element.
-				//https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/Overview.html#Element.
-				//https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/#sec-Algorithms
-				//Sec 5.4 Key Transport:
-				//The RSA v1.5 Key Transport algorithm given below are those used in conjunction with TRIPLEDES
-				//Please also see https://www.w3.org/TR/xmlenc-core/#sec-Algorithms and
-				//https://www.w3.org/TR/xmlenc-core/#rsav15note.
-				b, err := des.NewTripleDESCipher(pt)
-				if err != nil {
-					return nil, err
-				}
-
-				return b, nil
+				return pt, nil
 			default:
 				return nil, fmt.Errorf("unsupported encryption algorithm: %s", ek.EncryptionMethod.Algorithm)
 			}
@@ -200,10 +181,10 @@ func (ek *EncryptedKey) DecryptSymmetricKey(certs []*tls.Certificate) (cipher.Bl
 
 		var err error
 		for _, cert := range certs {
-			var keyBlock cipher.Block
-			keyBlock, err = decryptSymmetricKey(cert)
+			var keyBytes []byte
+			keyBytes, err = decryptSymmetricKey(cert)
 			if err == nil {
-				return keyBlock, err
+				return keyBytes, err
 			}
 		}
 
