@@ -96,6 +96,9 @@ func xmlUnmarshalElement(el *etree.Element, obj interface{}) error {
 	}
 	return nil
 }
+func (sp *SAMLServiceProvider) GetDecryptCertificate() (*tls.Certificate, error) {
+	return sp.getDecryptCert()
+}
 
 func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	if sp.SPKeyStore == nil {
