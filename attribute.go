@@ -26,7 +26,15 @@ func (vals Values) Get(k string) string {
 		return ""
 	}
 	if v, ok := vals[k]; ok && len(v.Values) > 0 {
-		return string(v.Values[0].Value)
+
+		// Select a first entry and verify if a NameID is present. If it is, return
+		// its value instead.
+		entry := v.Values[0]
+		if entry.NameID != nil && entry.NameID.Value != "" {
+			return entry.NameID.Value
+		}
+
+		return v.Values[0].Value
 	}
 	return ""
 }
