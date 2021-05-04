@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/beevik/etree"
 	"github.com/russellhaering/gosaml2/types"
@@ -87,6 +88,66 @@ func TestDecode(t *testing.T) {
 	err = xml.Unmarshal(f2, expected)
 
 	require.EqualValues(t, expected, assertion, "decrypted assertion did not match expectation")
+}
+
+func signResponseWithTime(t *testing.T, resp string,
+	sp *SAMLServiceProvider, notBefore time.Time, validity time.Duration) string {
+	doc := etree.NewDocument()
+	err := doc.ReadFromBytes([]byte(resp))
+	require.NoError(t, err)
+
+	el := doc.Root()
+
+	// Strip existing signatures
+	signatures := el.FindElements("//Signature")
+	for _, sig := range signatures {
+		parent := sig.Parent()
+		parent.RemoveChild(sig)
+	}
+
+	// Find the Assertion Element
+	// and load up the NotBefore, NotOnOrAfter elements
+	assertionEl := el.SelectElement("saml2:Assertion")
+	require.NotEmpty(t, assertionEl)
+
+	conditionEl := assertionEl.SelectElement("saml2:Conditions")
+	require.NotEmpty(t, conditionEl)
+
+	notBeforeEl := conditionEl.SelectAttr("NotBefore")
+	require.NotEmpty(t, notBeforeEl)
+
+	notAfterEl := conditionEl.SelectAttr("NotOnOrAfter")
+	require.NotEmpty(t, notAfterEl)
+
+	// Set the time
+
+	notBeforeEl.Value = notBefore.Format(time.RFC3339)
+	notAfterEl.Value = notBefore.Add(validity).Format(time.RFC3339)
+
+	// SubjectConfirmation elements
+
+	subjectConfirmationEl := assertionEl.FindElement("./saml2:Subject/saml2:SubjectConfirmation/saml2:SubjectConfirmationData")
+	require.NotEmpty(t, subjectConfirmationEl)
+
+	subjectNotAfterEl := subjectConfirmationEl.SelectAttr("NotOnOrAfter")
+	require.NotEmpty(t, subjectNotAfterEl)
+	subjectNotAfterEl.Value = time.Now().Add(validity).Format(time.RFC3339)
+
+	// Sign the modified response
+	el, err = sp.SigningContext().SignEnveloped(el)
+	require.NoError(t, err)
+
+	doc0 := etree.NewDocument()
+	doc0.SetRoot(el)
+	doc0.WriteSettings = etree.WriteSettings{
+		CanonicalAttrVal: true,
+		CanonicalEndTags: true,
+		CanonicalText:    true,
+	}
+
+	str, err := doc0.WriteToString()
+	require.NoError(t, err)
+	return str
 }
 
 func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
@@ -276,6 +337,39 @@ func TestSAML(t *testing.T) {
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(missingIDResponse)))
 	require.Error(t, err)
 	require.Equal(t, "Missing ID attribute", err.Error())
+
+	// ClockSkew test
+	// Setup a SAML response with NotBefore in the future
+	assertionInFuture := signResponseWithTime(t, rawResponse, sp, time.Now().Add(3*time.Minute), 1*time.Hour)
+
+	assertionInFutureInfo, err := sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInFuture)))
+	require.NoError(t, err)
+	// Should give error as NotBefore is in the future
+	require.True(t, assertionInFutureInfo.WarningInfo.InvalidTime)
+
+	//Adjust clock skew and test for expiration
+	sp.ClockSkew = 4 * time.Minute
+	assertionInFutureInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInFuture)))
+	require.NoError(t, err)
+	require.False(t, assertionInFutureInfo.WarningInfo.InvalidTime)
+
+	// Reset Clock skew
+	sp.ClockSkew = 0
+
+	// Setup an Assertion that has NotBefore 1 hour in the past, with NotOnOrAfter set to 55 minutes
+	expiredAssertion := signResponseWithTime(t, rawResponse, sp, time.Now().Add(-1*time.Hour), 55*time.Minute)
+	expiredAssertionInfo, err := sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(expiredAssertion)))
+	require.NoError(t, err)
+	// Should give error as Assertion expired 5 minutes back
+	require.True(t, expiredAssertionInfo.WarningInfo.InvalidTime)
+
+	// Setup a clockskew of 6 minutes and test for expiration
+	sp.ClockSkew = 6 * time.Minute
+	expiredAssertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(expiredAssertion)))
+	require.NoError(t, err)
+	require.False(t, expiredAssertionInfo.WarningInfo.InvalidTime)
+
+	sp.ClockSkew = 0
 }
 
 func TestInvalidResponseBadBase64(t *testing.T) {

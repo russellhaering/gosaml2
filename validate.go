@@ -76,7 +76,9 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
 	}
 
-	if now.Before(notBefore) {
+	// If now is lesser than notBefore, then see if the difference
+	// is greater than allowed clockskew
+	if now.Sub(notBefore) < 0 && notBefore.Sub(now) > sp.ClockSkew {
 		warningInfo.InvalidTime = true
 	}
 
@@ -89,7 +91,9 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
 	}
 
-	if now.After(notOnOrAfter) {
+	// if now - notOnOrAfter is greater than allowed clock skew
+	// note: if ClockSkew is not set, then it will be 0.
+	if now.Sub(notOnOrAfter) > sp.ClockSkew {
 		warningInfo.InvalidTime = true
 	}
 
@@ -229,7 +233,7 @@ func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
 		}
 
 		now := sp.Clock.Now()
-		if now.After(notOnOrAfter) {
+		if now.Sub(notOnOrAfter) > sp.ClockSkew {
 			return ErrInvalidValue{
 				Reason:   ReasonExpired,
 				Key:      NotOnOrAfterAttr,
