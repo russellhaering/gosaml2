@@ -54,18 +54,20 @@ type SAMLServiceProvider struct {
 	// provider use specific authentication mechanisms. Leaving this unset will
 	// permit the identity provider to choose the auth method. To maximize compatibility
 	// with identity providers it is recommended to leave this unset.
-	RequestedAuthnContext   *RequestedAuthnContext
-	AudienceURI             string
-	IDPCertificateStore     dsig.X509CertificateStore
-	SPKeyStore              dsig.X509KeyStore // Required encryption key, default signing key
-	SPSigningKeyStore       dsig.X509KeyStore // Optional signing key
-	NameIdFormat            string
-	ValidateEncryptionCert  bool
-	SkipSignatureValidation bool
-	AllowMissingAttributes  bool
-	Clock                   *dsig.Clock
-	signingContextMu        sync.RWMutex
-	signingContext          *dsig.SigningContext
+	RequestedAuthnContext     *RequestedAuthnContext
+	AudienceURI               string
+	IDPCertificateStore       dsig.X509CertificateStore
+	SPKeyStore                dsig.X509KeyStore // Required encryption key, default signing key
+	SPSigningKeyStore         dsig.X509KeyStore // Optional signing key
+	SPKeyStoreRotate          dsig.X509KeyStore // Optional additional encryption key for rotation
+	NameIdFormat              string
+	ValidateEncryptionCert    bool
+	SkipSignatureValidation   bool
+	AllowMissingAttributes    bool
+	Clock                     *dsig.Clock
+	RequireEncryptedAssertion bool
+	signingContextMu          sync.RWMutex
+	signingContext            *dsig.SigningContext
 }
 
 // RequestedAuthnContext controls which authentication mechanisms are requested of

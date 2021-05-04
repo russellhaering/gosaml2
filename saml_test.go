@@ -64,7 +64,7 @@ func TestDecode(t *testing.T) {
 
 	ea := response.EncryptedAssertions[0]
 
-	k, err := ea.EncryptedKey.DecryptSymmetricKey(&cert)
+	k, err := ea.EncryptedKey.DecryptSymmetricKey([]*tls.Certificate{&cert})
 	if err != nil {
 		t.Fatalf("could not get symmetric key: %v\n", err)
 	}
@@ -73,7 +73,7 @@ func TestDecode(t *testing.T) {
 		t.Fatalf("no symmetric key")
 	}
 
-	assertion, err := ea.Decrypt(&cert)
+	assertion, err := ea.Decrypt([]*tls.Certificate{&cert})
 	if err != nil {
 		t.Fatalf("error decrypting saml data: %v\n", err)
 	}
