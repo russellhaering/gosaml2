@@ -131,3 +131,13 @@ func TestCompressedResponse(t *testing.T) {
 	_, err = sp.RetrieveAssertionInfo(string(bs))
 	require.NoError(t, err, "Assertion info should be retrieved with no error")
 }
+
+func TestDecodeColonsInLocalNames(t *testing.T) {
+	_, _, err := parseResponse([]byte(`<x::Root/>`))
+	require.Error(t, err)
+}
+
+func TestDecodeDoubleColonInjectionAttackResponse(t *testing.T) {
+	_, _, err := parseResponse([]byte(doubleColonAssertionInjectionAttackResponse))
+	require.Error(t, err)
+}
