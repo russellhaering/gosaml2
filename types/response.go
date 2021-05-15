@@ -98,12 +98,12 @@ type Subject struct {
 }
 
 type AuthnContext struct {
-	XMLName              xml.Name              `xml:urn:oasis:names:tc:SAML:2.0:assertion AuthnContext"`
+	XMLName              xml.Name              `xml:"urn:oasis:names:tc:SAML:2.0:assertion AuthnContext"`
 	AuthnContextClassRef *AuthnContextClassRef `xml:"AuthnContextClassRef"`
 }
 
 type AuthnContextClassRef struct {
-	XMLName xml.Name `xml:urn:oasis:names:tc:SAML:2.0:assertion AuthnContextClassRef"`
+	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion AuthnContextClassRef"`
 	Value   string   `xml:",chardata"`
 }
 
