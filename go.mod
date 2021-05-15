@@ -1,4 +1,4 @@
-module github.com/russellhaering/gosaml2
+module github.com/harry-uglow/gosaml2
 
 go 1.13
 
