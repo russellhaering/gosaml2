@@ -1,11 +1,11 @@
 // Copyright 2016 Russell Haering et al.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/russellhaering/gosaml2"
-	"github.com/russellhaering/goxmldsig"
+	saml2 "github.com/russellhaering/gosaml2"
+	dsig "github.com/russellhaering/goxmldsig"
 )
 
 func TestValidateResponses(t *testing.T) {
@@ -108,7 +108,7 @@ func TestValidateResponses(t *testing.T) {
 				AudienceURI:                 "{audience}",
 				SkipSignatureValidation:     false,
 				AllowMissingAttributes:      true,
-				Clock: dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 3, 8, 7, 51, 0, 0, time.UTC))),
+				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 3, 8, 7, 51, 0, 0, time.UTC))),
 			},
 		},
 		{
@@ -122,7 +122,7 @@ func TestValidateResponses(t *testing.T) {
 				AudienceURI:                 "JSAuth",
 				SkipSignatureValidation:     false,
 				AllowMissingAttributes:      true,
-				Clock: dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2016, 12, 12, 16, 55, 0, 0, time.UTC))),
+				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2016, 12, 12, 16, 55, 0, 0, time.UTC))),
 			},
 		},
 	}

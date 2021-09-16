@@ -45,10 +45,10 @@ func TestRedirect(t *testing.T) {
 	}
 
 	require.NoError(t, sp.AuthRedirect(w, r, "foobar"))
-	require.Len(t, w.HeaderMap, 1, "wrong number of headers was set")
+	require.Len(t, w.Header(), 1, "wrong number of headers was set")
 	require.Equal(t, http.StatusFound, w.Code, "wrong http status was set")
 
-	u, err := url.Parse(w.HeaderMap.Get("Location"))
+	u, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err, "invalid url used for redirect")
 
 	require.Equal(t, "idp.test", u.Host)
