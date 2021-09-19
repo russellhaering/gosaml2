@@ -1,11 +1,11 @@
 // Copyright 2016 Russell Haering et al.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -110,13 +110,13 @@ var oneLoginScenarioErrors = map[int]string{
 	// 38 - signed(Response(encrypted(signed(Assertion)))) - 08 wrong IDP signing cert, correct SP encryption cert
 	38: "error validating response: Could not verify certificate against trusted certs",
 	// 97 - Response(encrypted(Assertion)) - 99 wrong SP encryption cert
-	97: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
+	97: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: matching cert not found, assertion cert(42:99:58:b8)",
 	// 46 - Response(encrypted(signed(Assertion))) - 06 wrong SP encryption cert, correct IDP signing cert
-	46: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
+	46: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: matching cert not found, assertion cert(42:99:58:b8)",
 	// 47 - signed(Response(encrypted(Assertion))) - 07 wrong SP encryption cert, correct IDP signing cert
-	47: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
+	47: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: matching cert not found, assertion cert(42:99:58:b8)",
 	// 48 - signed(Response(encrypted(signed(Assertion)))) - 08 wrong SP encryption cert, correct IDP signing cert
-	48: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
+	48: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: matching cert not found, assertion cert(42:99:58:b8)",
 	// 85 - Response(Assertion) - 99 empty Response Destination (empty is ok, Destination is optional)
 	// Note: gosaml2 is correctly checking signature before contents
 	85: "error validating response: response and/or assertions must be signed",
