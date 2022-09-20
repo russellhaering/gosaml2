@@ -26,7 +26,22 @@ func (sp *SAMLServiceProvider) validationContext() *dsig.ValidationContext {
 // validateResponseAttributes validates a SAML Response's tag and attributes. It does
 // not inspect child elements of the Response at all.
 func (sp *SAMLServiceProvider) validateResponseAttributes(response *types.Response) error {
-	if response.Destination != "" && response.Destination != sp.AssertionConsumerServiceURL {
+	destMatched := false
+	if len(sp.MultiAssertionConsumerServiceURLs) <= 1 {
+		if response.Destination == "" || response.Destination == sp.AssertionConsumerServiceURL {
+			destMatched = true
+		}
+	} else {
+		// Multiple ACS urls configured. Match the destination with any one of them.
+		for _, configuredAcsUrl := range sp.MultiAssertionConsumerServiceURLs {
+			if response.Destination == "" || response.Destination == configuredAcsUrl {
+				destMatched = true
+				break
+			}
+		}
+	}
+
+	if !destMatched {
 		return ErrInvalidValue{
 			Key:      DestinationAttr,
 			Expected: sp.AssertionConsumerServiceURL,
@@ -464,5 +479,3 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutResponseRedirect(encodedResp
 	return decodedResponse, nil
 }
 */
-
-
