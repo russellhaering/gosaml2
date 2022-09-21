@@ -3,7 +3,9 @@ package saml2
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
+	"github.com/russellhaering/gosaml2/types"
 	"io/ioutil"
 	"testing"
 	"time"
@@ -117,4 +119,150 @@ func TestCompressedResponse(t *testing.T) {
 
 	_, err = sp.RetrieveAssertionInfo(string(bs))
 	require.NoError(t, err, "Assertion info should be retrieved with no error")
+}
+
+func TestValidateResponseAttributesForMultiAcsUrls(t *testing.T) {
+	spURL := "myhost.test.com"
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL:       spURL,
+		MultiAssertionConsumerServiceURLs: []string{"https://myhost-kube1-node1.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node2.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node3.test.com:443/sp/ACS.saml2"},
+		AudienceURI:                       spURL,
+		SignAuthnRequests:                 false,
+	}
+
+	bs, err := ioutil.ReadFile("./providertests/testdata/oktaenc_response_multi_acs.b64")
+	require.NoError(t, err, "couldn't read the response")
+
+	raw, err := base64.StdEncoding.DecodeString(string(bs))
+	require.NoError(t, err, "Couldn't decode encoded response.")
+
+	// Parse the raw response
+	_, el, err := parseResponse(raw)
+	if err != nil {
+		require.NoError(t, err, "Couldn't parse the response.")
+	}
+
+	decodedResponse := &types.Response{}
+	err = xmlUnmarshalElement(el, decodedResponse)
+	require.NoError(t, err, "Couldn't unmarshall the response.")
+
+	// Good case, when destination in the response matches one of the ACS urls configured.
+	err = sp.validateResponseAttributes(decodedResponse)
+	require.NoError(t, err, "Couldn't validate the saml response attributes.")
+
+	sp = SAMLServiceProvider{
+		AssertionConsumerServiceURL:       spURL,
+		MultiAssertionConsumerServiceURLs: []string{"https://myhost-kube1-node0.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node2.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node3.test.com:443/sp/ACS.saml2"},
+		AudienceURI:                       spURL,
+		SignAuthnRequests:                 false,
+	}
+	// Response does not contain one of the ACS urls. Expect destination mismatch error.
+	err = sp.validateResponseAttributes(decodedResponse)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Unrecognized Destination value")
+
+}
+
+func TestValidateResponseAttributes(t *testing.T) {
+	spURL := "https://myhost-kube1-node1.test.com:443/sp/ACS.saml2"
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL: spURL,
+		AudienceURI:                 spURL,
+		SignAuthnRequests:           false,
+	}
+
+	bs, err := ioutil.ReadFile("./providertests/testdata/oktaenc_response_multi_acs.b64")
+	require.NoError(t, err, "couldn't read the response")
+
+	raw, err := base64.StdEncoding.DecodeString(string(bs))
+	require.NoError(t, err, "Couldn't decode encoded response.")
+
+	// Parse the raw response
+	_, el, err := parseResponse(raw)
+	if err != nil {
+		require.NoError(t, err, "Couldn't parse the response.")
+	}
+
+	decodedResponse := &types.Response{}
+	err = xmlUnmarshalElement(el, decodedResponse)
+	require.NoError(t, err, "Couldn't unmarshall the response.")
+
+	// Good case, when destination in the response matches the ACS urls configured.
+	err = sp.validateResponseAttributes(decodedResponse)
+	require.NoError(t, err, "Couldn't validate the saml response attributes.")
+
+	sp = SAMLServiceProvider{
+		AssertionConsumerServiceURL: "https://nomatch.test.com:443/sp/ACS.saml2",
+		AudienceURI:                 spURL,
+		SignAuthnRequests:           false,
+	}
+	// Response does not contain the ACS urls. Expect destination mismatch error.
+	err = sp.validateResponseAttributes(decodedResponse)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Unrecognized Destination value")
+
+}
+
+func TestValidateSubjectConfirmationDataRecipient(t *testing.T) {
+	spURL := "https://myhost-kube1-node1.test.com:443/sp/ACS.saml2"
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL: spURL,
+		AudienceURI:                 spURL,
+		SignAuthnRequests:           false,
+		IdentityProviderIssuer:      "http://www.okta.com/exk5lexwyipqCztUz5d7",
+		Clock:                       dsig.NewFakeClockAt(time.Date(2022, 9, 13, 20, 30, 00, 00, time.UTC)),
+	}
+
+	bs, err := ioutil.ReadFile("./providertests/testdata/oktaenc_response_multi_acs.b64")
+	require.NoError(t, err, "couldn't read the response")
+
+	raw, err := base64.StdEncoding.DecodeString(string(bs))
+	require.NoError(t, err, "Couldn't decode encoded response.")
+
+	// Parse the raw response
+	_, el, err := parseResponse(raw)
+	if err != nil {
+		require.NoError(t, err, "Couldn't parse the response.")
+	}
+
+	decodedResponse := &types.Response{}
+	err = xmlUnmarshalElement(el, decodedResponse)
+	require.NoError(t, err, "Couldn't unmarshall the response.")
+
+	// Good case, when recipient in the response matches the ACS urls configured.
+	err = sp.Validate(decodedResponse)
+	require.NoError(t, err, "Couldn't validate the saml response.")
+
+}
+
+func TestValidateSubjectConfirmationDataRecipientForMultiAcsUrls(t *testing.T) {
+	spURL := "myhost.test.com"
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL:       spURL,
+		MultiAssertionConsumerServiceURLs: []string{"https://myhost-kube1-node1.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node2.test.com:443/sp/ACS.saml2", "https://myhost-kube1-node3.test.com:443/sp/ACS.saml2"},
+		AudienceURI:                       spURL,
+		SignAuthnRequests:                 false,
+		Clock:                             dsig.NewFakeClockAt(time.Date(2022, 9, 13, 20, 30, 00, 00, time.UTC)),
+	}
+
+	bs, err := ioutil.ReadFile("./providertests/testdata/oktaenc_response_multi_acs.b64")
+	require.NoError(t, err, "couldn't read the response")
+
+	raw, err := base64.StdEncoding.DecodeString(string(bs))
+	require.NoError(t, err, "Couldn't decode encoded response.")
+
+	// Parse the raw response
+	_, el, err := parseResponse(raw)
+	if err != nil {
+		require.NoError(t, err, "Couldn't parse the response.")
+	}
+
+	decodedResponse := &types.Response{}
+	err = xmlUnmarshalElement(el, decodedResponse)
+	require.NoError(t, err, "Couldn't unmarshall the response.")
+
+	// Good case, when recipient in the response matches one of the ACS urls configured.
+	err = sp.Validate(decodedResponse)
+	require.NoError(t, err, "Couldn't validate the saml response.")
+
 }

@@ -15,10 +15,19 @@ import (
 
 const issueInstantFormat = "2006-01-02T15:04:05Z"
 
-func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, error) {
+func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool, assertionConsumerServiceURL ...string) (*etree.Document, error) {
 	authnRequest := &etree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
+	}
+
+	// When login via multiple ACS urls are supported the AuthnRequest will specify
+	// the ACS url explicitly. If none is specified, use the ACS url from the SP.
+	var acsUrl string
+	if len(assertionConsumerServiceURL) > 0 {
+		acsUrl = assertionConsumerServiceURL[0]
+	} else {
+		acsUrl = sp.AssertionConsumerServiceURL
 	}
 
 	authnRequest.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
@@ -29,7 +38,7 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	authnRequest.CreateAttr("ID", "_"+arId.String())
 	authnRequest.CreateAttr("Version", "2.0")
 	authnRequest.CreateAttr("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")
-	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
+	authnRequest.CreateAttr("AssertionConsumerServiceURL", acsUrl)
 	authnRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
 	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
 
@@ -72,12 +81,12 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	return doc, nil
 }
 
-func (sp *SAMLServiceProvider) BuildAuthRequestDocument() (*etree.Document, error) {
-	return sp.buildAuthnRequest(true)
+func (sp *SAMLServiceProvider) BuildAuthRequestDocument(acsUrl ...string) (*etree.Document, error) {
+	return sp.buildAuthnRequest(true, acsUrl...)
 }
 
-func (sp *SAMLServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, error) {
-	return sp.buildAuthnRequest(false)
+func (sp *SAMLServiceProvider) BuildAuthRequestDocumentNoSig(acsUrl ...string) (*etree.Document, error) {
+	return sp.buildAuthnRequest(false, acsUrl...)
 }
 
 // SignAuthnRequest takes a document, builds a signature, creates another document
