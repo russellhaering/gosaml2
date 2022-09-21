@@ -30,6 +30,7 @@ type SAMLServiceProvider struct {
 	IdentityProviderIssuer string
 
 	AssertionConsumerServiceURL string
+	MultiAssertionConsumerServiceURLs []string
 	ServiceProviderSLOURL string
 	ServiceProviderIssuer       string
 
@@ -80,6 +81,27 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
+	var acs []types.IndexedEndpoint
+
+	if len(sp.MultiAssertionConsumerServiceURLs) <= 1 {
+	    acs = []types.IndexedEndpoint{{
+		Binding:  BindingHttpPost,
+		Location: sp.AssertionConsumerServiceURL,
+		Index:    1,
+            }}
+	} else {
+	    // Multiple ACS URLs are configured.
+            indexCount := 0
+            for _, url := range sp.MultiAssertionConsumerServiceURLs {
+                tmp := types.IndexedEndpoint{
+		    Binding:  BindingHttpPost,
+		    Location: url,
+		    Index:    indexCount,
+                }
+                indexCount = indexCount + 1
+                acs = append(acs, tmp)
+            }
+	}
 	return &types.EntityDescriptor{
 		ValidUntil: time.Now().UTC().Add(time.Hour * 24 * 7), // 7 days
 		EntityID:   sp.ServiceProviderIssuer,
@@ -114,11 +136,7 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 					},
 				},
 			},
-			AssertionConsumerServices: []types.IndexedEndpoint{{
-				Binding:  BindingHttpPost,
-				Location: sp.AssertionConsumerServiceURL,
-				Index:    1,
-			}},
+			AssertionConsumerServices: acs,
 		},
 	}, nil
 }
@@ -136,6 +154,27 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
     if validityHours <= 0 {
         //By default let's keep it to 7 days.
         validityHours = int64(time.Hour * 24 * 7)
+    }
+
+    var acs []types.IndexedEndpoint
+
+    if len(sp.MultiAssertionConsumerServiceURLs) <= 1 {
+	acs = []types.IndexedEndpoint{{
+		Binding:  BindingHttpPost,
+		Location: sp.AssertionConsumerServiceURL,
+		Index:    1,
+	}}
+    } else {
+	indexCount := 0
+	for _, url := range sp.MultiAssertionConsumerServiceURLs {
+		tmp := types.IndexedEndpoint{
+			Binding:  BindingHttpPost,
+			Location: url,
+			Index:    indexCount,
+		}
+		indexCount = indexCount + 1
+		acs = append(acs, tmp)
+	}
     }
 
     return &types.EntityDescriptor{
@@ -172,11 +211,7 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
                     },
                 },
             },
-            AssertionConsumerServices: []types.IndexedEndpoint{{
-                Binding:  BindingHttpPost,
-                Location: sp.AssertionConsumerServiceURL,
-                Index:    1,
-            }},
+	    AssertionConsumerServices: acs,
             SingleLogoutServices: []types.Endpoint{{
                 Binding:  BindingHttpPost,
                 Location: sp.ServiceProviderSLOURL,

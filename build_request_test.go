@@ -115,3 +115,28 @@ func TestRequestedAuthnContextIncluded(t *testing.T) {
 	require.Equal(t, el.Tag, "AuthnContextClassRef")
 	require.Equal(t, el.Text(), AuthnContextPasswordProtectedTransport)
 }
+
+func TestBuildAuthRequestDocumentWithCustomAcsUrl(t *testing.T) {
+	spURL := "https://sp.test"
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL:       spURL,
+		MultiAssertionConsumerServiceURLs: []string{"https://sp.test1", "https://sp.test2", "https://sp.test3"},
+		AudienceURI:                       spURL,
+		IdentityProviderIssuer:            spURL,
+		IdentityProviderSSOURL:            "https://idp.test/saml/sso",
+		SignAuthnRequests:                 false,
+	}
+	// Case where ACS url is specified explicitly in the BuildAuthRequestDocument
+	doc, err := sp.BuildAuthRequestDocument("https://sp.test2")
+	require.NoError(t, err)
+	el := doc.FindElement("samlp:AuthnRequest")
+	require.Equal(t, el.SelectAttrValue("AssertionConsumerServiceURL", ""), "https://sp.test2")
+
+	// Case where no ACS url is specified  in the BuildAuthRequestDocument.
+	// The AssertionConsumerServiceURL is supposed to be used in this case.
+	doc, err = sp.BuildAuthRequestDocument()
+	require.NoError(t, err)
+	el = doc.FindElement("samlp:AuthnRequest")
+	require.Equal(t, el.SelectAttrValue("AssertionConsumerServiceURL", ""), "https://sp.test")
+
+}
