@@ -253,7 +253,7 @@ func (sp *SAMLServiceProvider) validateAssertionSignatures(el *etree.Element) er
 //ValidateEncodedResponse both decodes and validates, based on SP
 //configuration, an encoded, signed response. It will also appropriately
 //decrypt a response if the assertion was encrypted
-func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (*types.Response, error) {
+func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string, warningInfo *WarningInfo) (*types.Response, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedResponse)
 	if err != nil {
 		return nil, err
@@ -311,7 +311,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 		}
 	}
 
-	err = sp.Validate(decodedResponse)
+	err = sp.Validate(decodedResponse, warningInfo)
 	if err != nil {
 		return nil, err
 	}

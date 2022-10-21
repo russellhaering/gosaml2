@@ -48,10 +48,11 @@ func (e ErrMissingElement) Error() string {
 //contained, or an error message if an error has been encountered.
 func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*AssertionInfo, error) {
 	assertionInfo := &AssertionInfo{
-		Values: make(Values),
+		Values:      make(Values),
+		WarningInfo: &WarningInfo{},
 	}
 
-	response, err := sp.ValidateEncodedResponse(encodedResponse)
+	response, err := sp.ValidateEncodedResponse(encodedResponse, assertionInfo.WarningInfo)
 	if err != nil {
 		return nil, ErrVerification{Cause: err}
 	}
@@ -65,7 +66,7 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 	assertionInfo.Assertions = response.Assertions
 	assertionInfo.ResponseSignatureValidated = response.SignatureValidated
 
-	warningInfo, err := sp.VerifyAssertionConditions(&assertion)
+	err = sp.VerifyAssertionConditions(&assertion, assertionInfo.WarningInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +107,5 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 		assertionInfo.SessionIndex = assertion.AuthnStatement.SessionIndex
 	}
 
-	assertionInfo.WarningInfo = warningInfo
 	return assertionInfo, nil
 }
