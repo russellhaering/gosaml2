@@ -24,7 +24,7 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool, assertionConsu
 	// When login via multiple ACS urls are supported the AuthnRequest will specify
 	// the ACS url explicitly. If none is specified, use the ACS url from the SP.
 	var acsUrl string
-	if len(assertionConsumerServiceURL) > 0 {
+	if len(assertionConsumerServiceURL) > 0 && assertionConsumerServiceURL[0] != "" {
 		acsUrl = assertionConsumerServiceURL[0]
 	} else {
 		acsUrl = sp.AssertionConsumerServiceURL
