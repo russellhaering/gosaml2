@@ -77,7 +77,10 @@ func (sp *SAMLServiceProvider) BuildLogoutResponseDocumentNoSig(status string, r
 }
 
 func (sp *SAMLServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
-	ctx := sp.SigningContext()
+	ctx, err := sp.SigningContext()
+	if err != nil {
+		return nil, err
+	}
 
 	sig, err := ctx.ConstructSignature(el, true)
 	if err != nil {

@@ -253,25 +253,28 @@ func (sp *SAMLServiceProvider) GetSigningCertBytes() ([]byte, error) {
 	}
 }
 
-func (sp *SAMLServiceProvider) SigningContext() *dsig.SigningContext {
+func (sp *SAMLServiceProvider) SigningContext() (*dsig.SigningContext, error) {
 	sp.signingContextMu.RLock()
 	signingContext := sp.signingContext
 	sp.signingContextMu.RUnlock()
 
 	if signingContext != nil {
-		return signingContext
+		return signingContext, nil
 	}
 
 	sp.signingContextMu.Lock()
 	defer sp.signingContextMu.Unlock()
 
 	sp.signingContext = dsig.NewDefaultSigningContext(sp.GetSigningKey())
-	sp.signingContext.SetSignatureMethod(sp.SignAuthnRequestsAlgorithm)
+	err := sp.signingContext.SetSignatureMethod(sp.SignAuthnRequestsAlgorithm)
+	if err != nil {
+		return nil, err
+	}
 	if sp.SignAuthnRequestsCanonicalizer != nil {
 		sp.signingContext.Canonicalizer = sp.SignAuthnRequestsCanonicalizer
 	}
 
-	return sp.signingContext
+	return sp.signingContext, nil
 }
 
 type ProxyRestriction struct {
