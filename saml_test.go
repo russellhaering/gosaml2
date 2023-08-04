@@ -121,7 +121,7 @@ func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 }
 
 // getSAMLServiceProvider returns a SAMLServiceProvider that needs to either
-// set SPKeyStore or call Set
+// set SPKeyStore or call SetSPKeyStore.
 func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 	t.Helper()
 
