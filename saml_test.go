@@ -120,15 +120,16 @@ func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 	return str
 }
 
-func TestSAML(t *testing.T) {
+// getSAMLServiceProvider returns a SAMLServiceProvider that needs to either
+// set SPKeyStore or call Set
+func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
+	t.Helper()
+
 	block, _ := pem.Decode([]byte(idpCertificate))
 	require.NotEmpty(t, block)
 	cert, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err)
 	require.NotEmpty(t, cert)
-
-	randomKeyStore := dsig.RandomKeyStoreForTest()
-	_, _cert, err := randomKeyStore.GetKeyPair()
 
 	cert0, err := x509.ParseCertificate(_cert)
 	require.NoError(t, err)
@@ -138,16 +139,46 @@ func TestSAML(t *testing.T) {
 		Roots: []*x509.Certificate{cert, cert0},
 	}
 
-	sp := &SAMLServiceProvider{
+	return &SAMLServiceProvider{
 		IdentityProviderSSOURL:      "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
 		IdentityProviderIssuer:      "http://www.okta.com/exk5zt0r12Edi4rD20h7",
 		AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
 		SignAuthnRequests:           true,
 		AudienceURI:                 "123",
 		IDPCertificateStore:         &certStore,
-		SPKeyStore:                  randomKeyStore,
 		NameIdFormat:                NameIdFormatPersistent,
 	}
+}
+
+func TestSAML(t *testing.T) {
+	randomKeyStore := dsig.RandomKeyStoreForTest()
+	_, _cert, err := randomKeyStore.GetKeyPair()
+	if err != nil {
+		t.Fatalf("GetKeyPair failed with error: %v\n", err)
+	}
+
+	sp := getSAMLServiceProvider(t, _cert)
+	sp.SPKeyStore = randomKeyStore
+	testSAMLServiceProvider(t, sp)
+}
+
+func TestSAMLUsingSetSPKeyStore(t *testing.T) {
+	randomKeyStore := dsig.RandomKeyStoreForTest()
+	privateKey, _cert, err := randomKeyStore.GetKeyPair()
+	if err != nil {
+		t.Fatalf("GetKeyPair failed with error: %v\n", err)
+	}
+
+	sp := getSAMLServiceProvider(t, _cert)
+	sp.SetSPKeyStore(&KeyStore{
+		Cert:   _cert,
+		Signer: privateKey,
+	})
+	testSAMLServiceProvider(t, sp)
+}
+
+func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
+	t.Helper()
 
 	authRequestURL, err := sp.BuildAuthURL("/some/link/here")
 	require.NoError(t, err)
