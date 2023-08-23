@@ -77,7 +77,7 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
 	}
 
-	notBefore = notBefore.Truncate(time.Millisecond)
+	notBefore = notBefore.Add(-sp.ClockLeeway).Truncate(time.Millisecond)
 	if now.Before(notBefore) {
 		warningInfo.InvalidTime = true
 	}
@@ -91,7 +91,7 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
 	}
 
-	notOnOrAfter = notOnOrAfter.Truncate(time.Millisecond)
+	notOnOrAfter = notOnOrAfter.Add(sp.ClockLeeway).Truncate(time.Millisecond)
 	if now.After(notOnOrAfter) {
 		warningInfo.InvalidTime = true
 	}
