@@ -169,9 +169,10 @@ type Attribute struct {
 }
 
 type AttributeValue struct {
-	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion AttributeValue"`
-	Type    string   `xml:"xsi:type,attr"`
-	Value   string   `xml:",chardata"`
+	XMLName  xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion AttributeValue"`
+	Type     string   `xml:"xsi:type,attr"`
+	Value    string   `xml:",chardata"`
+	ValueXML string   `xml:",innerxml"`
 }
 
 type AuthnStatement struct {
