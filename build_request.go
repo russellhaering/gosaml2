@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package saml2
 
 import (
@@ -45,6 +46,12 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
 	authnRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
 	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
+	if sp.ForceAuthn {
+		authnRequest.CreateAttr("ForceAuthn", "true")
+	}
+	if sp.IsPassive {
+		authnRequest.CreateAttr("IsPassive", "true")
+	}
 
 	// NOTE(russell_h): In earlier versions we mistakenly sent the IdentityProviderIssuer
 	// in the AuthnRequest. For backwards compatibility we will fall back to that
@@ -57,7 +64,9 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 
 	nameIdPolicy := authnRequest.CreateElement("samlp:NameIDPolicy")
 	nameIdPolicy.CreateAttr("AllowCreate", "true")
-	nameIdPolicy.CreateAttr("Format", sp.NameIdFormat)
+	if sp.NameIdFormat != "" {
+		nameIdPolicy.CreateAttr("Format", sp.NameIdFormat)
+	}
 
 	if sp.RequestedAuthnContext != nil {
 		requestedAuthnContext := authnRequest.CreateElement("samlp:RequestedAuthnContext")

@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package saml2
 
 import (
@@ -48,7 +49,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest s
 	}
 
 	// Parse the raw request - parseResponse is generic
-	doc, el, err := parseResponse(raw)
+	doc, el, err := parseResponse(raw, sp.MaximumDecompressedBodySize)
 	if err != nil {
 		return nil, err
 	}

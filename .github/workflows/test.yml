@@ -1,0 +1,20 @@
+on: [push, pull_request]
+name: Test
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ['1.20', '1.19', '1.18']
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Setup Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Test
+        run: go test ./...
