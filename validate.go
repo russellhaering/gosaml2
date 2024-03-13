@@ -61,7 +61,7 @@ const (
 //all SAML2 contracts are upheld.
 func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion) (*WarningInfo, error) {
 	warningInfo := &WarningInfo{}
-	now := sp.Clock.Now()
+	now := sp.Clock.Now().Truncate(time.Millisecond)
 
 	conditions := assertion.Conditions
 	if conditions == nil {
@@ -77,6 +77,7 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
 	}
 
+	notBefore = notBefore.Add(-sp.ClockLeeway).Truncate(time.Millisecond)
 	if now.Before(notBefore) {
 		warningInfo.InvalidTime = true
 	}
@@ -90,6 +91,7 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 		return nil, ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
 	}
 
+	notOnOrAfter = notOnOrAfter.Add(sp.ClockLeeway).Truncate(time.Millisecond)
 	if now.After(notOnOrAfter) {
 		warningInfo.InvalidTime = true
 	}
