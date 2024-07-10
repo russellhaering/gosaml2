@@ -4,14 +4,13 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://www.apache.org/licenses/LICENSE-2.0
+//	https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package saml2
 
 import (
@@ -60,7 +59,9 @@ type SAMLServiceProvider struct {
 	// IsPassive attribute in authentication request requires that the identity provider and the
 	// user agent itself MUST NOT visibly take control of the user interface from the requester
 	// and interact with the presenter in a noticeable fashion.
-	IsPassive bool
+	IsPassive                  bool
+	IncludeSignatureParameters bool
+
 	// RequestedAuthnContext allows service providers to require that the identity
 	// provider use specific authentication mechanisms. Leaving this unset will
 	// permit the identity provider to choose the auth method. To maximize compatibility

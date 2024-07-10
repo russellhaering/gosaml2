@@ -171,7 +171,7 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 		qs.Add("RelayState", relayState)
 	}
 
-	if sp.SignAuthnRequests && binding == BindingHttpRedirect {
+	if ((sp.SignAuthnRequests && binding == BindingHttpRedirect) || sp.IncludeSignatureParameters) {
 		// Sign URL encoded query (see Section 3.4.4.1 DEFLATE Encoding of saml-bindings-2.0-os.pdf)
 		ctx := sp.SigningContext()
 		qs.Add("SigAlg", ctx.GetSignatureMethodIdentifier())

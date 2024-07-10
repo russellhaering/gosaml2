@@ -102,6 +102,9 @@ func xmlUnmarshalElement(el *etree.Element, obj interface{}) error {
 	}
 	return nil
 }
+func (sp *SAMLServiceProvider) GetDecryptCertificate() (*tls.Certificate, error) {
+	return sp.getDecryptCert()
+}
 
 func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	if sp.SPKeyStore == nil {
@@ -289,6 +292,8 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 		return nil, err
 	}
 
+	decrypted := etree.NewDocument()
+	decrypted.SetRoot(el.Copy())
 	var assertionSignaturesValidated bool
 	if !sp.SkipSignatureValidation {
 		err = sp.validateAssertionSignatures(el)
@@ -304,6 +309,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 	}
 
 	decodedResponse := &types.Response{}
+	decodedResponse.Document = decrypted
 	err = xmlUnmarshalElement(el, decodedResponse)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal response: %v", err)
