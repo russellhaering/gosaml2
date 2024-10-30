@@ -28,3 +28,8 @@ type AuthNRequest struct {
 	Destination string `xml:",attr"`
 	Issuer      string
 }
+
+type Issuer struct {
+	SPProvidedID string `xml:",SPProvidedID"`
+	Issuer       string
+}
