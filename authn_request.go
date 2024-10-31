@@ -27,9 +27,9 @@ type AuthNRequest struct {
 	IssueInstant                time.Time `xml:",attr"`
 	Destination                 string    `xml:",attr"`
 
-	Issuer     Issuer     `xml:"Issuer"`
-	Signature  Signature  `xml:"Signature"`
-	Extensions Extensions `xml:"Extensions"`
+	Issuer     *Issuer     `xml:"Issuer"`
+	Signature  *Signature  `xml:"Signature"`
+	Extensions *Extensions `xml:"Extensions"`
 }
 
 type Issuer struct {
@@ -38,13 +38,13 @@ type Issuer struct {
 }
 
 type Signature struct {
-	SignedInfo     SignedInfo `xml:"SignedInfo"`
-	SignatureValue string     `xml:"SignatureValue"`
-	KeyInfo        KeyInfo    `xml:"KeyInfo"`
+	SignedInfo     *SignedInfo `xml:"SignedInfo"`
+	SignatureValue string      `xml:"SignatureValue"`
+	KeyInfo        *KeyInfo    `xml:"KeyInfo"`
 }
 
 type SignedInfo struct {
-	Reference Reference `xml:"Reference"`
+	Reference *Reference `xml:"Reference"`
 }
 
 type Reference struct {
