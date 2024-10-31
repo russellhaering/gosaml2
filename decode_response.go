@@ -26,8 +26,8 @@ import (
 	"encoding/xml"
 
 	"github.com/beevik/etree"
+	"github.com/frozenchickenx/gosaml2/types"
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
-	"github.com/russellhaering/gosaml2/types"
 	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/russellhaering/goxmldsig/etreeutils"
 )

@@ -14,17 +14,52 @@
 
 package saml2
 
-import "time"
+import (
+	"time"
+)
 
 // AuthNRequest is the go struct representation of an authentication request
 type AuthNRequest struct {
-	ID                          string `xml:",attr"`
-	Version                     string `xml:",attr"`
-	ProtocolBinding             string `xml:",attr"`
-	AssertionConsumerServiceURL string `xml:",attr"`
+	ID                          string    `xml:",attr"`
+	Version                     string    `xml:",attr"`
+	ProtocolBinding             string    `xml:",attr"`
+	AssertionConsumerServiceURL string    `xml:",attr"`
+	IssueInstant                time.Time `xml:",attr"`
+	Destination                 string    `xml:",attr"`
 
-	IssueInstant time.Time `xml:",attr"`
+	Issuer     *Issuer     `xml:"Issuer"`
+	Signature  *Signature  `xml:"Signature"`
+	Extensions *Extensions `xml:"Extensions"`
+}
 
-	Destination string `xml:",attr"`
-	Issuer      string
+type Issuer struct {
+	SPProvidedID string `xml:",attr"`
+	Value        string `xml:",chardata"`
+}
+
+type Signature struct {
+	SignedInfo     *SignedInfo `xml:"SignedInfo"`
+	SignatureValue string      `xml:"SignatureValue"`
+	KeyInfo        *KeyInfo    `xml:"KeyInfo"`
+}
+
+type SignedInfo struct {
+	Reference *Reference `xml:"Reference"`
+}
+
+type Reference struct {
+	URI         string `xml:",attr"`
+	DigestValue string `xml:"DigestValue"`
+}
+
+type KeyInfo struct {
+	KeyName string `xml:"KeyName"`
+}
+
+type X509Data struct {
+	X509Certificate string `xml:"X509Certificate"`
+}
+
+type Extensions struct {
+	Picker string `xml:"Picker"`
 }

@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/frozenchickenx/gosaml2/types"
 )
 
-//ErrParsing indicates that the value present in an assertion could not be
-//parsed. It can be inspected for the specific tag name, the contents, and the
-//intended type.
+// ErrParsing indicates that the value present in an assertion could not be
+// parsed. It can be inspected for the specific tag name, the contents, and the
+// intended type.
 type ErrParsing struct {
 	Tag, Value, Type string
 }
@@ -32,14 +32,14 @@ func (ep ErrParsing) Error() string {
 	return fmt.Sprintf("Error parsing %s tag value as type %s", ep.Tag, ep.Value)
 }
 
-//Oft-used messages
+// Oft-used messages
 const (
 	ReasonUnsupported = "Unsupported"
 	ReasonExpired     = "Expired"
 )
 
-//ErrInvalidValue indicates that the expected value did not match the received
-//value.
+// ErrInvalidValue indicates that the expected value did not match the received
+// value.
 type ErrInvalidValue struct {
 	Key, Expected, Actual string
 	Reason                string
@@ -52,13 +52,13 @@ func (e ErrInvalidValue) Error() string {
 	return fmt.Sprintf("%s %s value, Expected: %s, Actual: %s", e.Reason, e.Key, e.Expected, e.Actual)
 }
 
-//Well-known methods of subject confirmation
+// Well-known methods of subject confirmation
 const (
 	SubjMethodBearer = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 )
 
-//VerifyAssertionConditions inspects an assertion element and makes sure that
-//all SAML2 contracts are upheld.
+// VerifyAssertionConditions inspects an assertion element and makes sure that
+// all SAML2 contracts are upheld.
 func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion) (*WarningInfo, error) {
 	warningInfo := &WarningInfo{}
 	now := sp.Clock.Now()
@@ -131,8 +131,8 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 	return warningInfo, nil
 }
 
-//Validate ensures that the assertion passed is valid for the current Service
-//Provider.
+// Validate ensures that the assertion passed is valid for the current Service
+// Provider.
 func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
 	err := sp.validateResponseAttributes(response)
 	if err != nil {
