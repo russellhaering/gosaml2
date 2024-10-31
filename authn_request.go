@@ -27,7 +27,9 @@ type AuthNRequest struct {
 	IssueInstant                time.Time `xml:",attr"`
 	Destination                 string    `xml:",attr"`
 
-	Issuer Issuer `xml:"Issuer"`
+	Issuer     Issuer     `xml:"Issuer"`
+	Signature  Signature  `xml:"Signature"`
+	Extensions Extensions `xml:"Extensions"`
 }
 
 type Issuer struct {
