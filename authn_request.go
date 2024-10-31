@@ -30,5 +30,5 @@ type AuthNRequest struct {
 
 type Issuer struct {
 	SPProvidedID string `xml:",attr"`
-	Issuer       string
+	Value        string `xml:",chardata"`
 }
