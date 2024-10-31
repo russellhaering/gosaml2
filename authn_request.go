@@ -61,9 +61,5 @@ type X509Data struct {
 }
 
 type Extensions struct {
-	Picker Picker `xml:"picker:Picker"`
-}
-
-type Picker struct {
-	Value string `xml:",chardata"`
+	Picker string `xml:"Picker"`
 }
