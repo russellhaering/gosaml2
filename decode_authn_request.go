@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+// ValidateEncodedAuthNRequest takes an encoded AuthNRequest, decodes and validates it (including signature) and returns the parsed AuthNRequest.
 func (sp *SAMLServiceProvider) ValidateEncodedAuthNRequest(encodedRequest string) (*AuthNRequest, error) {
 
 	var err error
