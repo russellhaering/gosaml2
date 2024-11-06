@@ -307,3 +307,24 @@ func (sp *SAMLServiceProvider) ValidateDecodedLogoutRequest(request *LogoutReque
 
 	return nil
 }
+
+func (sp *SAMLServiceProvider) ValidateDecodedAuthNRequest(request *AuthNRequest) error {
+	err := sp.validateAuthNRequestAttributes(request)
+	if err != nil {
+		return err
+	}
+
+	issuer := request.Issuer
+	if issuer == nil {
+		return ErrMissingElement{Tag: IssuerTag}
+	}
+
+	if sp.IdentityProviderIssuer == "" {
+		return ErrInvalidValue{
+			Key:    IssuerTag,
+			Reason: "IdentityProviderIssuer is required",
+		}
+	}
+
+	return nil
+}

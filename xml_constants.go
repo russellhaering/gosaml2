@@ -35,15 +35,16 @@ const (
 )
 
 const (
-	DestinationAttr  = "Destination"
-	VersionAttr      = "Version"
-	IdAttr           = "ID"
-	MethodAttr       = "Method"
-	RecipientAttr    = "Recipient"
-	NameAttr         = "Name"
-	NotBeforeAttr    = "NotBefore"
-	NotOnOrAfterAttr = "NotOnOrAfter"
-	CountAttr        = "Count"
+	DestinationAttr                 = "Destination"
+	VersionAttr                     = "Version"
+	IdAttr                          = "ID"
+	MethodAttr                      = "Method"
+	RecipientAttr                   = "Recipient"
+	NameAttr                        = "Name"
+	NotBeforeAttr                   = "NotBefore"
+	NotOnOrAfterAttr                = "NotOnOrAfter"
+	CountAttr                       = "Count"
+	AssertionConsumerServiceURLAttr = "AssertionConsumerServiceURL"
 )
 
 const (
