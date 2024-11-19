@@ -17,6 +17,7 @@ package saml2
 import (
 	"crypto"
 	"encoding/base64"
+	"github.com/beevik/etree"
 	"sync"
 	"time"
 
@@ -359,6 +360,25 @@ func (sp *SAMLServiceProvider) SigningContext() *dsig.SigningContext {
 	}
 
 	return sp.signingContext
+}
+
+func (sp *SAMLServiceProvider) SignResponse(el *etree.Element) (*etree.Element, error) {
+	ctx := sp.SigningContext()
+
+	sig, err := ctx.ConstructSignature(el, true)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := el.Copy()
+
+	var children []etree.Token
+	children = append(children, ret.Child[0])     // issuer is always first
+	children = append(children, sig)              // next is the signature
+	children = append(children, ret.Child[1:]...) // then all other children
+	ret.Child = children
+
+	return ret, nil
 }
 
 type ProxyRestriction struct {

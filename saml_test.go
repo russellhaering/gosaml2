@@ -146,7 +146,7 @@ func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 		SignAuthnRequests:           true,
 		AudienceURI:                 "123",
 		IDPCertificateStore:         &certStore,
-		NameIdFormat:                NameIdFormatPersistent,
+		NameIdFormat:                NameIDFormatPersistent,
 	}
 }
 
