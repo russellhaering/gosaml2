@@ -29,8 +29,8 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 		Tag:   "LogoutResponse",
 	}
 
-	logoutResponse.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
-	logoutResponse.CreateAttr("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion")
+	logoutResponse.CreateAttr("xmlns:samlp", SAMLProtocolNamespace)
+	logoutResponse.CreateAttr("xmlns:saml", SAMLAssertionNamespace)
 
 	arId := uuid.NewV4()
 
@@ -57,7 +57,7 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 
 	// Only POST binding includes <Signature> in <AuthnRequest> (includeSig)
 	if includeSig {
-		signed, err := sp.SignLogoutResponse(logoutResponse)
+		signed, err := sp.SignResponse(logoutResponse)
 		if err != nil {
 			return nil, err
 		}
@@ -74,25 +74,6 @@ func (sp *SAMLServiceProvider) BuildLogoutResponseDocument(status string, reqID 
 
 func (sp *SAMLServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*etree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, false)
-}
-
-func (sp *SAMLServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
-	ctx := sp.SigningContext()
-
-	sig, err := ctx.ConstructSignature(el, true)
-	if err != nil {
-		return nil, err
-	}
-
-	ret := el.Copy()
-
-	var children []etree.Token
-	children = append(children, ret.Child[0])     // issuer is always first
-	children = append(children, sig)              // next is the signature
-	children = append(children, ret.Child[1:]...) // then all other children
-	ret.Child = children
-
-	return ret, nil
 }
 
 func (sp *SAMLServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
