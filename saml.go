@@ -87,7 +87,7 @@ type SAMLServiceProvider struct {
 	spSigningKeyStoreOverride *KeyStore // When set via SetSPSigningKeyStore, this field is used instead of SPSigningKeyStore
 
 	// MaximumDecompressedBodySize is the maximum size to which a compressed
-	// SAML document will be decompressed. If a compresed document is exceeds
+	// SAML document will be decompressed. If a compressed document exceeds
 	// this size during decompression an error will be returned.
 	MaximumDecompressedBodySize int64
 
