@@ -63,7 +63,7 @@ func TestRedirect(t *testing.T) {
 	req := AuthNRequest{}
 	require.NoError(t, xml.NewDecoder(fr).Decode(&req), "Error reading/decoding from flate-compressed URL")
 
-	iss, err := url.Parse(req.Issuer)
+	iss, err := url.Parse(req.Issuer.Value)
 	require.NoError(t, err, "error parsing request issuer URL")
 
 	require.Equal(t, "sp.test", iss.Host)
