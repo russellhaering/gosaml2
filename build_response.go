@@ -3,8 +3,10 @@ package saml2
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"github.com/beevik/etree"
 	"github.com/frozenchickenx/gosaml2/uuid"
+	"github.com/frozenchickenx/gosaml2/xmlenc"
 	"html/template"
 	"time"
 )
@@ -39,7 +41,7 @@ const (
 )
 
 // todo godocs and break into smaller functions
-func (sp *SAMLServiceProvider) buildResponse(respData SAMLResponseData, includeSig bool) (*etree.Document, error) {
+func (sp *SAMLServiceProvider) buildResponse(respData SAMLResponseData) (*etree.Document, error) {
 	resp := &etree.Element{
 		Space: "saml2p",
 		Tag:   ResponseTag,
@@ -68,7 +70,7 @@ func (sp *SAMLServiceProvider) buildResponse(respData SAMLResponseData, includeS
 	statusCode.CreateAttr(ValueAttr, StatusCodeSuccess)
 
 	// assertion
-	assertion := resp.CreateElement("saml2:Assertion")
+	assertion := etree.NewElement("saml2:Assertion")
 	assertion.CreateAttr("xmlns:saml2", SAMLAssertionNamespace)
 	assertion.CreateAttr(IDAttr, "_"+responseUUID)
 	assertion.CreateAttr(IssueInstantAttr, instant)
@@ -116,26 +118,47 @@ func (sp *SAMLServiceProvider) buildResponse(respData SAMLResponseData, includeS
 	attributeStatements.AddChild(buildAttribute(attributeStatements, _attrSPID, respData.SPID))
 	attributeStatements.AddChild(buildAttribute(attributeStatements, _attrEmail, respData.Email))
 
-	doc := etree.NewDocument()
-
-	if includeSig {
-		signed, err := sp.SignResponse(resp)
-		if err != nil {
-			return nil, err
-		}
-
-		doc.SetRoot(signed)
-	} else {
-		doc.SetRoot(resp)
+	signedAssertion, err := sp.SignResponse(assertion)
+	if err != nil {
+		return nil, err
 	}
+
+	certs, err := sp.IDPCertificateStore.Certificates()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(certs) <= 0 {
+		return nil, fmt.Errorf("no certificates found in IDPCertificateStore")
+	}
+
+	assertionDoc := etree.NewDocument()
+	assertionDoc.SetRoot(signedAssertion)
+	assertionBytes, err := assertionDoc.WriteToBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedDataAndKey, err := xmlenc.PKCS1v15().Encrypt(certs[0], assertionBytes, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedAssertion := etree.NewElement("saml2:EncryptedAssertion")
+	encryptedAssertion.CreateAttr("xmlns:saml2", SAMLAssertionNamespace)
+	for _, el := range encryptedDataAndKey {
+		encryptedAssertion.AddChild(el)
+	}
+
+	resp.AddChild(encryptedAssertion)
+
+	doc := etree.NewDocument()
+	doc.SetRoot(resp)
+
 	return doc, nil
 }
 func (sp *SAMLServiceProvider) BuildResponseDocument(respData SAMLResponseData) (*etree.Document, error) {
-	return sp.buildResponse(respData, true)
-}
-
-func (sp *SAMLServiceProvider) BuildResponseDocumentNoSig(respData SAMLResponseData) (*etree.Document, error) {
-	return sp.buildResponse(respData, false)
+	return sp.buildResponse(respData)
 }
 
 func (sp *SAMLServiceProvider) BuildResponseBodyPostFromDocument(relayState string, endpointURL string, doc *etree.Document) ([]byte, error) {
