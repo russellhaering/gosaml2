@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: gosaml2 
+  annotations:
+    github.com/project-slug: Staffbase/gosaml2
+  tags:
+    - go
+    - sso
+    - authentication
+    - oss
+spec:
+  type: library
+  lifecycle: experimental
