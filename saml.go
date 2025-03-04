@@ -17,6 +17,7 @@ package saml2
 import (
 	"crypto"
 	"encoding/base64"
+	"github.com/beevik/etree"
 	"sync"
 	"time"
 
@@ -35,6 +36,10 @@ func (serr ErrSaml) Error() string {
 		return serr.Message
 	}
 	return "SAML error"
+}
+
+type AuthNRequestProcessor interface {
+	Process(request *etree.Element) error
 }
 
 type SAMLServiceProvider struct {
@@ -73,6 +78,8 @@ type SAMLServiceProvider struct {
 	SkipSignatureValidation bool
 	AllowMissingAttributes  bool
 	Clock                   *dsig.Clock
+
+	AuthNRequestProcessors []AuthNRequestProcessor
 
 	// Required encryption key and default signing key.
 	// Deprecated: Use SetSPKeyStore instead of setting or reading this field.
