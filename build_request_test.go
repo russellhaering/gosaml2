@@ -213,3 +213,34 @@ func TestIsPassiveIncluded(t *testing.T) {
 	require.NotNil(t, attr)
 	require.Equal(t, "true", attr.Value)
 }
+
+func TestAddIdpScopingExtension(t *testing.T) {
+	spURL := "https://sp.test"
+	extension := AddIdpScoping{
+		ProviderId: "foo",
+		Name:       "bar",
+	}
+
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL: spURL,
+		AudienceURI:                 spURL,
+		IdentityProviderIssuer:      spURL,
+		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
+
+		// Add IdP scoping extension
+		AuthNRequestProcessors: []AuthNRequestProcessor{&extension},
+	}
+
+	request, err := sp.BuildAuthRequest()
+	require.NoError(t, err)
+
+	doc := etree.NewDocument()
+	err = doc.ReadFromString(request)
+	require.NoError(t, err)
+
+	el := doc.FindElement("./AuthnRequest/Scoping/IDPList/IDPEntry")
+
+	require.NotNil(t, el)
+	require.Equal(t, el.SelectAttrValue("ProviderID", ""), "foo")
+	require.Equal(t, el.SelectAttrValue("Name", ""), "bar")
+}
