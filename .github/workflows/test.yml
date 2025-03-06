@@ -15,4 +15,30 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
-        run: go test ./...
+        run: go test -covermode=atomic -coverpkg=./... -coverprofile=test.cov -v ./...
+
+      - name: upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: test.cov
+          path: test.cov
+          retention-days: 1
+
+  sonar:
+    name: Run SonarCloud Analysis
+    runs-on: ubuntu-22.04
+    needs: test
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: download coverage data from GitHub storage
+        uses: actions/download-artifact@v4
+        with:
+          path: cov/
+          merge-multiple: true
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@v5.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+
