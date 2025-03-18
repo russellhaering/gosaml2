@@ -1,11 +1,35 @@
 version: 2
+
+registries:
+  github:
+    type: git
+    url: https://github.com
+    username: x-access-token
+    password: ${{ secrets.STAFFBOT_GO_READ }}
+
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      ci-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+    registries:
+      - github
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
