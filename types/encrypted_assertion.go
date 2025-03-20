@@ -44,7 +44,7 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 		// https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/Overview.html#sec-Extensions-to-KeyInfo
 		ek = &ea.DetEncryptedKey
 	}
-	k, err := ek.DecryptSymmetricKey(cert)
+	k, err := ek.DecryptSymmetricKey(cert, ea.EncryptionMethod.Algorithm)
 	if err != nil {
 		return nil, fmt.Errorf("cannot decrypt, error retrieving private key: %s", err)
 	}

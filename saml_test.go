@@ -25,8 +25,8 @@ import (
 	"encoding/pem"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/beevik/etree"
@@ -49,7 +49,7 @@ func init() {
 }
 
 func TestDecode(t *testing.T) {
-	f, err := ioutil.ReadFile("./testdata/saml.post")
+	f, err := os.ReadFile("./testdata/saml.post")
 	if err != nil {
 		t.Fatalf("could not open test file: %v\n", err)
 	}
@@ -65,7 +65,7 @@ func TestDecode(t *testing.T) {
 
 	ea := response.EncryptedAssertions[0]
 
-	k, err := ea.EncryptedKey.DecryptSymmetricKey(&cert)
+	k, err := ea.EncryptedKey.DecryptSymmetricKey(&cert, ea.EncryptionMethod.Algorithm)
 	if err != nil {
 		t.Fatalf("could not get symmetric key: %v\n", err)
 	}
@@ -79,7 +79,7 @@ func TestDecode(t *testing.T) {
 		t.Fatalf("error decrypting saml data: %v\n", err)
 	}
 
-	f2, err := ioutil.ReadFile("./testdata/saml.xml")
+	f2, err := os.ReadFile("./testdata/saml.xml")
 	if err != nil {
 		t.Fatalf("could not read expected output")
 	}
