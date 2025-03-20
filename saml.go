@@ -72,7 +72,9 @@ type SAMLServiceProvider struct {
 	ValidateEncryptionCert  bool
 	SkipSignatureValidation bool
 	AllowMissingAttributes  bool
+
 	Clock                   *dsig.Clock
+	ClockLeeway time.Duration // to handle clock drift issues
 
 	// Required encryption key and default signing key.
 	// Deprecated: Use SetSPKeyStore instead of setting or reading this field.
