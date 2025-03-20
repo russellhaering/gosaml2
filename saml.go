@@ -356,7 +356,10 @@ func (sp *SAMLServiceProvider) SigningContext() *dsig.SigningContext {
 	sp.signingContext.SetSignatureMethod(sp.SignAuthnRequestsAlgorithm)
 	if sp.SignAuthnRequestsCanonicalizer != nil {
 		sp.signingContext.Canonicalizer = sp.SignAuthnRequestsCanonicalizer
+	} else {
+		sp.signingContext.Canonicalizer = dsig.MakeC14N10ExclusiveCanonicalizerWithPrefixList(dsig.DefaultPrefix)
 	}
+
 
 	return sp.signingContext
 }
