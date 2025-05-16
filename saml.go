@@ -92,6 +92,8 @@ type SAMLServiceProvider struct {
 
 	signingContextMu sync.RWMutex
 	signingContext   *dsig.SigningContext
+
+	AllowClockSkew time.Duration
 }
 
 // SetSPKeyStore sets the encryption key to be used.
