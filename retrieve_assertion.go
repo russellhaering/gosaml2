@@ -14,7 +14,11 @@
 
 package saml2
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/russellhaering/gosaml2/types"
+)
 
 //ErrMissingElement is the error type that indicates an element and/or attribute is
 //missing. It provides a structured error that can be more appropriately acted
@@ -47,18 +51,25 @@ func (e ErrMissingElement) Error() string {
 //RetrieveAssertionInfo takes an encoded response and returns the AssertionInfo
 //contained, or an error message if an error has been encountered.
 func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*AssertionInfo, error) {
+	assertionInfo, _, err := sp.RetrieveAssertionInfoWithResponse(encodedResponse)
+	return assertionInfo, err
+}
+
+//RetrieveAssertionInfoWithResponse is the same as RetrieveAssertionInfo, but
+//returns the response as well.
+func (sp *SAMLServiceProvider) RetrieveAssertionInfoWithResponse(encodedResponse string) (*AssertionInfo, *types.Response, error) {
 	assertionInfo := &AssertionInfo{
 		Values: make(Values),
 	}
 
 	response, err := sp.ValidateEncodedResponse(encodedResponse)
 	if err != nil {
-		return nil, ErrVerification{Cause: err}
+		return nil, nil, ErrVerification{Cause: err}
 	}
 
 	// TODO: Support multiple assertions
 	if len(response.Assertions) == 0 {
-		return nil, ErrMissingAssertion
+		return nil, nil, ErrMissingAssertion
 	}
 
 	assertion := response.Assertions[0]
@@ -67,18 +78,18 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 
 	warningInfo, err := sp.VerifyAssertionConditions(&assertion)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	//Get the NameID
 	subject := assertion.Subject
 	if subject == nil {
-		return nil, ErrMissingElement{Tag: SubjectTag}
+		return nil, nil, ErrMissingElement{Tag: SubjectTag}
 	}
 
 	nameID := subject.NameID
 	if nameID == nil {
-		return nil, ErrMissingElement{Tag: NameIdTag}
+		return nil, nil, ErrMissingElement{Tag: NameIdTag}
 	}
 
 	assertionInfo.NameID = nameID.Value
@@ -86,7 +97,7 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 	//Get the actual assertion attributes
 	attributeStatement := assertion.AttributeStatement
 	if attributeStatement == nil && !sp.AllowMissingAttributes {
-		return nil, ErrMissingElement{Tag: AttributeStatementTag}
+		return nil, nil, ErrMissingElement{Tag: AttributeStatementTag}
 	}
 
 	if attributeStatement != nil {
@@ -107,5 +118,5 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 	}
 
 	assertionInfo.WarningInfo = warningInfo
-	return assertionInfo, nil
+	return assertionInfo, response, nil
 }
