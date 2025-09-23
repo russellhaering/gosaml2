@@ -31,6 +31,10 @@ func (e ErrVerification) Error() string {
 	return fmt.Sprintf("error validating response: %s", e.Cause.Error())
 }
 
+func (e ErrVerification) Unwrap() error {
+	return e.Cause
+}
+
 //ErrMissingAssertion indicates that an appropriate assertion element could not
 //be found in the SAML Response
 var (
