@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -285,6 +286,28 @@ func (sp *SAMLServiceProvider) BuildAuthURL(relayState string) (string, error) {
 		return "", err
 	}
 	return sp.BuildAuthURLFromDocument(relayState, doc)
+}
+
+// BuildAuthURL builds redirect URL to be sent to principal and
+// in addition returns the ID of the request.
+func (sp *SAMLServiceProvider) BuildAuthURLWithID(relayState string) (string, string, error) {
+	doc, err := sp.BuildAuthRequestDocument()
+	if err != nil {
+		return "", "", err
+	}
+	authURL, err := sp.BuildAuthURLRedirect(relayState, doc)
+	if err != nil {
+		return "", "", err
+	}
+	el := doc.FindElement(".//samlp:AuthnRequest")
+	if el == nil {
+		return "", "", errors.New("AuthnRequest element not found")
+	}
+	id := el.SelectAttrValue("ID", "")
+	if id == "" {
+		return "", "", errors.New("ID attribute not found")
+	}
+	return authURL, id, nil
 }
 
 // AuthRedirect takes a ResponseWriter and Request from an http interaction and
