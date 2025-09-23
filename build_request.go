@@ -284,7 +284,7 @@ func (sp *SAMLServiceProvider) BuildAuthURL(relayState string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return sp.BuildAuthURLFromDocument(relayState, doc)
+	return sp.BuildAuthURLRedirect(relayState, doc)
 }
 
 // AuthRedirect takes a ResponseWriter and Request from an http interaction and
