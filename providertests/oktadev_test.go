@@ -1,11 +1,11 @@
 // Copyright 2016 Russell Haering et al.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,12 +20,12 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/russellhaering/gosaml2"
-	"github.com/russellhaering/goxmldsig"
+	saml2 "github.com/russellhaering/gosaml2"
+	dsig "github.com/russellhaering/goxmldsig"
 )
 
 var oktaScenarioErrors = map[int]string{
-	1:  "error validating response: response and/or assertions must be signed",
+	1:  "error validating response: Missing signature referencing the top-level element",
 	3:  "error validating response: Could not verify certificate against trusted certs",
 	4:  "error validating response: Unrecognized Destination value, Expected: http://dba9a5fc.ngrok.io/v1/_saml_callback, Actual: fake.identifier.example.com",
 	5:  "error validating response: Unrecognized Issuer value, Expected: http://example.com/saml/acs/example, Actual: fake.identifier.example.com",
@@ -33,7 +33,7 @@ var oktaScenarioErrors = map[int]string{
 	8:  "error validating response: missing NotOnOrAfter attribute on SubjectConfirmationData element",
 	9:  "missing NotOnOrAfter attribute on Conditions element",
 	10: "missing NotBefore attribute on Conditions element",
-	12: "error validating response: response and/or assertions must be signed",
+	12: "error validating response: Missing signature referencing the top-level element",
 	13: "error validating response: Signature could not be verified",
 	14: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: Failure",
 	15: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: urn:oasis:names:tc:SAML:2.0:status:Requester",

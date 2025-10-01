@@ -1,11 +1,11 @@
 // Copyright 2016 Russell Haering et al.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,14 +18,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/russellhaering/gosaml2"
+	saml2 "github.com/russellhaering/gosaml2"
 )
 
 var oneLoginScenarioErrors = map[int]string{
 	// 99 - Response(Assertion) - no signature
-	99: "error validating response: response and/or assertions must be signed",
+	99: "error validating response: Missing signature referencing the top-level element",
 	// 98 - Response(encrypted(Assertion)) - no signature
-	98: "error validating response: response and/or assertions must be signed",
+	98: "error validating response: Missing signature referencing the top-level element",
 	// 01 - signed(Response(Assertion))
 	1: "",
 	// 03 - Response(signed(Assertion))
@@ -64,18 +64,16 @@ var oneLoginScenarioErrors = map[int]string{
 	17: "error validating response: Signature could not be verified",
 	// 18 - signed(Response(encrypted(signed(Assertion)))) - 16 signed (signature valid, still cannot decrypt)
 	18: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: rsa internal error: crypto/rsa: decryption error",
-	// 81 - Response(Assertion) - 99 set IssueInstant before EncryptionCertTime
-	// Note: signatures are being checked before IssueInstant (which is correct)
-	81: "error validating response: response and/or assertions must be signed",
-	// 82 - Response(Assertion) - 99 set IssueInstant after EncryptionCertTime
-	// Note: signatures are being checked before IssueInstant (which is correct)
-	82: "error validating response: response and/or assertions must be signed",
-	// 91 - Response(Assertion) - 99 set IssueInstant before CertTime
-	// Note: signatures are being checked before IssueInstant (which is correct)
-	91: "error validating response: response and/or assertions must be signed",
-	// 92 - Response(Assertion) - 99 set IssueInstant after CertTime
-	// Note: signatures are being checked before IssueInstant (which is correct)
-	92: "error validating response: response and/or assertions must be signed",
+	// 81 - Response(Assertion) - 99 missing assertion and response signature
+	81: "error validating response: Missing signature referencing the top-level element",
+	// 82 - Response(Assertion) - 99 missing assertion and response signature
+	82: "error validating response: Missing signature referencing the top-level element",
+	// 91 - Response(Assertion) - 99 missing Response subject confirmation element
+	// Note: gosaml2 is correctly checking signature before contents
+	91: "error validating response: Missing signature referencing the top-level element",
+	// 92 - Response(Assertion) - 99 missing Response subject confirmation method
+	// Note: gosaml2 is correctly checking signature before contents
+	92: "error validating response: Missing signature referencing the top-level element",
 	// 21 - signed(Response(Assertion)) - 91 sign Response, IssueInstant before SigningCertTime
 	21: "error validating response: Cert is not valid at this time",
 	// 22 - signed(Response(Assertion)) - 92 sign Response, IssueInstant after SigningCertTime
@@ -120,19 +118,19 @@ var oneLoginScenarioErrors = map[int]string{
 	48: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
 	// 85 - Response(Assertion) - 99 empty Response Destination (empty is ok, Destination is optional)
 	// Note: gosaml2 is correctly checking signature before contents
-	85: "error validating response: response and/or assertions must be signed",
+	85: "error validating response: Missing signature referencing the top-level element",
 	// 86 - Response(Assertion) - 99 wrong Response Destination (SP acs)
 	// Note: gosaml2 is correctly checking signature before contents
-	86: "error validating response: response and/or assertions must be signed",
+	86: "error validating response: Missing signature referencing the top-level element",
 	// 87 - Response(Assertion) - 99 wrong Response Issuer (IDP endpoint id)
 	// Note: gosaml2 is correctly checking signature before contents
-	87: "error validating response: response and/or assertions must be signed",
+	87: "error validating response: Missing signature referencing the top-level element",
 	// 88 - Response(Assertion) - 99 wrong Assertion Audience (SP entity id)
 	// Note: gosaml2 is correctly checking signature before contents
-	88: "error validating response: response and/or assertions must be signed",
+	88: "error validating response: Missing signature referencing the top-level element",
 	// 89 - Response(Assertion) - 99 wrong Assertion Issuer (IDP endpoint id)
 	// Note: gosaml2 is correctly checking signature before contents
-	89: "error validating response: response and/or assertions must be signed",
+	89: "error validating response: Missing signature referencing the top-level element",
 	// 50 - signed(Response(Assertion)) - 85 signed Response, empty Response Destination (success, optional)
 	50: "",
 	// 51 - signed(Response(Assertion)) - 86 signed Response, wrong Response Destination (SP acs)
