@@ -137,16 +137,17 @@ type RequestedAuthnContext struct {
 
 func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	keyDescriptors := make([]types.KeyDescriptor, 0, 2)
-	if sp.GetSigningKey() != nil {
-		signingCertBytes, err := sp.GetSigningCertBytes()
-		if err != nil {
-			return nil, err
-		}
+
+	signingCertBytes, err := sp.GetSigningCertBytes()
+	if err != nil {
+		return nil, err
+	}
+	if signingCertBytes != nil {
 		keyDescriptors = append(keyDescriptors, types.KeyDescriptor{
 			Use: "signing",
 			KeyInfo: dsigtypes.KeyInfo{
 				X509Data: dsigtypes.X509Data{
-					X509Certificates: []dsigtypes.X509Certificate{dsigtypes.X509Certificate{
+					X509Certificates: []dsigtypes.X509Certificate{{
 						Data: base64.StdEncoding.EncodeToString(signingCertBytes),
 					}},
 				},
