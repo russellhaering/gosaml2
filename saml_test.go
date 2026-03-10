@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"compress/flate"
 	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -27,9 +29,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/beevik/etree"
+	"github.com/jonboulle/clockwork"
 	"github.com/russellhaering/gosaml2/types"
 	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/stretchr/testify/require"
@@ -90,6 +95,36 @@ func TestDecode(t *testing.T) {
 	require.EqualValues(t, expected, assertion, "decrypted assertion did not match expectation")
 }
 
+type testKeyStoreImpl struct {
+	key  *rsa.PrivateKey
+	cert []byte
+}
+
+func (ks *testKeyStoreImpl) GetKeyPair() (*rsa.PrivateKey, []byte, error) {
+	return ks.key, ks.cert, nil
+}
+
+// testKeyStore generates an RSA key pair with a certificate valid at the given
+// time, suitable for use with a fake clock in tests.
+func testKeyStore(t *testing.T, validAt time.Time) dsig.X509KeyStore {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(0),
+		NotBefore:             validAt.Add(-time.Hour),
+		NotAfter:              validAt.Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+
+	return &testKeyStoreImpl{key: key, cert: certBytes}
+}
+
 func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 	doc := etree.NewDocument()
 	err := doc.ReadFromBytes([]byte(resp))
@@ -147,27 +182,24 @@ func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 		AudienceURI:                 "123",
 		IDPCertificateStore:         &certStore,
 		NameIdFormat:                NameIdFormatPersistent,
+		Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))),
 	}
 }
 
 func TestSAML(t *testing.T) {
-	randomKeyStore := dsig.RandomKeyStoreForTest()
-	_, _cert, err := randomKeyStore.GetKeyPair()
-	if err != nil {
-		t.Fatalf("GetKeyPair failed with error: %v\n", err)
-	}
+	ks := testKeyStore(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	_, _cert, err := ks.GetKeyPair()
+	require.NoError(t, err)
 
 	sp := getSAMLServiceProvider(t, _cert)
-	sp.SPKeyStore = randomKeyStore
+	sp.SPKeyStore = ks
 	testSAMLServiceProvider(t, sp)
 }
 
 func TestSAMLUsingSetSPKeyStore(t *testing.T) {
-	randomKeyStore := dsig.RandomKeyStoreForTest()
-	privateKey, _cert, err := randomKeyStore.GetKeyPair()
-	if err != nil {
-		t.Fatalf("GetKeyPair failed with error: %v\n", err)
-	}
+	ks := testKeyStore(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	privateKey, _cert, err := ks.GetKeyPair()
+	require.NoError(t, err)
 
 	sp := getSAMLServiceProvider(t, _cert)
 	sp.SetSPKeyStore(&KeyStore{
