@@ -16,6 +16,7 @@ package saml2
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -24,9 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
-	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,22 +101,24 @@ wlekRhVEjR0UhnM+nn2sqqbv7tDEPs63lZSDXCnR1PhscHrEuQ04rHI3OL0gCULVQFvJrj85IAZF
 
 func testEncryptedAssertion(t *testing.T, validateEncryptionCert bool) {
 	var err error
-	cert, err := tls.LoadX509KeyPair("./testdata/test.crt", "./testdata/test.key")
+	tlsCert, err := tls.LoadX509KeyPair("./testdata/test.crt", "./testdata/test.key")
 	require.NoError(t, err, "could not load x509 key pair")
 
 	block, _ := pem.Decode([]byte(idpCert))
 
-	idpCert, err := x509.ParseCertificate(block.Bytes)
+	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse idp cert pem block")
 
+	fakeTime := time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)
 	sp := SAMLServiceProvider{
 		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
-		SPKeyStore:                  dsig.TLSCertKeyStore(cert),
-		ValidateEncryptionCert:      validateEncryptionCert,
-		IDPCertificateStore: &dsig.MemoryX509CertificateStore{
-			Roots: []*x509.Certificate{idpCert},
+		SPKeyStore: &KeyStore{
+			Signer: tlsCert.PrivateKey.(crypto.Signer),
+			Cert:   tlsCert.Certificate[0],
 		},
-		Clock: dsig.NewFakeClockAt(time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)),
+		ValidateEncryptionCert: validateEncryptionCert,
+		IDPCertificates:        []*x509.Certificate{idpCertParsed},
+		Clock:                  func() time.Time { return fakeTime },
 	}
 
 	bs, err := ioutil.ReadFile("./testdata/saml.post")
@@ -146,16 +147,19 @@ func TestCompressedResponse(t *testing.T) {
 
 	block, _ := pem.Decode([]byte(oktaCert))
 
-	idpCert, err := x509.ParseCertificate(block.Bytes)
+	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
+	fakeTime := time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC)
 	sp := SAMLServiceProvider{
 		AssertionConsumerServiceURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
-		SPKeyStore:                  dsig.TLSCertKeyStore(cert),
-		IDPCertificateStore: &dsig.MemoryX509CertificateStore{
-			Roots: []*x509.Certificate{idpCert},
+		SPKeyStore: &KeyStore{
+			Signer: cert.PrivateKey.(crypto.Signer),
+			Cert:   cert.Certificate[0],
 		},
-		Clock: dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC))),
+		IDPCertificates: []*x509.Certificate{idpCertParsed},
+		Clock:           func() time.Time { return fakeTime },
+		AllowSHA1:       true,
 	}
 
 	_, err = sp.RetrieveAssertionInfo(string(bs))
@@ -186,18 +190,15 @@ func TestDecodeDoubleColonInjectionAttackResponse(t *testing.T) {
 
 func TestMalFormedInput(t *testing.T) {
 	block, _ := pem.Decode([]byte(oktaCert2))
-	idpCert, err := x509.ParseCertificate(block.Bytes)
+	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
-	certStore := dsig.MemoryX509CertificateStore{
-		Roots: []*x509.Certificate{idpCert},
-	}
-
+	fakeTime := time.Date(2019, 8, 12, 12, 00, 52, 718, time.UTC)
 	sp := &SAMLServiceProvider{
-		Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2019, 8, 12, 12, 00, 52, 718, time.UTC))),
+		Clock:                       func() time.Time { return fakeTime },
 		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
 		SignAuthnRequests:           true,
-		IDPCertificateStore:         &certStore,
+		IDPCertificates:             []*x509.Certificate{idpCertParsed},
 		ValidateEncryptionCert:      true,
 	}
 	base64Input := base64.StdEncoding.EncodeToString([]byte(badInput))
@@ -211,16 +212,18 @@ func TestCompressionBombInput(t *testing.T) {
 
 	block, _ := pem.Decode([]byte(oktaCert))
 
-	idpCert, err := x509.ParseCertificate(block.Bytes)
+	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
+	fakeTime := time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC)
 	sp := SAMLServiceProvider{
 		AssertionConsumerServiceURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
-		SPKeyStore:                  dsig.TLSCertKeyStore(cert),
-		IDPCertificateStore: &dsig.MemoryX509CertificateStore{
-			Roots: []*x509.Certificate{idpCert},
+		SPKeyStore: &KeyStore{
+			Signer: cert.PrivateKey.(crypto.Signer),
+			Cert:   cert.Certificate[0],
 		},
-		Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC))),
+		IDPCertificates:             []*x509.Certificate{idpCertParsed},
+		Clock:                       func() time.Time { return fakeTime },
 		MaximumDecompressedBodySize: 2048,
 	}
 

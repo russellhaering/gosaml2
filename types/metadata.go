@@ -17,8 +17,6 @@ package types
 import (
 	"encoding/xml"
 	"time"
-
-	dsigtypes "github.com/russellhaering/goxmldsig/types"
 )
 
 type EntityDescriptor struct {
@@ -69,8 +67,26 @@ type IDPSSODescriptor struct {
 type KeyDescriptor struct {
 	XMLName           xml.Name           `xml:"urn:oasis:names:tc:SAML:2.0:metadata KeyDescriptor"`
 	Use               string             `xml:"use,attr"`
-	KeyInfo           dsigtypes.KeyInfo  `xml:"KeyInfo"`
+	KeyInfo           KeyInfo            `xml:"KeyInfo"`
 	EncryptionMethods []EncryptionMethod `xml:"EncryptionMethod"`
+}
+
+// KeyInfo represents a ds:KeyInfo element.
+type KeyInfo struct {
+	XMLName  xml.Name `xml:"http://www.w3.org/2000/09/xmldsig# KeyInfo"`
+	X509Data X509Data `xml:"X509Data"`
+}
+
+// X509Data represents a ds:X509Data element.
+type X509Data struct {
+	XMLName          xml.Name          `xml:"http://www.w3.org/2000/09/xmldsig# X509Data"`
+	X509Certificates []X509Certificate `xml:"X509Certificate"`
+}
+
+// X509Certificate represents a ds:X509Certificate element.
+type X509Certificate struct {
+	XMLName xml.Name `xml:"http://www.w3.org/2000/09/xmldsig# X509Certificate"`
+	Data    string   `xml:",chardata"`
 }
 
 type NameIDFormat struct {

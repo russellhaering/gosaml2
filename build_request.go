@@ -44,7 +44,7 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	authnRequest.CreateAttr("Version", "2.0")
 	authnRequest.CreateAttr("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")
 	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
-	authnRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
+	authnRequest.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
 	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
 	if sp.ForceAuthn {
 		authnRequest.CreateAttr("ForceAuthn", "true")
@@ -108,22 +108,29 @@ func (sp *SAMLServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document,
 //
 // [1] https://docs.oasis-open.org/security/saml/v2.0/saml-schema-protocol-2.0.xsd
 func (sp *SAMLServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Element, error) {
-	ctx := sp.SigningContext()
-
-	sig, err := ctx.ConstructSignature(el, true)
+	signed, err := sp.Signer().SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := el.Copy()
+	// SignEnveloped appends the signature as the last child.
+	// Per the SAML schema, signature must come right after the Issuer.
+	// Rearrange: [issuer, sig, ...rest]
+	children := signed.ChildElements()
+	if len(children) >= 2 {
+		// Find the Signature element (last child added by SignEnveloped)
+		sigEl := children[len(children)-1]
+		signed.RemoveChild(sigEl)
 
-	var children []etree.Token
-	children = append(children, ret.Child[0])     // issuer is always first
-	children = append(children, sig)              // next is the signature
-	children = append(children, ret.Child[1:]...) // then all other children
-	ret.Child = children
+		// Rebuild: issuer first, then sig, then rest
+		var newChildren []etree.Token
+		newChildren = append(newChildren, signed.Child[0]) // issuer
+		newChildren = append(newChildren, sigEl)           // signature
+		newChildren = append(newChildren, signed.Child[1:]...) // rest
+		signed.Child = newChildren
+	}
 
-	return ret, nil
+	return signed, nil
 }
 
 // BuildAuthRequest builds <AuthnRequest> for identity provider
@@ -173,10 +180,11 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 
 	if sp.SignAuthnRequests && binding == BindingHttpRedirect {
 		// Sign URL encoded query (see Section 3.4.4.1 DEFLATE Encoding of saml-bindings-2.0-os.pdf)
-		ctx := sp.SigningContext()
-		qs.Add("SigAlg", ctx.GetSignatureMethodIdentifier())
+		signer := sp.Signer()
+		sigAlg := signatureMethodIdentifier(signer.Key, signer.Hash)
+		qs.Add("SigAlg", sigAlg)
 		var rawSignature []byte
-		if rawSignature, err = ctx.SignString(signatureInputString(qs.Get("SAMLRequest"), qs.Get("RelayState"), qs.Get("SigAlg"))); err != nil {
+		if rawSignature, err = signer.SignString(signatureInputString(qs.Get("SAMLRequest"), qs.Get("RelayState"), qs.Get("SigAlg"))); err != nil {
 			return "", fmt.Errorf("unable to sign query string of redirect URL: %v", err)
 		}
 
@@ -313,7 +321,7 @@ func (sp *SAMLServiceProvider) buildLogoutRequest(includeSig bool, nameID string
 
 	logoutRequest.CreateAttr("ID", "_"+arId.String())
 	logoutRequest.CreateAttr("Version", "2.0")
-	logoutRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
+	logoutRequest.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
 	logoutRequest.CreateAttr("Destination", sp.IdentityProviderSLOURL)
 
 	// NOTE(russell_h): In earlier versions we mistakenly sent the IdentityProviderIssuer
@@ -356,22 +364,26 @@ func (sp *SAMLServiceProvider) buildLogoutRequest(includeSig bool, nameID string
 }
 
 func (sp *SAMLServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element, error) {
-	ctx := sp.SigningContext()
-
-	sig, err := ctx.ConstructSignature(el, true)
+	signed, err := sp.Signer().SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := el.Copy()
+	// SignEnveloped appends the signature as the last child.
+	// Per the SAML schema, signature must come right after the Issuer.
+	children := signed.ChildElements()
+	if len(children) >= 2 {
+		sigEl := children[len(children)-1]
+		signed.RemoveChild(sigEl)
 
-	var children []etree.Token
-	children = append(children, ret.Child[0])     // issuer is always first
-	children = append(children, sig)              // next is the signature
-	children = append(children, ret.Child[1:]...) // then all other children
-	ret.Child = children
+		var newChildren []etree.Token
+		newChildren = append(newChildren, signed.Child[0])
+		newChildren = append(newChildren, sigEl)
+		newChildren = append(newChildren, signed.Child[1:]...)
+		signed.Child = newChildren
+	}
 
-	return ret, nil
+	return signed, nil
 }
 
 func (sp *SAMLServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*etree.Document, error) {
@@ -486,8 +498,9 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 
 	if binding == BindingHttpRedirect {
 		// Sign URL encoded query (see Section 3.4.4.1 DEFLATE Encoding of saml-bindings-2.0-os.pdf)
-		ctx := sp.SigningContext()
-		qs.Add("SigAlg", ctx.GetSignatureMethodIdentifier())
+		signer := sp.Signer()
+		sigAlg := signatureMethodIdentifier(signer.Key, signer.Hash)
+		qs.Add("SigAlg", sigAlg)
 		var rawSignature []byte
 		//qs.Encode() sorts the keys (See https://golang.org/pkg/net/url/#Values.Encode).
 		//If RelayState parameter is present then RelayState parameter
@@ -501,7 +514,7 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 		if relayState != "" {
 			paramValueMap["RelayState"] = relayState
 		}
-		paramValueMap["SigAlg"] = ctx.GetSignatureMethodIdentifier()
+		paramValueMap["SigAlg"] = sigAlg
 
 		ss := ""
 
@@ -521,7 +534,7 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 		}
 
 		//Now generate the signature on the string of ordered parameters.
-		if rawSignature, err = ctx.SignString(ss); err != nil {
+		if rawSignature, err = signer.SignString(ss); err != nil {
 			return "", fmt.Errorf("unable to sign query string of redirect URL: %v", err)
 		}
 

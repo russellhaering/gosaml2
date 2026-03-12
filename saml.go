@@ -16,13 +16,15 @@ package saml2
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"sync"
 	"time"
 
 	"github.com/russellhaering/gosaml2/types"
-	dsig "github.com/russellhaering/goxmldsig"
-	dsigtypes "github.com/russellhaering/goxmldsig/types"
+	dsig "github.com/russellhaering/goxmldsig/v2"
 )
 
 type ErrSaml struct {
@@ -65,55 +67,41 @@ type SAMLServiceProvider struct {
 	// provider use specific authentication mechanisms. Leaving this unset will
 	// permit the identity provider to choose the auth method. To maximize compatibility
 	// with identity providers it is recommended to leave this unset.
-	RequestedAuthnContext   *RequestedAuthnContext
-	AudienceURI             string
-	IDPCertificateStore     dsig.X509CertificateStore
+	RequestedAuthnContext *RequestedAuthnContext
+	AudienceURI           string
+
+	// IDPCertificates are the trusted certificates from the identity provider.
+	IDPCertificates []*x509.Certificate
+
 	NameIdFormat            string
 	ValidateEncryptionCert  bool
 	SkipSignatureValidation bool
 	AllowMissingAttributes  bool
-	Clock                   *dsig.Clock
 
-	// Required encryption key and default signing key.
-	// Deprecated: Use SetSPKeyStore instead of setting or reading this field.
-	SPKeyStore dsig.X509KeyStore
+	// AllowSHA1 permits SHA-1 for signature and digest algorithms.
+	// Default: false (SHA-1 is rejected).
+	AllowSHA1 bool
 
-	// Optional signing key.
-	// Deprecated: Use SetSPSigningKeyStore instead of setting or reading this field.
-	SPSigningKeyStore dsig.X509KeyStore
+	// Clock returns the current time. If nil, time.Now is used.
+	Clock func() time.Time
 
-	spKeyStoreOverride        *KeyStore // When set via SetSPKeyStore, this field is used instead of SPKeyStore
-	spSigningKeyStoreOverride *KeyStore // When set via SetSPSigningKeyStore, this field is used instead of SPSigningKeyStore
+	// SPKeyStore holds the SP encryption/decryption key and certificate.
+	SPKeyStore *KeyStore
+
+	// SPSigningKeyStore holds the SP signing key and certificate.
+	// If nil, SPKeyStore is used for signing.
+	SPSigningKeyStore *KeyStore
 
 	// MaximumDecompressedBodySize is the maximum size to which a compressed
-	// SAML document will be decompressed. If a compresed document is exceeds
+	// SAML document will be decompressed. If a compressed document exceeds
 	// this size during decompression an error will be returned.
 	MaximumDecompressedBodySize int64
 
-	signingContextMu sync.RWMutex
-	signingContext   *dsig.SigningContext
+	signerMu sync.RWMutex
+	signer   *dsig.Signer
 }
 
-// SetSPKeyStore sets the encryption key to be used.
-// It is required to either call this method (recommended) or
-// set SPKeyStore directly (deprecated).
-func (sp *SAMLServiceProvider) SetSPKeyStore(ks *KeyStore) error {
-	if ks != nil && ks.Signer == nil {
-		return ErrSaml{Message: "SP key store signer can't be nil"}
-	}
-	sp.spKeyStoreOverride = ks
-	return nil
-}
-
-// SetSPSigningKeyStore sets the signing key to be used.
-func (sp *SAMLServiceProvider) SetSPSigningKeyStore(ks *KeyStore) error {
-	if ks != nil && ks.Signer == nil {
-		return ErrSaml{Message: "SP signing key store signer can't be nil"}
-	}
-	sp.spSigningKeyStoreOverride = ks
-	return nil
-}
-
+// KeyStore holds a signing key and its associated certificate.
 type KeyStore struct {
 	Signer crypto.Signer
 	Cert   []byte
@@ -137,16 +125,16 @@ type RequestedAuthnContext struct {
 
 func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	keyDescriptors := make([]types.KeyDescriptor, 0, 2)
-	if sp.GetSigningKey() != nil {
+	if sp.getSigningKeyStore() != nil {
 		signingCertBytes, err := sp.GetSigningCertBytes()
 		if err != nil {
 			return nil, err
 		}
 		keyDescriptors = append(keyDescriptors, types.KeyDescriptor{
 			Use: "signing",
-			KeyInfo: dsigtypes.KeyInfo{
-				X509Data: dsigtypes.X509Data{
-					X509Certificates: []dsigtypes.X509Certificate{dsigtypes.X509Certificate{
+			KeyInfo: types.KeyInfo{
+				X509Data: types.X509Data{
+					X509Certificates: []types.X509Certificate{{
 						Data: base64.StdEncoding.EncodeToString(signingCertBytes),
 					}},
 				},
@@ -161,9 +149,9 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	if encryptionCertBytes != nil {
 		keyDescriptors = append(keyDescriptors, types.KeyDescriptor{
 			Use: "encryption",
-			KeyInfo: dsigtypes.KeyInfo{
-				X509Data: dsigtypes.X509Data{
-					X509Certificates: []dsigtypes.X509Certificate{{
+			KeyInfo: types.KeyInfo{
+				X509Data: types.X509Data{
+					X509Certificates: []types.X509Certificate{{
 						Data: base64.StdEncoding.EncodeToString(encryptionCertBytes),
 					}},
 				},
@@ -178,7 +166,7 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 		})
 	}
 	return &types.EntityDescriptor{
-		ValidUntil: sp.Clock.Now().UTC().Add(time.Hour * 24 * 7), // 7 days
+		ValidUntil: sp.now().UTC().Add(time.Hour * 24 * 7), // 7 days
 		EntityID:   sp.ServiceProviderIssuer,
 		SPSSODescriptor: &types.SPSSODescriptor{
 			AuthnRequestsSigned:        sp.SignAuthnRequests,
@@ -210,7 +198,7 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
 	}
 
 	return &types.EntityDescriptor{
-		ValidUntil: sp.Clock.Now().UTC().Add(time.Duration(validityHours)), // default 7 days
+		ValidUntil: sp.now().UTC().Add(time.Duration(validityHours)), // default 7 days
 		EntityID:   sp.ServiceProviderIssuer,
 		SPSSODescriptor: &types.SPSSODescriptor{
 			AuthnRequestsSigned:        sp.SignAuthnRequests,
@@ -219,9 +207,9 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
 			KeyDescriptors: []types.KeyDescriptor{
 				{
 					Use: "signing",
-					KeyInfo: dsigtypes.KeyInfo{
-						X509Data: dsigtypes.X509Data{
-							X509Certificates: []dsigtypes.X509Certificate{{
+					KeyInfo: types.KeyInfo{
+						X509Data: types.X509Data{
+							X509Certificates: []types.X509Certificate{{
 								Data: base64.StdEncoding.EncodeToString(signingCertBytes),
 							}},
 						},
@@ -229,9 +217,9 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
 				},
 				{
 					Use: "encryption",
-					KeyInfo: dsigtypes.KeyInfo{
-						X509Data: dsigtypes.X509Data{
-							X509Certificates: []dsigtypes.X509Certificate{{
+					KeyInfo: types.KeyInfo{
+						X509Data: types.X509Data{
+							X509Certificates: []types.X509Certificate{{
 								Data: base64.StdEncoding.EncodeToString(encryptionCertBytes),
 							}},
 						},
@@ -258,107 +246,127 @@ func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.Enti
 	}, nil
 }
 
-// Deprecated: This method won't return the correct value if SetSPKeyStore is used.
-func (sp *SAMLServiceProvider) GetEncryptionKey() dsig.X509KeyStore {
+// now returns the current time using the configured clock, or time.Now.
+func (sp *SAMLServiceProvider) now() time.Time {
+	if sp.Clock != nil {
+		return sp.Clock()
+	}
+	return time.Now()
+}
+
+// getSigningKeyStore returns the key store to use for signing.
+func (sp *SAMLServiceProvider) getSigningKeyStore() *KeyStore {
+	if sp.SPSigningKeyStore != nil {
+		return sp.SPSigningKeyStore
+	}
 	return sp.SPKeyStore
 }
 
-// Deprecated: This method won't return the correct value if SetSPSigningKeyStore is used.
-func (sp *SAMLServiceProvider) GetSigningKey() dsig.X509KeyStore {
-	if sp.SPSigningKeyStore == nil {
-		return sp.GetEncryptionKey() // Default is signing key is same as encryption key
-	}
-	return sp.SPSigningKeyStore
-}
-
-func (sp *SAMLServiceProvider) getEncryptionCert() ([]byte, error) {
-	if sp.spKeyStoreOverride != nil {
-		return sp.spKeyStoreOverride.Cert, nil
-	}
-	if sp.SPKeyStore != nil {
-		_, cert, err := sp.SPKeyStore.GetKeyPair()
-		return cert, err
-	}
-	return nil, nil
-}
-
 func (sp *SAMLServiceProvider) GetEncryptionCertBytes() ([]byte, error) {
-	cert, err := sp.getEncryptionCert()
-	if err != nil {
-		return nil, err
-	}
-	if len(cert) < 1 {
+	if sp.SPKeyStore == nil {
 		return nil, ErrSaml{Message: "empty SP encryption certificate"}
 	}
-	return cert, nil
-}
-
-func (sp *SAMLServiceProvider) getSigningCert() ([]byte, error) {
-	if sp.spSigningKeyStoreOverride != nil {
-		return sp.spSigningKeyStoreOverride.Cert, nil
+	if len(sp.SPKeyStore.Cert) < 1 {
+		return nil, ErrSaml{Message: "empty SP encryption certificate"}
 	}
-	if sp.SPSigningKeyStore != nil {
-		_, cert, err := sp.SPSigningKeyStore.GetKeyPair()
-		return cert, err
-	}
-	return sp.getEncryptionCert()
+	return sp.SPKeyStore.Cert, nil
 }
 
 func (sp *SAMLServiceProvider) GetSigningCertBytes() ([]byte, error) {
-	cert, err := sp.getSigningCert()
-	if err != nil {
-		return nil, err
-	}
-	if len(cert) < 1 {
+	ks := sp.getSigningKeyStore()
+	if ks == nil {
 		return nil, ErrSaml{Message: "empty SP signing certificate"}
 	}
-	return cert, nil
+	if len(ks.Cert) < 1 {
+		return nil, ErrSaml{Message: "empty SP signing certificate"}
+	}
+	return ks.Cert, nil
 }
 
-func (sp *SAMLServiceProvider) getSignerCert() (crypto.Signer, []byte, error) {
-	if s := sp.spSigningKeyStoreOverride; s != nil {
-		return s.Signer, s.Cert, nil
-	}
-	if s := sp.SPSigningKeyStore; s != nil {
-		return s.GetKeyPair()
-	}
-	return nil, nil, nil
-}
+// Signer returns a dsig.Signer configured for this service provider.
+func (sp *SAMLServiceProvider) Signer() *dsig.Signer {
+	sp.signerMu.RLock()
+	s := sp.signer
+	sp.signerMu.RUnlock()
 
-func (sp *SAMLServiceProvider) SigningContext() *dsig.SigningContext {
-	sp.signingContextMu.RLock()
-	signingContext := sp.signingContext
-	sp.signingContextMu.RUnlock()
-
-	if signingContext != nil {
-		return signingContext
+	if s != nil {
+		return s
 	}
 
-	sp.signingContextMu.Lock()
-	defer sp.signingContextMu.Unlock()
+	sp.signerMu.Lock()
+	defer sp.signerMu.Unlock()
 
-	signing := sp.spSigningKeyStoreOverride
-	if signing == nil {
-		signing = sp.spKeyStoreOverride
+	ks := sp.getSigningKeyStore()
+	if ks == nil {
+		return nil
 	}
-	var err error
-	if signing != nil {
-		sp.signingContext, err = dsig.NewSigningContext(signing.Signer, [][]byte{signing.Cert})
-		if err != nil {
-			// Ideally this function should return the error, but updating the function signature would be backward incompatible.
-			// In practice, this error should never happen because NewSigningContext only errors when passed a nil signer, and
-			// sp.spSigningKeyStoreOverride only gets set after checking to ensure the signer is not nil.
-			panic(err)
-		}
-	} else {
-		sp.signingContext = dsig.NewDefaultSigningContext(sp.GetSigningKey())
+
+	cert, err := x509.ParseCertificate(ks.Cert)
+	if err != nil {
+		panic(err)
 	}
-	sp.signingContext.SetSignatureMethod(sp.SignAuthnRequestsAlgorithm)
+
+	sp.signer = &dsig.Signer{
+		Key:   ks.Signer,
+		Certs: []*x509.Certificate{cert},
+		Hash:  signatureAlgorithmHash(sp.SignAuthnRequestsAlgorithm),
+	}
 	if sp.SignAuthnRequestsCanonicalizer != nil {
-		sp.signingContext.Canonicalizer = sp.SignAuthnRequestsCanonicalizer
+		sp.signer.Canonicalizer = sp.SignAuthnRequestsCanonicalizer
 	}
 
-	return sp.signingContext
+	return sp.signer
+}
+
+// signatureAlgorithmHash returns the crypto.Hash for a given signature method URI.
+// Returns 0 (which defaults to SHA256 in the Signer) if unrecognized or empty.
+func signatureAlgorithmHash(algorithm string) crypto.Hash {
+	switch algorithm {
+	case dsig.RSASHA1SignatureMethod, dsig.ECDSASHA1SignatureMethod:
+		return crypto.SHA1
+	case dsig.RSASHA256SignatureMethod, dsig.ECDSASHA256SignatureMethod:
+		return crypto.SHA256
+	case dsig.RSASHA384SignatureMethod, dsig.ECDSASHA384SignatureMethod:
+		return crypto.SHA384
+	case dsig.RSASHA512SignatureMethod, dsig.ECDSASHA512SignatureMethod:
+		return crypto.SHA512
+	default:
+		return 0
+	}
+}
+
+// signatureMethodIdentifier returns the XML-DSig signature method URI for the
+// given key and hash algorithm. This is needed for the HTTP-Redirect binding
+// where the SigAlg query parameter must be set.
+func signatureMethodIdentifier(key crypto.Signer, hash crypto.Hash) string {
+	if hash == 0 {
+		hash = crypto.SHA256
+	}
+	switch key.Public().(type) {
+	case *rsa.PublicKey:
+		switch hash {
+		case crypto.SHA1:
+			return dsig.RSASHA1SignatureMethod
+		case crypto.SHA256:
+			return dsig.RSASHA256SignatureMethod
+		case crypto.SHA384:
+			return dsig.RSASHA384SignatureMethod
+		case crypto.SHA512:
+			return dsig.RSASHA512SignatureMethod
+		}
+	case *ecdsa.PublicKey:
+		switch hash {
+		case crypto.SHA1:
+			return dsig.ECDSASHA1SignatureMethod
+		case crypto.SHA256:
+			return dsig.ECDSASHA256SignatureMethod
+		case crypto.SHA384:
+			return dsig.ECDSASHA384SignatureMethod
+		case crypto.SHA512:
+			return dsig.ECDSASHA512SignatureMethod
+		}
+	}
+	return dsig.RSASHA256SignatureMethod
 }
 
 type ProxyRestriction struct {

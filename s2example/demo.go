@@ -15,18 +15,18 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
-	"fmt"
-	"net/http"
-
-	"io/ioutil"
-
 	"encoding/base64"
 	"encoding/xml"
+	"fmt"
+	"io/ioutil"
+	"math/big"
+	"net/http"
 
 	saml2 "github.com/russellhaering/gosaml2"
 	"github.com/russellhaering/gosaml2/types"
-	dsig "github.com/russellhaering/goxmldsig"
 )
 
 func main() {
@@ -46,9 +46,7 @@ func main() {
 		panic(err)
 	}
 
-	certStore := dsig.MemoryX509CertificateStore{
-		Roots: []*x509.Certificate{},
-	}
+	var idpCerts []*x509.Certificate
 
 	for _, kd := range metadata.IDPSSODescriptor.KeyDescriptors {
 		for idx, xcert := range kd.KeyInfo.X509Data.X509Certificates {
@@ -65,13 +63,13 @@ func main() {
 				panic(err)
 			}
 
-			certStore.Roots = append(certStore.Roots, idpCert)
+			idpCerts = append(idpCerts, idpCert)
 		}
 	}
 
 	// We sign the AuthnRequest with a random key because Okta doesn't seem
 	// to verify these.
-	randomKeyStore := dsig.RandomKeyStoreForTest()
+	randomKeyStore := randomKeyStoreForDemo()
 
 	sp := &saml2.SAMLServiceProvider{
 		IdentityProviderSSOURL:      metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
@@ -80,7 +78,7 @@ func main() {
 		AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
 		SignAuthnRequests:           true,
 		AudienceURI:                 "http://example.com/saml/acs/example",
-		IDPCertificateStore:         &certStore,
+		IDPCertificates:             idpCerts,
 		SPKeyStore:                  randomKeyStore,
 	}
 
@@ -135,5 +133,25 @@ func main() {
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func randomKeyStoreForDemo() *saml2.KeyStore {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+	}
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+
+	return &saml2.KeyStore{
+		Signer: key,
+		Cert:   certBytes,
 	}
 }

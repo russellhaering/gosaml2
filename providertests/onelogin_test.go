@@ -23,9 +23,9 @@ import (
 
 var oneLoginScenarioErrors = map[int]string{
 	// 99 - Response(Assertion) - no signature
-	99: "error validating response: Missing signature referencing the top-level element",
+	99: "error validating response: dsig: missing signature referencing the top-level element",
 	// 98 - Response(encrypted(Assertion)) - no signature
-	98: "error validating response: Missing signature referencing the top-level element",
+	98: "error validating response: dsig: missing signature referencing the top-level element",
 	// 01 - signed(Response(Assertion))
 	1: "",
 	// 03 - Response(signed(Assertion))
@@ -49,39 +49,39 @@ var oneLoginScenarioErrors = map[int]string{
 	// OneLogin and PingFed also do not include DigestMethod (default to http://www.w3.org/2000/09/xmldsig#sha1).
 	9: "",
 	// 11 - signed(Response(Assertion)) - 01 Assertion content changed slightly
-	11: "error validating response: Signature could not be verified",
+	11: "error validating response: dsig: computed digest does not match signed digest value",
 	// 12 - signed(Response(Assertion)) - 01 Response content changed slightly
-	12: "error validating response: Signature could not be verified",
+	12: "error validating response: dsig: computed digest does not match signed digest value",
 	// 13 - Response(signed(Assertion)) - 03 Assertion content changed slightly
-	13: "error validating response: Signature could not be verified",
+	13: "error validating response: dsig: computed digest does not match signed digest value",
 	// 14 - signed(Response(signed(Assertion)) - 04 Assertion content changed slightly
-	14: "error validating response: Signature could not be verified",
+	14: "error validating response: dsig: computed digest does not match signed digest value",
 	// 15 - signed(Response(signed(Assertion))) - 04 Response content changed slightly
-	15: "error validating response: Signature could not be verified",
+	15: "error validating response: dsig: computed digest does not match signed digest value",
 	// 16 - Response(encrypted(signed(Assertion))) - 06 CipherValue of EncryptedKey changed slightly
 	16: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: rsa internal error: crypto/rsa: decryption error",
 	// 17 - signed(Response(encrypted(Assertion))) - 07 Response content changed slightly
-	17: "error validating response: Signature could not be verified",
+	17: "error validating response: dsig: computed digest does not match signed digest value",
 	// 18 - signed(Response(encrypted(signed(Assertion)))) - 16 signed (signature valid, still cannot decrypt)
 	18: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: rsa internal error: crypto/rsa: decryption error",
 	// 81 - Response(Assertion) - 99 missing assertion and response signature
-	81: "error validating response: Missing signature referencing the top-level element",
+	81: "error validating response: dsig: missing signature referencing the top-level element",
 	// 82 - Response(Assertion) - 99 missing assertion and response signature
-	82: "error validating response: Missing signature referencing the top-level element",
+	82: "error validating response: dsig: missing signature referencing the top-level element",
 	// 91 - Response(Assertion) - 99 missing Response subject confirmation element
 	// Note: gosaml2 is correctly checking signature before contents
-	91: "error validating response: Missing signature referencing the top-level element",
+	91: "error validating response: dsig: missing signature referencing the top-level element",
 	// 92 - Response(Assertion) - 99 missing Response subject confirmation method
 	// Note: gosaml2 is correctly checking signature before contents
-	92: "error validating response: Missing signature referencing the top-level element",
+	92: "error validating response: dsig: missing signature referencing the top-level element",
 	// 21 - signed(Response(Assertion)) - 91 sign Response, IssueInstant before SigningCertTime
-	21: "error validating response: Cert is not valid at this time",
+	21: "error validating response: dsig: certificate not valid at current time",
 	// 22 - signed(Response(Assertion)) - 92 sign Response, IssueInstant after SigningCertTime
-	22: "error validating response: Cert is not valid at this time",
+	22: "error validating response: dsig: certificate not valid at current time",
 	// 93 - Response(signed(Assertion)) - 91 sign Assertion, IssueInstant before SigningCertTime
-	93: "error validating response: Cert is not valid at this time",
+	93: "error validating response: dsig: certificate not valid at current time",
 	// 94 - Response(signed(Assertion)) - 92 sign Assertion, IssueInstant after SigningCertTime
-	94: "error validating response: Cert is not valid at this time",
+	94: "error validating response: dsig: certificate not valid at current time",
 	// 83 - Response(signed(Assertion)) - 81 sign Assertion IssueInstant before EncryptionCertTime
 	//                                    (Success, EncryptionCertTime is not a factor in this case)
 	83: "",
@@ -97,17 +97,17 @@ var oneLoginScenarioErrors = map[int]string{
 	// 28 - Response(encrypted(signed(Assertion))) - 06 with AtTime after IssueInstant
 	28: "error validating response: Expired NotOnOrAfter value, Expected: 2017-08-30T23:55:00Z, Actual: 2017-08-30T23:19:41.379Z",
 	// 31 - signed(Response(Assertion)) - 01 wrong IDP signing cert
-	31: "error validating response: Could not verify certificate against trusted certs",
+	31: "error validating response: dsig: signing certificate not in trusted set",
 	// 33 - Response(signed(Assertion)) - 03 wrong IDP signing cert
-	33: "error validating response: Could not verify certificate against trusted certs",
+	33: "error validating response: dsig: signing certificate not in trusted set",
 	// 34 - signed(Response(signed(Assertion))) - 04 wrong IDP signing cert
-	34: "error validating response: Could not verify certificate against trusted certs",
+	34: "error validating response: dsig: signing certificate not in trusted set",
 	// 36 - Response(encrypted(signed(Assertion))) - 06 wrong IDP signing cert, correct SP encryption cert
-	36: "error validating response: Could not verify certificate against trusted certs",
+	36: "error validating response: dsig: signing certificate not in trusted set",
 	// 37 - signed(Response(encrypted(Assertion))) - 07 wrong IDP signing cert, correct SP encryption cert
-	37: "error validating response: Could not verify certificate against trusted certs",
+	37: "error validating response: dsig: signing certificate not in trusted set",
 	// 38 - signed(Response(encrypted(signed(Assertion)))) - 08 wrong IDP signing cert, correct SP encryption cert
-	38: "error validating response: Could not verify certificate against trusted certs",
+	38: "error validating response: dsig: signing certificate not in trusted set",
 	// 97 - Response(encrypted(Assertion)) - 99 wrong SP encryption cert
 	97: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
 	// 46 - Response(encrypted(signed(Assertion))) - 06 wrong SP encryption cert, correct IDP signing cert
@@ -118,19 +118,19 @@ var oneLoginScenarioErrors = map[int]string{
 	48: "error validating response: unable to decrypt encrypted assertion: cannot decrypt, error retrieving private key: key decryption attempted with mismatched cert, SP cert(cd:f6:7c:e9), assertion cert(42:99:58:b8)",
 	// 85 - Response(Assertion) - 99 empty Response Destination (empty is ok, Destination is optional)
 	// Note: gosaml2 is correctly checking signature before contents
-	85: "error validating response: Missing signature referencing the top-level element",
+	85: "error validating response: dsig: missing signature referencing the top-level element",
 	// 86 - Response(Assertion) - 99 wrong Response Destination (SP acs)
 	// Note: gosaml2 is correctly checking signature before contents
-	86: "error validating response: Missing signature referencing the top-level element",
+	86: "error validating response: dsig: missing signature referencing the top-level element",
 	// 87 - Response(Assertion) - 99 wrong Response Issuer (IDP endpoint id)
 	// Note: gosaml2 is correctly checking signature before contents
-	87: "error validating response: Missing signature referencing the top-level element",
+	87: "error validating response: dsig: missing signature referencing the top-level element",
 	// 88 - Response(Assertion) - 99 wrong Assertion Audience (SP entity id)
 	// Note: gosaml2 is correctly checking signature before contents
-	88: "error validating response: Missing signature referencing the top-level element",
+	88: "error validating response: dsig: missing signature referencing the top-level element",
 	// 89 - Response(Assertion) - 99 wrong Assertion Issuer (IDP endpoint id)
 	// Note: gosaml2 is correctly checking signature before contents
-	89: "error validating response: Missing signature referencing the top-level element",
+	89: "error validating response: dsig: missing signature referencing the top-level element",
 	// 50 - signed(Response(Assertion)) - 85 signed Response, empty Response Destination (success, optional)
 	50: "",
 	// 51 - signed(Response(Assertion)) - 86 signed Response, wrong Response Destination (SP acs)
@@ -193,10 +193,11 @@ func TestOneLoginCasesLocally(t *testing.T) {
 		IdentityProviderIssuer:      "https://saml.idp.nope/h9gkjzvb3e",
 		AssertionConsumerServiceURL: "https://saml.sp.nope/session/sso/saml/acs/rq5jwkvb8z",
 		AudienceURI:                 "https://saml.sp.nope/session/sso/saml/spentityid/rq5jwkvb8z",
-		IDPCertificateStore:         LoadCertificateStore("./testdata/onelogin/idp.signing.cert"),
+		IDPCertificates:             LoadCertificates("./testdata/onelogin/idp.signing.cert"),
 		SPKeyStore:                  LoadKeyStore("./testdata/onelogin/sp.encryption.cert", "./testdata/onelogin/sp.encryption.key"),
 		SPSigningKeyStore:           LoadKeyStore("./testdata/onelogin/sp.signing.cert", "./testdata/onelogin/sp.signing.key"),
 		ValidateEncryptionCert:      true,
+		AllowSHA1:                   true,
 	}
 
 	scenarios := []ProviderTestScenario{}

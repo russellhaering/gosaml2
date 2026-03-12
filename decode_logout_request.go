@@ -16,9 +16,10 @@ package saml2
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 
-	dsig "github.com/russellhaering/goxmldsig"
+	dsig "github.com/russellhaering/goxmldsig/v2"
 )
 
 func (sp *SAMLServiceProvider) validateLogoutRequestAttributes(request *LogoutRequest) error {
@@ -57,7 +58,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest s
 	var requestSignatureValidated bool
 	if !sp.SkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
-		if err == dsig.ErrMissingSignature {
+		if errors.Is(err, dsig.ErrMissingSignature) {
 			// Unfortunately we just blew away our Response
 			el = doc.Root()
 		} else if err != nil {

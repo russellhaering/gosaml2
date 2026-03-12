@@ -59,7 +59,7 @@ func TestPingFedCasesLocally(t *testing.T) {
 		IdentityProviderIssuer:      "https://saml.test.nope:9031/eid/sxpmrhbkzn",
 		AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/hp24dqnpvq",
 		AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/hp24dqnpvq",
-		IDPCertificateStore:         LoadCertificateStore("./testdata/pingfed/idp.signing.cert"),
+		IDPCertificates:             LoadCertificates("./testdata/pingfed/idp.signing.cert"),
 		SPKeyStore:                  LoadKeyStore("./testdata/pingfed/sp.encryption.cert", "./testdata/pingfed/sp.encryption.key"),
 		SPSigningKeyStore:           LoadKeyStore("./testdata/pingfed/sp.signing.cert", "./testdata/pingfed/sp.signing.key"),
 		ValidateEncryptionCert:      true,

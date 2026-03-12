@@ -18,10 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/russellhaering/gosaml2"
-	"github.com/russellhaering/goxmldsig"
 )
+
+func fakeClock(t time.Time) func() time.Time {
+	return func() time.Time { return t }
+}
 
 func TestValidateResponses(t *testing.T) {
 	scenarios := []ProviderTestScenario{
@@ -33,8 +35,9 @@ func TestValidateResponses(t *testing.T) {
 				IdentityProviderIssuer:      "urn:scaleft-test.auth0.com",
 				AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
 				AudienceURI:                 "urn:scaleft-test.auth0.com",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/auth0_cert.pem"),
-				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2016, 7, 25, 18, 30, 0, 0, time.UTC))),
+				IDPCertificates:         LoadCertificates("./testdata/auth0_cert.pem"),
+				AllowSHA1: true,
+				Clock:                       fakeClock(time.Date(2016, 7, 25, 18, 30, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -46,10 +49,10 @@ func TestValidateResponses(t *testing.T) {
 				AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/dknhyszjl7",
 				SignAuthnRequests:           false,
 				AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/dknhyszjl7",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/adfs_idp_signing_cert.pem"),
+				IDPCertificates:         LoadCertificates("./testdata/adfs_idp_signing_cert.pem"),
 				SPKeyStore:                  LoadKeyStore("./testdata/adfs_sp_encryption_cert.pem", "./testdata/adfs_sp_encryption_key.pem"),
 				SPSigningKeyStore:           LoadKeyStore("./testdata/adfs_sp_signing_cert.pem", "./testdata/adfs_sp_signing_key.pem"),
-				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 9, 21, 23, 28, 0, 0, time.UTC))),
+				Clock:                       fakeClock(time.Date(2017, 9, 21, 23, 28, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -61,10 +64,10 @@ func TestValidateResponses(t *testing.T) {
 				AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/dknhyszjl7",
 				SignAuthnRequests:           false,
 				AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/dknhyszjl7",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/adfs_idp_signing_cert.pem"),
+				IDPCertificates:         LoadCertificates("./testdata/adfs_idp_signing_cert.pem"),
 				SPKeyStore:                  LoadKeyStore("./testdata/adfs_sp_encryption_cert.pem", "./testdata/adfs_sp_encryption_key.pem"),
 				SPSigningKeyStore:           LoadKeyStore("./testdata/adfs_sp_signing_cert.pem", "./testdata/adfs_sp_signing_key.pem"),
-				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 9, 21, 23, 20, 0, 0, time.UTC))),
+				Clock:                       fakeClock(time.Date(2017, 9, 21, 23, 20, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -78,10 +81,10 @@ func TestValidateResponses(t *testing.T) {
 				AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/skv8dv26wh",
 				SignAuthnRequests:           false,
 				AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/skv8dv26wh",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/oktaenc_idp_signing_cert.pem"),
+				IDPCertificates:         LoadCertificates("./testdata/oktaenc_idp_signing_cert.pem"),
 				SPKeyStore:                  LoadKeyStore("./testdata/oktaenc_sp_encryption_cert.pem", "./testdata/oktaenc_sp_encryption_key.pem"),
 				SPSigningKeyStore:           LoadKeyStore("./testdata/oktaenc_sp_signing_cert.pem", "./testdata/oktaenc_sp_signing_key.pem"),
-				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 9, 06, 22, 14, 0, 0, time.UTC))),
+				Clock:                       fakeClock(time.Date(2017, 9, 06, 22, 14, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -93,8 +96,8 @@ func TestValidateResponses(t *testing.T) {
 				AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
 				SignAuthnRequests:           true,
 				AudienceURI:                 "\"123\"",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/okta_cert.pem"),
-				Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2016, 7, 25, 23, 16, 0, 0, time.UTC))),
+				IDPCertificates:         LoadCertificates("./testdata/okta_cert.pem"),
+				Clock:                       fakeClock(time.Date(2016, 7, 25, 23, 16, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -104,11 +107,12 @@ func TestValidateResponses(t *testing.T) {
 				IdentityProviderSSOURL:      "https://launchdarkly-dev.onelogin.com/trust/saml2/http-post/sso/634027",
 				IdentityProviderIssuer:      "https://app.onelogin.com/saml/metadata/634027",
 				AssertionConsumerServiceURL: "http://884d40bf.ngrok.io/api/sso/saml2/acs/58af624473d4f375b8e70d81",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/onelogin_cert.pem"),
+				IDPCertificates:         LoadCertificates("./testdata/onelogin_cert.pem"),
 				AudienceURI:                 "{audience}",
 				SkipSignatureValidation:     false,
 				AllowMissingAttributes:      true,
-				Clock: dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 3, 8, 7, 51, 0, 0, time.UTC))),
+				AllowSHA1: true,
+				Clock: fakeClock(time.Date(2017, 3, 8, 7, 51, 0, 0, time.UTC)),
 			},
 		},
 		{
@@ -118,11 +122,12 @@ func TestValidateResponses(t *testing.T) {
 				IdentityProviderSSOURL:      "https://deaoam-dev02.jpl.nasa.gov:14101/oam/fed",
 				IdentityProviderIssuer:      "https://deaoam-dev02.jpl.nasa.gov:14101/oam/fed",
 				AssertionConsumerServiceURL: "http://127.0.0.1:5556/callback",
-				IDPCertificateStore:         LoadCertificateStore("./testdata/oam_cert.pem"),
+				IDPCertificates:         LoadCertificates("./testdata/oam_cert.pem"),
 				AudienceURI:                 "JSAuth",
 				SkipSignatureValidation:     false,
 				AllowMissingAttributes:      true,
-				Clock: dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2016, 12, 12, 16, 55, 0, 0, time.UTC))),
+				AllowSHA1: true,
+				Clock: fakeClock(time.Date(2016, 12, 12, 16, 55, 0, 0, time.UTC)),
 			},
 		},
 	}

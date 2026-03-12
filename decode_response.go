@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 
@@ -28,18 +29,23 @@ import (
 	"github.com/beevik/etree"
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	"github.com/russellhaering/gosaml2/types"
-	dsig "github.com/russellhaering/goxmldsig"
-	"github.com/russellhaering/goxmldsig/etreeutils"
+	dsig "github.com/russellhaering/goxmldsig/v2"
+	"github.com/russellhaering/goxmldsig/v2/etreeutils"
 )
 
 const (
 	defaultMaxDecompressedResponseSize = 5 * 1024 * 1024
 )
 
-func (sp *SAMLServiceProvider) validationContext() *dsig.ValidationContext {
-	ctx := dsig.NewDefaultValidationContext(sp.IDPCertificateStore)
-	ctx.Clock = sp.Clock
-	return ctx
+func (sp *SAMLServiceProvider) verifier() *dsig.Verifier {
+	v := &dsig.Verifier{
+		TrustedCerts: sp.IDPCertificates,
+		AllowSHA1:    sp.AllowSHA1,
+	}
+	if sp.Clock != nil {
+		v.Clock = sp.Clock
+	}
+	return v
 }
 
 // validateResponseAttributes validates a SAML Response's tag and attributes. It does
@@ -108,26 +114,9 @@ func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("no decryption certs available")
 	}
 
-	//This is the tls.Certificate we'll use to decrypt any encrypted assertions
-	var decryptCert tls.Certificate
-
-	switch crt := sp.SPKeyStore.(type) {
-	case dsig.TLSCertKeyStore:
-		// Get the tls.Certificate directly if possible
-		decryptCert = tls.Certificate(crt)
-
-	default:
-
-		//Otherwise, construct one from the results of GetKeyPair
-		pk, cert, err := sp.SPKeyStore.GetKeyPair()
-		if err != nil {
-			return nil, fmt.Errorf("error getting keypair: %v", err)
-		}
-
-		decryptCert = tls.Certificate{
-			Certificate: [][]byte{cert},
-			PrivateKey:  pk,
-		}
+	decryptCert := tls.Certificate{
+		Certificate: [][]byte{sp.SPKeyStore.Cert},
+		PrivateKey:  sp.SPKeyStore.Signer,
 	}
 
 	if sp.ValidateEncryptionCert {
@@ -137,7 +126,7 @@ func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 		} else if cert, err := x509.ParseCertificate(decryptCert.Certificate[0]); err != nil {
 			return nil, fmt.Errorf("invalid x509 decryption cert: %v", err)
 		} else {
-			now := sp.Clock.Now()
+			now := sp.now()
 			if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
 				return nil, fmt.Errorf("decryption cert is not valid at this time")
 			}
@@ -155,7 +144,7 @@ func (sp *SAMLServiceProvider) decryptAssertions(el *etree.Element) error {
 			return fmt.Errorf("found encrypted assertion with unexpected parent element: %s", encryptedElement.Parent().Tag)
 		}
 
-		detached, err := etreeutils.NSDetatch(ctx, encryptedElement) // make a detached copy
+		detached, err := etreeutils.NSDetach(ctx, encryptedElement) // make a detached copy
 		if err != nil {
 			return fmt.Errorf("unable to detach encrypted assertion: %v", err)
 		}
@@ -201,7 +190,11 @@ func (sp *SAMLServiceProvider) decryptAssertions(el *etree.Element) error {
 }
 
 func (sp *SAMLServiceProvider) validateElementSignature(el *etree.Element) (*etree.Element, error) {
-	return sp.validationContext().Validate(el)
+	result, err := sp.verifier().Verify(el)
+	if err != nil {
+		return nil, err
+	}
+	return result.Element, nil
 }
 
 // deprecated
@@ -217,13 +210,13 @@ func (sp *SAMLServiceProvider) validateAssertionSignatures(el *etree.Element) er
 			return fmt.Errorf("found assertion with unexpected parent element: %s", unverifiedAssertion.Parent().Tag)
 		}
 
-		detached, err := etreeutils.NSDetatch(ctx, unverifiedAssertion) // make a detached copy
+		detached, err := etreeutils.NSDetach(ctx, unverifiedAssertion) // make a detached copy
 		if err != nil {
 			return fmt.Errorf("unable to detach unverified assertion: %v", err)
 		}
 
-		assertion, err := sp.validationContext().Validate(detached)
-		if err == dsig.ErrMissingSignature {
+		result, err := sp.verifier().Verify(detached)
+		if errors.Is(err, dsig.ErrMissingSignature) {
 			unsignedAssertions++
 			return nil
 		} else if err != nil {
@@ -238,7 +231,7 @@ func (sp *SAMLServiceProvider) validateAssertionSignatures(el *etree.Element) er
 			panic("unable to remove assertion")
 		}
 
-		el.AddChild(assertion)
+		el.AddChild(result.Element)
 		signedAssertions++
 
 		return nil
@@ -294,7 +287,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 	signedResponseEl, err := sp.validateElementSignature(unverifiedResponse)
 
 	// continue for unsigned Response, maybe individual Assertions are still signed
-	if err == dsig.ErrMissingSignature {
+	if errors.Is(err, dsig.ErrMissingSignature) {
 		// Unfortunately we just blew away our Response
 		unverifiedResponse = doc.Root()
 	} else if err != nil {
@@ -358,13 +351,13 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 			return fmt.Errorf("found assertion with unexpected parent element: %s", unverifiedAssertion.Parent().Tag)
 		}
 
-		detached, err := etreeutils.NSDetatch(ctx, unverifiedAssertion) // make a detached copy
+		detached, err := etreeutils.NSDetach(ctx, unverifiedAssertion) // make a detached copy
 		if err != nil {
 			return fmt.Errorf("unable to detach unverified assertion: %v", err)
 		}
 
 		// signedAssertion after checking for errors
-		signedAssertion, err := sp.validationContext().Validate(detached)
+		result, err := sp.verifier().Verify(detached)
 
 		if err != nil {
 			return err // return any errors including unsignedAssertions
@@ -372,7 +365,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 
 		decodedAssertion := &types.Assertion{}
 
-		err = xmlUnmarshalElement(signedAssertion, decodedAssertion)
+		err = xmlUnmarshalElement(result.Element, decodedAssertion)
 		if err != nil {
 			return fmt.Errorf("unable to unmarshal assertion: %v", err)
 		}
@@ -513,7 +506,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutResponsePOST(encodedResponse
 	var responseSignatureValidated bool
 	if !sp.SkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
-		if err == dsig.ErrMissingSignature {
+		if errors.Is(err, dsig.ErrMissingSignature) {
 			// Unfortunately we just blew away our Response
 			el = doc.Root()
 		} else if err != nil {

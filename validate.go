@@ -61,7 +61,7 @@ const (
 //all SAML2 contracts are upheld.
 func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion) (*WarningInfo, error) {
 	warningInfo := &WarningInfo{}
-	now := sp.Clock.Now()
+	now := sp.now()
 
 	conditions := assertion.Conditions
 	if conditions == nil {
@@ -229,7 +229,7 @@ func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
 			return ErrParsing{Tag: NotOnOrAfterAttr, Value: subjectConfirmationData.NotOnOrAfter, Type: "time.RFC3339"}
 		}
 
-		now := sp.Clock.Now()
+		now := sp.now()
 		if now.After(notOnOrAfter) {
 			return ErrInvalidValue{
 				Reason:   ReasonExpired,

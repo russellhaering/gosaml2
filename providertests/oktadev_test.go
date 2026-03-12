@@ -19,22 +19,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	saml2 "github.com/russellhaering/gosaml2"
-	dsig "github.com/russellhaering/goxmldsig"
 )
 
 var oktaScenarioErrors = map[int]string{
-	1:  "error validating response: Missing signature referencing the top-level element",
-	3:  "error validating response: Could not verify certificate against trusted certs",
+	1:  "error validating response: dsig: missing signature referencing the top-level element",
+	3:  "error validating response: dsig: signing certificate not in trusted set",
 	4:  "error validating response: Unrecognized Destination value, Expected: http://dba9a5fc.ngrok.io/v1/_saml_callback, Actual: fake.identifier.example.com",
 	5:  "error validating response: Unrecognized Issuer value, Expected: http://example.com/saml/acs/example, Actual: fake.identifier.example.com",
 	7:  "error validating response: missing Issuer element",
 	8:  "error validating response: missing NotOnOrAfter attribute on SubjectConfirmationData element",
 	9:  "missing NotOnOrAfter attribute on Conditions element",
 	10: "missing NotBefore attribute on Conditions element",
-	12: "error validating response: Missing signature referencing the top-level element",
-	13: "error validating response: Signature could not be verified",
+	12: "error validating response: dsig: missing signature referencing the top-level element",
+	13: "error validating response: dsig: computed digest does not match signed digest value",
 	14: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: Failure",
 	15: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: urn:oasis:names:tc:SAML:2.0:status:Requester",
 }
@@ -54,8 +52,9 @@ func TestOktaDevCasesLocally(t *testing.T) {
 		IdentityProviderIssuer:      "http://example.com/saml/acs/example",
 		AssertionConsumerServiceURL: "http://dba9a5fc.ngrok.io/v1/_saml_callback",
 		AudienceURI:                 "http://example.com/saml/acs/example",
-		IDPCertificateStore:         LoadCertificateStore("./testdata/saml.oktadev.com/oktadev.pem"),
-		Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC))),
+		IDPCertificates:             LoadCertificates("./testdata/saml.oktadev.com/oktadev.pem"),
+		AllowSHA1:                   true,
+		Clock:                       fakeClock(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC)),
 	}
 
 	scenarios := []ProviderTestScenario{}

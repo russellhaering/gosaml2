@@ -34,9 +34,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/jonboulle/clockwork"
 	"github.com/russellhaering/gosaml2/types"
-	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,18 +93,9 @@ func TestDecode(t *testing.T) {
 	require.EqualValues(t, expected, assertion, "decrypted assertion did not match expectation")
 }
 
-type testKeyStoreImpl struct {
-	key  *rsa.PrivateKey
-	cert []byte
-}
-
-func (ks *testKeyStoreImpl) GetKeyPair() (*rsa.PrivateKey, []byte, error) {
-	return ks.key, ks.cert, nil
-}
-
 // testKeyStore generates an RSA key pair with a certificate valid at the given
 // time, suitable for use with a fake clock in tests.
-func testKeyStore(t *testing.T, validAt time.Time) dsig.X509KeyStore {
+func testKeyStore(t *testing.T, validAt time.Time) *KeyStore {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	require.NoError(t, err)
@@ -122,7 +111,7 @@ func testKeyStore(t *testing.T, validAt time.Time) dsig.X509KeyStore {
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	require.NoError(t, err)
 
-	return &testKeyStoreImpl{key: key, cert: certBytes}
+	return &KeyStore{Signer: key, Cert: certBytes}
 }
 
 func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
@@ -139,7 +128,7 @@ func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 		parent.RemoveChild(sig)
 	}
 
-	el, err = sp.SigningContext().SignEnveloped(el)
+	el, err = sp.Signer().SignEnveloped(el)
 	require.NoError(t, err)
 
 	doc0 := etree.NewDocument()
@@ -170,9 +159,7 @@ func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 	require.NoError(t, err)
 	require.NotEmpty(t, cert0)
 
-	certStore := dsig.MemoryX509CertificateStore{
-		Roots: []*x509.Certificate{cert, cert0},
-	}
+	fakeTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	return &SAMLServiceProvider{
 		IdentityProviderSSOURL:      "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
@@ -180,32 +167,17 @@ func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 		AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
 		SignAuthnRequests:           true,
 		AudienceURI:                 "123",
-		IDPCertificateStore:         &certStore,
+		IDPCertificates:             []*x509.Certificate{cert, cert0},
 		NameIdFormat:                NameIdFormatPersistent,
-		Clock:                       dsig.NewFakeClock(clockwork.NewFakeClockAt(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))),
+		Clock:                       func() time.Time { return fakeTime },
 	}
 }
 
 func TestSAML(t *testing.T) {
 	ks := testKeyStore(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	_, _cert, err := ks.GetKeyPair()
-	require.NoError(t, err)
 
-	sp := getSAMLServiceProvider(t, _cert)
+	sp := getSAMLServiceProvider(t, ks.Cert)
 	sp.SPKeyStore = ks
-	testSAMLServiceProvider(t, sp)
-}
-
-func TestSAMLUsingSetSPKeyStore(t *testing.T) {
-	ks := testKeyStore(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	privateKey, _cert, err := ks.GetKeyPair()
-	require.NoError(t, err)
-
-	sp := getSAMLServiceProvider(t, _cert)
-	sp.SetSPKeyStore(&KeyStore{
-		Cert:   _cert,
-		Signer: privateKey,
-	})
 	testSAMLServiceProvider(t, sp)
 }
 
@@ -299,16 +271,16 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(manInTheMiddledResponse)))
 	require.Error(t, err)
-	require.Equal(t, "Signature could not be verified", err.Error())
+	require.Equal(t, "dsig: computed digest does not match signed digest value", err.Error())
 
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredReferenceURIResponse)))
 	require.Error(t, err)
 	// require.IsType(t, ErrInvalidValue{}, err, err.Error())
-	require.Equal(t, "Could not verify certificate against trusted certs", err.Error())
+	require.Equal(t, "dsig: signing certificate not in trusted set", err.Error())
 
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSignedInfoResponse)))
 	require.Error(t, err)
-	require.Equal(t, "Could not verify certificate against trusted certs", err.Error())
+	require.Equal(t, "dsig: signing certificate not in trusted set", err.Error())
 
 	alteredRecipient := signResponse(t, alteredRecipientResponse, sp)
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredRecipient)))
@@ -339,7 +311,7 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 
 	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(missingIDResponse)))
 	require.Error(t, err)
-	require.Equal(t, "Signature could not be verified", err.Error())
+	require.Equal(t, "dsig: computed digest does not match signed digest value", err.Error())
 }
 
 func TestInvalidResponseBadBase64(t *testing.T) {

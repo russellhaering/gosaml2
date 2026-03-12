@@ -36,7 +36,7 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 
 	logoutResponse.CreateAttr("ID", "_"+arId.String())
 	logoutResponse.CreateAttr("Version", "2.0")
-	logoutResponse.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
+	logoutResponse.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
 	logoutResponse.CreateAttr("Destination", sp.IdentityProviderSLOURL)
 	logoutResponse.CreateAttr("InResponseTo", reqID)
 
@@ -77,22 +77,26 @@ func (sp *SAMLServiceProvider) BuildLogoutResponseDocumentNoSig(status string, r
 }
 
 func (sp *SAMLServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
-	ctx := sp.SigningContext()
-
-	sig, err := ctx.ConstructSignature(el, true)
+	signed, err := sp.Signer().SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := el.Copy()
+	// SignEnveloped appends the signature as the last child.
+	// Per the SAML schema, signature must come right after the Issuer.
+	children := signed.ChildElements()
+	if len(children) >= 2 {
+		sigEl := children[len(children)-1]
+		signed.RemoveChild(sigEl)
 
-	var children []etree.Token
-	children = append(children, ret.Child[0])     // issuer is always first
-	children = append(children, sig)              // next is the signature
-	children = append(children, ret.Child[1:]...) // then all other children
-	ret.Child = children
+		var newChildren []etree.Token
+		newChildren = append(newChildren, signed.Child[0])
+		newChildren = append(newChildren, sigEl)
+		newChildren = append(newChildren, signed.Child[1:]...)
+		signed.Child = newChildren
+	}
 
-	return ret, nil
+	return signed, nil
 }
 
 func (sp *SAMLServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
