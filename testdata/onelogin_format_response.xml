@@ -1,0 +1,71 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+    ID="_onelogin-resp-001"
+    Version="2.0"
+    IssueInstant="2025-01-01T00:00:00Z"
+    Destination="http://localhost:8080/v1/_saml_callback"
+    InResponseTo="_req-onelogin-001">
+  <saml:Issuer>https://app.onelogin.com/saml/metadata/123456</saml:Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+  <saml:Assertion
+      ID="_onelogin-assertion-001"
+      IssueInstant="2025-01-01T00:00:00Z"
+      Version="2.0">
+    <saml:Issuer>https://app.onelogin.com/saml/metadata/123456</saml:Issuer>
+    <saml:Subject>
+      <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">alice@example.com</saml:NameID>
+      <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <saml:SubjectConfirmationData
+            InResponseTo="_req-onelogin-001"
+            NotOnOrAfter="2116-01-01T01:00:00Z"
+            Recipient="http://localhost:8080/v1/_saml_callback"/>
+      </saml:SubjectConfirmation>
+    </saml:Subject>
+    <saml:Conditions NotBefore="2024-12-31T23:00:00Z" NotOnOrAfter="2116-01-01T01:00:00Z">
+      <saml:AudienceRestriction>
+        <saml:Audience>https://sp.example.com</saml:Audience>
+      </saml:AudienceRestriction>
+    </saml:Conditions>
+    <saml:AttributeStatement>
+      <saml:Attribute Name="User.email"
+          NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">alice@example.com</saml:AttributeValue>
+      </saml:Attribute>
+      <saml:Attribute Name="User.FirstName"
+          NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">Alice</saml:AttributeValue>
+      </saml:Attribute>
+      <saml:Attribute Name="User.LastName"
+          NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">Wonderland</saml:AttributeValue>
+      </saml:Attribute>
+      <saml:Attribute Name="memberOf"
+          NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">Engineering</saml:AttributeValue>
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">DevOps</saml:AttributeValue>
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:type="xs:string">Security</saml:AttributeValue>
+      </saml:Attribute>
+    </saml:AttributeStatement>
+    <saml:AuthnStatement AuthnInstant="2025-01-01T00:00:00Z"
+        SessionIndex="_onelogin-session-001"
+        SessionNotOnOrAfter="2116-01-01T08:00:00Z">
+      <saml:AuthnContext>
+        <saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef>
+      </saml:AuthnContext>
+    </saml:AuthnStatement>
+  </saml:Assertion>
+</samlp:Response>
