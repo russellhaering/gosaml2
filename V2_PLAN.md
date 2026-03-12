@@ -9,6 +9,7 @@ This is a breaking-change release. The module path will become `github.com/russe
 3. **Opinionated but escapable.** Strong defaults with explicit opt-out fields for compatibility with quirky IdPs.
 4. **No panics.** Every code path returns errors. Panics are bugs.
 5. **Pluggable where it matters.** Interfaces for request tracking (replay prevention) and clock, not for things nobody swaps out.
+6. **IdP-ready foundation.** Types, crypto, metadata parsing, and error handling are role-neutral. Adding an `IdentityProvider` struct later should require no changes to existing code.
 
 ---
 
@@ -261,15 +262,28 @@ Clean up the existing `Metadata()` / `MetadataWithSLO()` mess:
 - Fix the `validityHours` bug (nanoseconds vs hours confusion)
 - Add `MetadataValidDuration time.Duration` field (default: 7 days)
 
-### 4.3 IdP Metadata parsing
+### 4.3 Metadata parsing
 
-Add ability to configure `ServiceProvider` from IdP metadata XML:
+Add a shared `ParseEntityDescriptor` that parses SAML metadata XML into the existing `types.EntityDescriptor` struct, then role-specific convenience functions that extract the relevant bits:
 
 ```go
-func ParseIDPMetadata(xmlBytes []byte) (*IDPConfig, []*x509.Certificate, error)
+// Shared — parses any SAML EntityDescriptor
+func ParseEntityDescriptor(xmlBytes []byte) (*types.EntityDescriptor, error)
+
+// SP-side convenience — extracts IdP config + signing certs from IdP metadata
+func IDPConfigFromMetadata(ed *types.EntityDescriptor) (*IDPConfig, []*x509.Certificate, error)
 ```
 
-Extracts: entity ID, SSO URL + binding, SLO URL + binding, signing certificates. This is table-stakes for SaaS integration — every customer sends you their IdP metadata XML.
+`IDPConfigFromMetadata` extracts: entity ID, SSO URL + binding preference, SLO URL + binding, signing certificates from `IDPSSODescriptor`.
+
+This two-layer design keeps the door open for a future `IdentityProvider` struct that would use the same `ParseEntityDescriptor` with a mirror function:
+
+```go
+// Future IdP-side convenience
+func SPConfigFromMetadata(ed *types.EntityDescriptor) (*SPConfig, []*x509.Certificate, error)
+```
+
+This is table-stakes for SaaS integration — every customer sends you their IdP metadata XML.
 
 ### 4.4 Certificate rotation support
 
@@ -326,7 +340,7 @@ These are explicitly out of scope:
 
 1. **HTTP-Artifact binding** — Requires back-channel SOAP. Very rare in SaaS.
 2. **SOAP binding** — Same. Enterprise-only, complex, low demand (#202).
-3. **IdP implementation** — This is an SP library. crewjam/saml has an IdP; we don't need one.
+3. **IdP implementation** — Not in this release. But the architecture is designed so that an `IdentityProvider` struct can be added later as a peer to `ServiceProvider`, reusing shared types, crypto, metadata parsing, and error handling. The split: `ParseEntityDescriptor` is shared, role-specific config extraction is separate, and `ServiceProvider`/`IdentityProvider` are independent structs in the same package.
 4. **HTTP middleware / session management** — Opinionated middleware belongs in a separate package (maybe `gosaml2/samlhttp` later). The core library should stay framework-agnostic.
 5. **EncryptedID** — Extremely rare. EncryptedAssertion covers the common case.
 6. **EntitiesDescriptor parsing** — Multi-entity metadata documents are an IdP federation concern.
