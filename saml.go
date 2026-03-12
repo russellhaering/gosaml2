@@ -303,7 +303,10 @@ func (sp *SAMLServiceProvider) Signer() *dsig.Signer {
 
 	cert, err := x509.ParseCertificate(ks.Cert)
 	if err != nil {
-		panic(err)
+		// Ideally this function should return the error, but updating the function
+		// signature would be backward incompatible. Returning nil avoids the previous
+		// panic while preserving the existing API contract.
+		return nil
 	}
 
 	sp.signer = &dsig.Signer{

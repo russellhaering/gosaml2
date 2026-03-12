@@ -50,7 +50,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest s
 	}
 
 	// Parse the raw request - parseResponse is generic
-	doc, el, err := parseResponse(raw, sp.MaximumDecompressedBodySize)
+	_, el, err := parseResponse(raw, sp.MaximumDecompressedBodySize)
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +59,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest s
 	if !sp.SkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
 		if errors.Is(err, dsig.ErrMissingSignature) {
-			// Unfortunately we just blew away our Response
-			el = doc.Root()
+			return nil, fmt.Errorf("logout request has no signature")
 		} else if err != nil {
 			return nil, err
 		} else if el == nil {
