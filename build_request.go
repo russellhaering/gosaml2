@@ -19,17 +19,20 @@ import (
 	"compress/flate"
 	"encoding/base64"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/uuid"
+	"github.com/russellhaering/gosaml2/v2/uuid"
 )
 
 const issueInstantFormat = "2006-01-02T15:04:05Z"
 
-func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, error) {
+func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, error) {
+	if sp.EntityID == "" {
+		return nil, fmt.Errorf("EntityID must not be empty")
+	}
+
 	authnRequest := &etree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
@@ -43,9 +46,9 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	authnRequest.CreateAttr("ID", "_"+arId.String())
 	authnRequest.CreateAttr("Version", "2.0")
 	authnRequest.CreateAttr("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")
-	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
+	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.ACSURL)
 	authnRequest.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
-	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
+	authnRequest.CreateAttr("Destination", sp.IDPSSOURL)
 	if sp.ForceAuthn {
 		authnRequest.CreateAttr("ForceAuthn", "true")
 	}
@@ -53,19 +56,12 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 		authnRequest.CreateAttr("IsPassive", "true")
 	}
 
-	// NOTE(russell_h): In earlier versions we mistakenly sent the IdentityProviderIssuer
-	// in the AuthnRequest. For backwards compatibility we will fall back to that
-	// behavior when ServiceProviderIssuer isn't set.
-	if sp.ServiceProviderIssuer != "" {
-		authnRequest.CreateElement("saml:Issuer").SetText(sp.ServiceProviderIssuer)
-	} else {
-		authnRequest.CreateElement("saml:Issuer").SetText(sp.IdentityProviderIssuer)
-	}
+	authnRequest.CreateElement("saml:Issuer").SetText(sp.EntityID)
 
 	nameIdPolicy := authnRequest.CreateElement("samlp:NameIDPolicy")
 	nameIdPolicy.CreateAttr("AllowCreate", "true")
-	if sp.NameIdFormat != "" {
-		nameIdPolicy.CreateAttr("Format", sp.NameIdFormat)
+	if sp.NameIDFormat != "" {
+		nameIdPolicy.CreateAttr("Format", sp.NameIDFormat)
 	}
 
 	if sp.RequestedAuthnContext != nil {
@@ -94,11 +90,11 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 	return doc, nil
 }
 
-func (sp *SAMLServiceProvider) BuildAuthRequestDocument() (*etree.Document, error) {
+func (sp *ServiceProvider) BuildAuthRequestDocument() (*etree.Document, error) {
 	return sp.buildAuthnRequest(true)
 }
 
-func (sp *SAMLServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, error) {
+func (sp *ServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, error) {
 	return sp.buildAuthnRequest(false)
 }
 
@@ -107,8 +103,12 @@ func (sp *SAMLServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document,
 // signature is right after the Issuer [1] then all other children.
 //
 // [1] https://docs.oasis-open.org/security/saml/v2.0/saml-schema-protocol-2.0.xsd
-func (sp *SAMLServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Element, error) {
-	signed, err := sp.Signer().SignEnveloped(el)
+func (sp *ServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Element, error) {
+	signer, err := sp.Signer()
+	if err != nil {
+		return nil, err
+	}
+	signed, err := signer.SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (sp *SAMLServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Eleme
 }
 
 // BuildAuthRequest builds <AuthnRequest> for identity provider
-func (sp *SAMLServiceProvider) BuildAuthRequest() (string, error) {
+func (sp *ServiceProvider) BuildAuthRequest() (string, error) {
 	doc, err := sp.BuildAuthRequestDocument()
 	if err != nil {
 		return "", err
@@ -142,8 +142,8 @@ func (sp *SAMLServiceProvider) BuildAuthRequest() (string, error) {
 	return doc.WriteToString()
 }
 
-func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
-	parsedUrl, err := url.Parse(sp.IdentityProviderSSOURL)
+func (sp *ServiceProvider) buildAuthURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
+	parsedUrl, err := url.Parse(sp.IDPSSOURL)
 	if err != nil {
 		return "", err
 	}
@@ -180,7 +180,10 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 
 	if sp.SignAuthnRequests && binding == BindingHttpRedirect {
 		// Sign URL encoded query (see Section 3.4.4.1 DEFLATE Encoding of saml-bindings-2.0-os.pdf)
-		signer := sp.Signer()
+		signer, err := sp.Signer()
+		if err != nil {
+			return "", fmt.Errorf("unable to get signer: %v", err)
+		}
 		sigAlg := signatureMethodIdentifier(signer.Key, signer.Hash)
 		qs.Add("SigAlg", sigAlg)
 		var rawSignature []byte
@@ -197,73 +200,24 @@ func (sp *SAMLServiceProvider) buildAuthURLFromDocument(relayState, binding stri
 	return parsedUrl.String(), nil
 }
 
-func (sp *SAMLServiceProvider) BuildAuthURLFromDocument(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildAuthURLFromDocument(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, BindingHttpPost, doc)
 }
 
-func (sp *SAMLServiceProvider) BuildAuthURLRedirect(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildAuthURLRedirect(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, BindingHttpRedirect, doc)
 }
 
-func (sp *SAMLServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	reqBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
 	}
-
-	encodedReqBuf := base64.StdEncoding.EncodeToString(reqBuf)
-
-	var tmpl *template.Template
-	var rv bytes.Buffer
-
-	if relayState != "" {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input type="hidden" name="RelayState" value="{{.RelayState}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-			RelayState  string
-		}{
-			URL:         sp.IdentityProviderSSOURL,
-			SAMLRequest: encodedReqBuf,
-			RelayState:  relayState,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	} else {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-		}{
-			URL:         sp.IdentityProviderSSOURL,
-			SAMLRequest: encodedReqBuf,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	}
-
-	return rv.Bytes(), nil
+	return buildPOSTForm(sp.IDPSSOURL, "SAMLRequest", base64.StdEncoding.EncodeToString(reqBuf), relayState)
 }
 
 //BuildAuthBodyPost builds the POST body to be sent to IDP.
-func (sp *SAMLServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, error) {
+func (sp *ServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, error) {
 	var doc *etree.Document
 	var err error
 
@@ -282,12 +236,12 @@ func (sp *SAMLServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, err
 
 //BuildAuthBodyPostFromDocument builds the POST body to be sent to IDP.
 //It takes the AuthnRequest xml as input.
-func (sp *SAMLServiceProvider) BuildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) BuildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildAuthBodyPostFromDocument(relayState, doc)
 }
 
 // BuildAuthURL builds redirect URL to be sent to principal
-func (sp *SAMLServiceProvider) BuildAuthURL(relayState string) (string, error) {
+func (sp *ServiceProvider) BuildAuthURL(relayState string) (string, error) {
 	doc, err := sp.BuildAuthRequestDocument()
 	if err != nil {
 		return "", err
@@ -296,9 +250,9 @@ func (sp *SAMLServiceProvider) BuildAuthURL(relayState string) (string, error) {
 }
 
 // AuthRedirect takes a ResponseWriter and Request from an http interaction and
-// redirects to the SAMLServiceProvider's configured IdP, including the
+// redirects to the ServiceProvider's configured IdP, including the
 // relayState provided, if any.
-func (sp *SAMLServiceProvider) AuthRedirect(w http.ResponseWriter, r *http.Request, relayState string) (err error) {
+func (sp *ServiceProvider) AuthRedirect(w http.ResponseWriter, r *http.Request, relayState string) (err error) {
 	url, err := sp.BuildAuthURL(relayState)
 	if err != nil {
 		return err
@@ -308,7 +262,11 @@ func (sp *SAMLServiceProvider) AuthRedirect(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-func (sp *SAMLServiceProvider) buildLogoutRequest(includeSig bool, nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, sessionIndex string) (*etree.Document, error) {
+	if sp.EntityID == "" {
+		return nil, fmt.Errorf("EntityID must not be empty")
+	}
+
 	logoutRequest := &etree.Element{
 		Space: "samlp",
 		Tag:   "LogoutRequest",
@@ -322,30 +280,16 @@ func (sp *SAMLServiceProvider) buildLogoutRequest(includeSig bool, nameID string
 	logoutRequest.CreateAttr("ID", "_"+arId.String())
 	logoutRequest.CreateAttr("Version", "2.0")
 	logoutRequest.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
-	logoutRequest.CreateAttr("Destination", sp.IdentityProviderSLOURL)
+	logoutRequest.CreateAttr("Destination", sp.IDPSLOURL)
 
-	// NOTE(russell_h): In earlier versions we mistakenly sent the IdentityProviderIssuer
-	// in the AuthnRequest. For backwards compatibility we will fall back to that
-	// behavior when ServiceProviderIssuer isn't set.
-	// TODO: Throw error in case Issuer is empty.
-	if sp.ServiceProviderIssuer != "" {
-		logoutRequest.CreateElement("saml:Issuer").SetText(sp.ServiceProviderIssuer)
-	} else {
-		logoutRequest.CreateElement("saml:Issuer").SetText(sp.IdentityProviderIssuer)
-	}
+	logoutRequest.CreateElement("saml:Issuer").SetText(sp.EntityID)
 
-	nameId := logoutRequest.CreateElement("saml:NameID")
-	nameId.SetText(nameID)
-	nameId.CreateAttr("Format", sp.NameIdFormat)
+	nameIdEl := logoutRequest.CreateElement("saml:NameID")
+	nameIdEl.SetText(nameID)
+	nameIdEl.CreateAttr("Format", sp.NameIDFormat)
 
-	//Section 3.7.1 - http://docs.oasis-open.org/security/saml/v2.0/saml-core-2.0-os.pdf says
-	//SessionIndex is optional. If the IDP supports SLO then it must send SessionIndex as per
-	//Section 4.1.4.2 of https://docs.oasis-open.org/security/saml/v2.0/saml-profiles-2.0-os.pdf.
-	//As per section 4.4.3.1 of //docs.oasis-open.org/security/saml/v2.0/saml-profiles-2.0-os.pdf,
-	//a LogoutRequest issued by Session Participant to Identity Provider, must contain
-	//at least one SessionIndex element needs to be included.
-	nameId = logoutRequest.CreateElement("samlp:SessionIndex")
-	nameId.SetText(sessionIndex)
+	nameIdEl = logoutRequest.CreateElement("samlp:SessionIndex")
+	nameIdEl.SetText(sessionIndex)
 
 	doc := etree.NewDocument()
 
@@ -363,8 +307,12 @@ func (sp *SAMLServiceProvider) buildLogoutRequest(includeSig bool, nameID string
 	return doc, nil
 }
 
-func (sp *SAMLServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element, error) {
-	signed, err := sp.Signer().SignEnveloped(el)
+func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element, error) {
+	signer, err := sp.Signer()
+	if err != nil {
+		return nil, err
+	}
+	signed, err := signer.SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
@@ -386,82 +334,34 @@ func (sp *SAMLServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Elem
 	return signed, nil
 }
 
-func (sp *SAMLServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*etree.Document, error) {
 	return sp.buildLogoutRequest(false, nameID, sessionIndex)
 }
 
-func (sp *SAMLServiceProvider) BuildLogoutRequestDocument(nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutRequestDocument(nameID string, sessionIndex string) (*etree.Document, error) {
 	return sp.buildLogoutRequest(true, nameID, sessionIndex)
 }
 
 //BuildLogoutBodyPostFromDocument builds the POST body to be sent to IDP.
 //It takes the LogoutRequest xml as input.
-func (sp *SAMLServiceProvider) BuildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) BuildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildLogoutBodyPostFromDocument(relayState, doc)
 }
 
-func (sp *SAMLServiceProvider) buildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	reqBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
 	}
-
-	encodedReqBuf := base64.StdEncoding.EncodeToString(reqBuf)
-	var tmpl *template.Template
-	var rv bytes.Buffer
-
-	if relayState != "" {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input type="hidden" name="RelayState" value="{{.RelayState}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-			RelayState  string
-		}{
-			URL:         sp.IdentityProviderSLOURL,
-			SAMLRequest: encodedReqBuf,
-			RelayState:  relayState,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	} else {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-		}{
-			URL:         sp.IdentityProviderSLOURL,
-			SAMLRequest: encodedReqBuf,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	}
-
-	return rv.Bytes(), nil
+	return buildPOSTForm(sp.IDPSLOURL, "SAMLRequest", base64.StdEncoding.EncodeToString(reqBuf), relayState)
 }
 
-func (sp *SAMLServiceProvider) BuildLogoutURLRedirect(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildLogoutURLRedirect(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildLogoutURLFromDocument(relayState, BindingHttpRedirect, doc)
 }
 
-func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
-	parsedUrl, err := url.Parse(sp.IdentityProviderSLOURL)
+func (sp *ServiceProvider) buildLogoutURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
+	parsedUrl, err := url.Parse(sp.IDPSLOURL)
 	if err != nil {
 		return "", err
 	}
@@ -498,15 +398,13 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 
 	if binding == BindingHttpRedirect {
 		// Sign URL encoded query (see Section 3.4.4.1 DEFLATE Encoding of saml-bindings-2.0-os.pdf)
-		signer := sp.Signer()
+		signer, err := sp.Signer()
+		if err != nil {
+			return "", fmt.Errorf("unable to get signer: %v", err)
+		}
 		sigAlg := signatureMethodIdentifier(signer.Key, signer.Hash)
 		qs.Add("SigAlg", sigAlg)
 		var rawSignature []byte
-		//qs.Encode() sorts the keys (See https://golang.org/pkg/net/url/#Values.Encode).
-		//If RelayState parameter is present then RelayState parameter
-		//will be put first by Encode(). Hence encode them separately and concatenate.
-		//Signature string has to have parameters in the order - SAMLRequest=value&RelayState=value&SigAlg=value.
-		//(See Section 3.4.4.1 saml-bindings-2.0-os.pdf).
 		var orderedParams = []string{"SAMLRequest", "RelayState", "SigAlg"}
 
 		var paramValueMap = make(map[string]string)
@@ -521,7 +419,6 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 		for _, k := range orderedParams {
 			v, ok := paramValueMap[k]
 			if ok {
-				//Add the value after URL encoding.
 				u := url.Values{}
 				u.Add(k, v)
 				e := u.Encode()
@@ -533,7 +430,6 @@ func (sp *SAMLServiceProvider) buildLogoutURLFromDocument(relayState, binding st
 			}
 		}
 
-		//Now generate the signature on the string of ordered parameters.
 		if rawSignature, err = signer.SignString(ss); err != nil {
 			return "", fmt.Errorf("unable to sign query string of redirect URL: %v", err)
 		}

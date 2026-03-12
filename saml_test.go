@@ -17,6 +17,7 @@ package saml2
 import (
 	"bytes"
 	"compress/flate"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -34,7 +35,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,7 +115,7 @@ func testKeyStore(t *testing.T, validAt time.Time) *KeyStore {
 	return &KeyStore{Signer: key, Cert: certBytes}
 }
 
-func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
+func signResponse(t *testing.T, resp string, sp *ServiceProvider) string {
 	doc := etree.NewDocument()
 	err := doc.ReadFromBytes([]byte(resp))
 	require.NoError(t, err)
@@ -128,7 +129,9 @@ func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 		parent.RemoveChild(sig)
 	}
 
-	el, err = sp.Signer().SignEnveloped(el)
+	signer, err := sp.Signer()
+	require.NoError(t, err)
+	el, err = signer.SignEnveloped(el)
 	require.NoError(t, err)
 
 	doc0 := etree.NewDocument()
@@ -144,9 +147,9 @@ func signResponse(t *testing.T, resp string, sp *SAMLServiceProvider) string {
 	return str
 }
 
-// getSAMLServiceProvider returns a SAMLServiceProvider that needs to either
+// getServiceProvider returns a ServiceProvider that needs to either
 // set SPKeyStore or call SetSPKeyStore.
-func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
+func getServiceProvider(t *testing.T, _cert []byte) *ServiceProvider {
 	t.Helper()
 
 	block, _ := pem.Decode([]byte(idpCertificate))
@@ -161,28 +164,31 @@ func getSAMLServiceProvider(t *testing.T, _cert []byte) *SAMLServiceProvider {
 
 	fakeTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	return &SAMLServiceProvider{
-		IdentityProviderSSOURL:      "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
-		IdentityProviderIssuer:      "http://www.okta.com/exk5zt0r12Edi4rD20h7",
-		AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
-		SignAuthnRequests:           true,
-		AudienceURI:                 "123",
-		IDPCertificates:             []*x509.Certificate{cert, cert0},
-		NameIdFormat:                NameIdFormatPersistent,
-		Clock:                       func() time.Time { return fakeTime },
+	return &ServiceProvider{
+		IDPSSOURL:        "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
+		IDPEntityID:      "http://www.okta.com/exk5zt0r12Edi4rD20h7",
+		ACSURL:           "http://localhost:8080/v1/_saml_callback",
+		SignAuthnRequests: true,
+		AudienceURIs:     []string{"123"},
+		IDPCertificates:  []*x509.Certificate{cert, cert0},
+		NameIDFormat:     NameIdFormatPersistent,
+		EntityID:         "http://localhost:8080",
+		Clock:            func() time.Time { return fakeTime },
 	}
 }
 
 func TestSAML(t *testing.T) {
 	ks := testKeyStore(t, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	sp := getSAMLServiceProvider(t, ks.Cert)
+	sp := getServiceProvider(t, ks.Cert)
 	sp.SPKeyStore = ks
-	testSAMLServiceProvider(t, sp)
+	testServiceProvider(t, sp)
 }
 
-func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
+func testServiceProvider(t *testing.T, sp *ServiceProvider) {
 	t.Helper()
+
+	ctx := context.Background()
 
 	authRequestURL, err := sp.BuildAuthURL("/some/link/here")
 	require.NoError(t, err)
@@ -198,18 +204,15 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 	// valid. We have to re-sign them here before validating them
 	raw := signResponse(t, rawResponse, sp)
 
-	el, err := sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(raw)))
+	el, err := sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(raw)))
 	require.NoError(t, err)
 	require.NotEmpty(t, el)
 
-	assertionInfo, err := sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(raw)))
+	assertionInfo, err := sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(raw)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
-	require.NotNil(t, assertionInfo.WarningInfo) // always set when err == nil
-	require.False(t, assertionInfo.WarningInfo.OneTimeUse)
-	require.False(t, assertionInfo.WarningInfo.NotInAudience)
-	require.False(t, assertionInfo.WarningInfo.InvalidTime)
-	require.Nil(t, assertionInfo.WarningInfo.ProxyRestriction)
+	require.False(t, assertionInfo.OneTimeUse)
+	require.Nil(t, assertionInfo.ProxyRestriction)
 
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.NameID)
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.Values.Get("Email"))
@@ -219,48 +222,47 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 
 	assertionInfoModifiedAudience := signResponse(t, assertionInfoModifiedAudienceResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoModifiedAudience)))
-	require.NoError(t, err)
-	require.NotEmpty(t, assertionInfo)
-	require.True(t, assertionInfo.WarningInfo.NotInAudience)
+	_, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoModifiedAudience)))
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrAudienceMismatch)
 
 	assertionInfoOneTimeUse := signResponse(t, assertionInfoOneTimeUseResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoOneTimeUse)))
+	assertionInfo, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoOneTimeUse)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
-	require.True(t, assertionInfo.WarningInfo.OneTimeUse)
+	require.True(t, assertionInfo.OneTimeUse)
 
 	assertionInfoProxyRestriction := signResponse(t, assertionInfoProxyRestrictionResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestriction)))
+	assertionInfo, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestriction)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
-	require.NotEmpty(t, assertionInfo.WarningInfo.ProxyRestriction)
-	require.Equal(t, 3, assertionInfo.WarningInfo.ProxyRestriction.Count)
-	require.Equal(t, []string{"123"}, assertionInfo.WarningInfo.ProxyRestriction.Audience)
+	require.NotNil(t, assertionInfo.ProxyRestriction)
+	require.Equal(t, 3, assertionInfo.ProxyRestriction.Count)
+	require.Equal(t, []string{"123"}, assertionInfo.ProxyRestriction.Audience)
 
 	assertionInfoProxyRestrictionNoCount := signResponse(t, assertionInfoProxyRestrictionNoCountResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestrictionNoCount)))
+	assertionInfo, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestrictionNoCount)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
-	require.NotEmpty(t, assertionInfo.WarningInfo.ProxyRestriction)
-	require.Equal(t, 0, assertionInfo.WarningInfo.ProxyRestriction.Count)
-	require.Equal(t, []string{"123"}, assertionInfo.WarningInfo.ProxyRestriction.Audience)
+	require.NotNil(t, assertionInfo.ProxyRestriction)
+	require.Equal(t, 0, assertionInfo.ProxyRestriction.Count)
+	require.Equal(t, []string{"123"}, assertionInfo.ProxyRestriction.Audience)
 
 	assertionInfoProxyRestrictionNoAudience := signResponse(t, assertionInfoProxyRestrictionNoAudienceResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestrictionNoAudience)))
+	assertionInfo, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoProxyRestrictionNoAudience)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
-	require.NotEmpty(t, assertionInfo.WarningInfo.ProxyRestriction)
-	require.Equal(t, 3, assertionInfo.WarningInfo.ProxyRestriction.Count)
-	require.Equal(t, []string{}, assertionInfo.WarningInfo.ProxyRestriction.Audience)
+	require.NotNil(t, assertionInfo.ProxyRestriction)
+	require.Equal(t, 3, assertionInfo.ProxyRestriction.Count)
+	require.Equal(t, []string{}, assertionInfo.ProxyRestriction.Audience)
 
 	assertionInfoResp := signResponse(t, assertionInfoResponse, sp)
 
-	assertionInfo, err = sp.RetrieveAssertionInfo(base64.StdEncoding.EncodeToString([]byte(assertionInfoResp)))
+	assertionInfo, err = sp.RetrieveAssertionInfo(ctx, base64.StdEncoding.EncodeToString([]byte(assertionInfoResp)))
 	require.NoError(t, err)
 	require.NotEmpty(t, assertionInfo)
 	require.NotEmpty(t, assertionInfo.Values)
@@ -269,61 +271,53 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 	require.Equal(t, "Simon", assertionInfo.Values.Get("LastName"))
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.Values.Get("Login"))
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(manInTheMiddledResponse)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(manInTheMiddledResponse)))
 	require.Error(t, err)
 	require.Equal(t, "dsig: computed digest does not match signed digest value", err.Error())
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredReferenceURIResponse)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredReferenceURIResponse)))
 	require.Error(t, err)
-	// require.IsType(t, ErrInvalidValue{}, err, err.Error())
 	require.Equal(t, "dsig: signing certificate not in trusted set", err.Error())
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSignedInfoResponse)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredSignedInfoResponse)))
 	require.Error(t, err)
 	require.Equal(t, "dsig: signing certificate not in trusted set", err.Error())
 
 	alteredRecipient := signResponse(t, alteredRecipientResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredRecipient)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredRecipient)))
 	require.Error(t, err)
-	require.IsType(t, err, ErrInvalidValue{})
-	require.Contains(t, err.Error(), "Recipient")
+	require.ErrorIs(t, err, ErrBadRecipient)
 
 	alteredDestination := signResponse(t, alteredDestinationResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredDestination)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredDestination)))
 	require.Error(t, err)
-	require.IsType(t, err, ErrInvalidValue{})
-	require.Equal(t, err.(ErrInvalidValue).Key, "Destination")
+	require.ErrorIs(t, err, ErrBadDestination)
 
 	alteredSubjectConfirmationMethod := signResponse(t, alteredSubjectConfirmationMethodResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredSubjectConfirmationMethod)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredSubjectConfirmationMethod)))
 	require.Error(t, err)
-	require.IsType(t, err, ErrInvalidValue{})
-	require.Equal(t, err.(ErrInvalidValue).Reason, ReasonUnsupported)
-	require.Equal(t, err.(ErrInvalidValue).Key, SubjectConfirmationTag)
+	require.ErrorIs(t, err, ErrMalformed)
 
 	alteredVersion := signResponse(t, alteredVersionResponse, sp)
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(alteredVersion)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(alteredVersion)))
 	require.Error(t, err)
-	require.IsType(t, err, ErrInvalidValue{})
-	require.Equal(t, err.(ErrInvalidValue).Reason, ReasonUnsupported)
-	require.Equal(t, err.(ErrInvalidValue).Key, "SAML version")
-	require.Contains(t, err.Error(), "Unsupported SAML version")
+	require.ErrorIs(t, err, ErrBadVersion)
 
-	_, err = sp.ValidateEncodedResponse(base64.StdEncoding.EncodeToString([]byte(missingIDResponse)))
+	_, err = sp.ValidateEncodedResponse(ctx, base64.StdEncoding.EncodeToString([]byte(missingIDResponse)))
 	require.Error(t, err)
 	require.Equal(t, "dsig: computed digest does not match signed digest value", err.Error())
 }
 
 func TestInvalidResponseBadBase64(t *testing.T) {
-	sp := &SAMLServiceProvider{}
+	sp := &ServiceProvider{}
 
-	response, err := sp.ValidateEncodedResponse("invalid-base64")
+	response, err := sp.ValidateEncodedResponse(context.Background(), "invalid-base64")
 	require.EqualError(t, err, "illegal base64 data at input byte 7")
 	require.Nil(t, response)
 }
 
 func TestInvalidResponseBadCompression(t *testing.T) {
-	sp := &SAMLServiceProvider{}
+	sp := &ServiceProvider{}
 
 	// Value from: https://github.com/golang/go/blob/23416315060bf7601e5779c3a6a2529d4d604584/src/compress/flate/flate_test.go#L219
 	rawResponse, err := hex.DecodeString("33180700")
@@ -331,13 +325,13 @@ func TestInvalidResponseBadCompression(t *testing.T) {
 
 	b64Response := base64.StdEncoding.EncodeToString(rawResponse)
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
 	require.EqualError(t, err, "flate: corrupt input before offset 3")
 	require.Nil(t, response)
 }
 
 func TestInvalidResponseBadXML(t *testing.T) {
-	sp := &SAMLServiceProvider{}
+	sp := &ServiceProvider{}
 
 	compressed := &bytes.Buffer{}
 
@@ -349,44 +343,21 @@ func TestInvalidResponseBadXML(t *testing.T) {
 
 	b64Response := base64.StdEncoding.EncodeToString(compressed.Bytes())
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
 	require.EqualError(t, err, "XML syntax error on line 1: invalid character entity &Invalid (no semicolon)")
 	require.Nil(t, response)
 }
 
 func TestInvalidResponseNoElement(t *testing.T) {
-	sp := &SAMLServiceProvider{}
+	sp := &ServiceProvider{}
 
 	b64Response := base64.StdEncoding.EncodeToString([]byte("no-element-here"))
 
-	response, err := sp.ValidateEncodedResponse(b64Response)
+	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
 	require.EqualError(t, err, "unable to parse response")
 	require.Nil(t, response)
 }
 func TestSAMLCommentInjection(t *testing.T) {
-	/*
-		Explanation:
-
-		See: https://duo.com/blog/duo-finds-saml-vulnerabilities-affecting-multiple-implementations
-
-		The TLDR is that XML canonicalization may result in a different value being signed from the one being retrieved.
-		The target of this is the NameID in the Subject of the SAMLResponse Assertion
-
-		Example:
-			 The following Subject
-			 ```<Subject>
-				<NameID>user@user.com<!---->.evil.com</NameID>
-			</Subject>```
-			would get canonicalized to
-			```
-			<Subject>
-				<NameID>user@user.com.evil.com</NameID>
-			</Subject>
-			```
-			Many XML parsers have a behavior where they pull the first text element, so in the example with the comment, a vulnerable XML parser would return `user@user.com`, ignoring the text after the comment.
-			Knowing this, a user (user@user.com.evil.com) can attack a vulnerable SP by manipulating their signed SAMLResponse with a comment that turns their username into another one.
-	*/
-
 	// To show that we are not vulnerable, we want to prove that we get the canonicalized value using our parser
 	_, el, err := parseResponse([]byte(commentInjectionAttackResponse), 0)
 	require.NoError(t, err)

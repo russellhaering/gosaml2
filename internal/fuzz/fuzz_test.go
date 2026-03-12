@@ -15,11 +15,12 @@
 package fuzz
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
-	saml2 "github.com/russellhaering/gosaml2"
+	saml2 "github.com/russellhaering/gosaml2/v2"
 )
 
 func FuzzDecodeResponse(f *testing.F) {
@@ -31,8 +32,8 @@ func FuzzDecodeResponse(f *testing.F) {
 			return
 		}
 
-		sp := &saml2.SAMLServiceProvider{}
-		_, _ = sp.ValidateEncodedResponse(encodedResponse)
+		sp := &saml2.ServiceProvider{}
+		_, _ = sp.ValidateEncodedResponse(context.Background(), encodedResponse)
 	})
 }
 
@@ -45,8 +46,8 @@ func FuzzLogoutResponse(f *testing.F) {
 			return
 		}
 
-		sp := &saml2.SAMLServiceProvider{}
-		_, _ = sp.ValidateEncodedLogoutResponsePOST(encodedResponse)
+		sp := &saml2.ServiceProvider{}
+		_, _ = sp.ValidateEncodedLogoutResponsePOST(context.Background(), encodedResponse)
 	})
 }
 
@@ -63,14 +64,15 @@ func FuzzBuildRequest(f *testing.F) {
 			return
 		}
 
-		sp := &saml2.SAMLServiceProvider{
-			IdentityProviderSSOURL:      "https://idp.example.com/sso",
-			IdentityProviderIssuer:      "https://idp.example.com/",
-			AssertionConsumerServiceURL: "https://sp.example.com/acs",
-			AudienceURI:                 "https://sp.example.com/audience",
-			SignAuthnRequests:           idValue%2 == 0,
-			ForceAuthn:                  idValue%3 == 0,
-			IsPassive:                   idValue%5 == 0,
+		sp := &saml2.ServiceProvider{
+			IDPSSOURL:        "https://idp.example.com/sso",
+			IDPEntityID:      "https://idp.example.com/",
+			ACSURL:           "https://sp.example.com/acs",
+			AudienceURIs:     []string{"https://sp.example.com/audience"},
+			EntityID:         "https://sp.example.com",
+			SignAuthnRequests: idValue%2 == 0,
+			ForceAuthn:       idValue%3 == 0,
+			IsPassive:        idValue%5 == 0,
 		}
 
 		_, _ = sp.BuildAuthURL(relayState)

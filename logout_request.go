@@ -16,7 +16,7 @@ package saml2
 
 import (
 	"encoding/xml"
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2/types"
 	"time"
 )
 
@@ -25,9 +25,9 @@ type LogoutRequest struct {
 	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:protocol LogoutRequest"`
 	ID      string   `xml:"ID,attr"`
 	Version string   `xml:"Version,attr"`
-	//ProtocolBinding     string          `xml:",attr"`
 
 	IssueInstant time.Time `xml:"IssueInstant,attr"`
+	NotOnOrAfter string    `xml:"NotOnOrAfter,attr,omitempty"`
 
 	Destination string        `xml:"Destination,attr"`
 	Issuer      *types.Issuer `xml:"Issuer"`

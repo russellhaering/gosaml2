@@ -17,6 +17,7 @@ package saml2
 import (
 	"bytes"
 	"compress/flate"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -28,7 +29,7 @@ import (
 
 	"github.com/beevik/etree"
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/goxmldsig/v2"
 	"github.com/russellhaering/goxmldsig/v2/etreeutils"
 )
@@ -37,7 +38,7 @@ const (
 	defaultMaxDecompressedResponseSize = 5 * 1024 * 1024
 )
 
-func (sp *SAMLServiceProvider) verifier() *dsig.Verifier {
+func (sp *ServiceProvider) verifier() *dsig.Verifier {
 	v := &dsig.Verifier{
 		TrustedCerts: sp.IDPCertificates,
 		AllowSHA1:    sp.AllowSHA1,
@@ -50,21 +51,18 @@ func (sp *SAMLServiceProvider) verifier() *dsig.Verifier {
 
 // validateResponseAttributes validates a SAML Response's tag and attributes. It does
 // not inspect child elements of the Response at all.
-func (sp *SAMLServiceProvider) validateResponseAttributes(response *types.Response) error {
-	if response.Destination != "" && response.Destination != sp.AssertionConsumerServiceURL {
-		return ErrInvalidValue{
-			Key:      DestinationAttr,
-			Expected: sp.AssertionConsumerServiceURL,
-			Actual:   response.Destination,
+func (sp *ServiceProvider) validateResponseAttributes(response *types.Response) error {
+	if response.Destination != "" && response.Destination != sp.ACSURL {
+		return &ValidationError{
+			Reason: ErrBadDestination,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.ACSURL, response.Destination),
 		}
 	}
 
 	if response.Version != "2.0" {
-		return ErrInvalidValue{
-			Reason:   ReasonUnsupported,
-			Key:      "SAML version",
-			Expected: "2.0",
-			Actual:   response.Version,
+		return &ValidationError{
+			Reason: ErrBadVersion,
+			Detail: fmt.Sprintf("expected 2.0, got %s", response.Version),
 		}
 	}
 
@@ -73,21 +71,18 @@ func (sp *SAMLServiceProvider) validateResponseAttributes(response *types.Respon
 
 // validateLogoutResponseAttributes validates a SAML Response's tag and attributes. It does
 // not inspect child elements of the Response at all.
-func (sp *SAMLServiceProvider) validateLogoutResponseAttributes(response *types.LogoutResponse) error {
-	if response.Destination != "" && response.Destination != sp.ServiceProviderSLOURL {
-		return ErrInvalidValue{
-			Key:      DestinationAttr,
-			Expected: sp.ServiceProviderSLOURL,
-			Actual:   response.Destination,
+func (sp *ServiceProvider) validateLogoutResponseAttributes(response *types.LogoutResponse) error {
+	if response.Destination != "" && response.Destination != sp.SLOURL {
+		return &ValidationError{
+			Reason: ErrBadDestination,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.SLOURL, response.Destination),
 		}
 	}
 
 	if response.Version != "2.0" {
-		return ErrInvalidValue{
-			Reason:   ReasonUnsupported,
-			Key:      "SAML version",
-			Expected: "2.0",
-			Actual:   response.Version,
+		return &ValidationError{
+			Reason: ErrBadVersion,
+			Detail: fmt.Sprintf("expected 2.0, got %s", response.Version),
 		}
 	}
 
@@ -109,7 +104,7 @@ func xmlUnmarshalElement(el *etree.Element, obj interface{}) error {
 	return nil
 }
 
-func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
+func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	if sp.SPKeyStore == nil {
 		return nil, fmt.Errorf("no decryption certs available")
 	}
@@ -136,7 +131,7 @@ func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	return &decryptCert, nil
 }
 
-func (sp *SAMLServiceProvider) decryptAssertions(el *etree.Element) error {
+func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 	var decryptCert *tls.Certificate
 
 	decryptAssertion := func(ctx etreeutils.NSContext, encryptedElement *etree.Element) error {
@@ -188,7 +183,7 @@ func (sp *SAMLServiceProvider) decryptAssertions(el *etree.Element) error {
 	}
 }
 
-func (sp *SAMLServiceProvider) validateElementSignature(el *etree.Element) (*etree.Element, error) {
+func (sp *ServiceProvider) validateElementSignature(el *etree.Element) (*etree.Element, error) {
 	result, err := sp.verifier().Verify(el)
 	if err != nil {
 		return nil, err
@@ -196,61 +191,12 @@ func (sp *SAMLServiceProvider) validateElementSignature(el *etree.Element) (*etr
 	return result.Element, nil
 }
 
-// deprecated
-func (sp *SAMLServiceProvider) validateAssertionSignatures(el *etree.Element) error {
-	signedAssertions := 0
-	unsignedAssertions := 0
-	validateAssertion := func(ctx etreeutils.NSContext, unverifiedAssertion *etree.Element) error {
-		parent := unverifiedAssertion.Parent()
-		if parent == nil {
-			return fmt.Errorf("parent is nil")
-		}
-		if parent != el {
-			return fmt.Errorf("found assertion with unexpected parent element: %s", unverifiedAssertion.Parent().Tag)
-		}
-
-		detached, err := etreeutils.NSDetach(ctx, unverifiedAssertion) // make a detached copy
-		if err != nil {
-			return fmt.Errorf("unable to detach unverified assertion: %v", err)
-		}
-
-		result, err := sp.verifier().Verify(detached)
-		if errors.Is(err, dsig.ErrMissingSignature) {
-			unsignedAssertions++
-			return nil
-		} else if err != nil {
-			return err
-		}
-
-		// Replace the original unverified Assertion with the verified one. Note that
-		// if the Response is not signed, only signed Assertions (and not the parent Response) can be trusted.
-		if el.RemoveChild(unverifiedAssertion) == nil {
-			return fmt.Errorf("unable to remove unverified assertion element")
-		}
-
-		el.AddChild(result.Element)
-		signedAssertions++
-
-		return nil
-	}
-
-	if err := etreeutils.NSFindIterate(el, SAMLAssertionNamespace, AssertionTag, validateAssertion); err != nil {
-		return err
-	} else if signedAssertions > 0 && unsignedAssertions > 0 {
-		return fmt.Errorf("invalid to have both signed and unsigned assertions")
-	} else if signedAssertions < 1 {
-		return dsig.ErrMissingSignature
-	} else {
-		return nil
-	}
-}
-
 // verifyAssertionSignaturesIfPresent iterates through assertions within a
 // signed Response and verifies any that carry their own signatures. Assertions
 // without signatures are left untouched (the Response envelope signature
 // covers them). This prevents XML wrapping attacks where assertion content is
 // tampered with inside a signed envelope.
-func (sp *SAMLServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.Element) error {
+func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.Element) error {
 	verifyAssertion := func(ctx etreeutils.NSContext, assertionEl *etree.Element) error {
 		if assertionEl.Parent() != responseEl {
 			return nil
@@ -284,7 +230,7 @@ func (sp *SAMLServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *et
 // ValidateEncodedResponse both decodes and validates, based on SP
 // configuration, an encoded, signed response. It will also appropriately
 // decrypt a response if the assertion was encrypted
-func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (*types.Response, error) {
+func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedResponse string) (*types.Response, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedResponse)
 	if err != nil {
 		return nil, err
@@ -302,15 +248,17 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 	// user has decided to skip signature verification
 	// just unmarshal the untrusted el
 
-	if sp.SkipSignatureValidation {
+	if sp.InsecureSkipSignatureValidation {
 		err = xmlUnmarshalElement(unverifiedResponse, decodedResponse)
 		if err != nil {
 			return nil, fmt.Errorf("unable to unmarshal response: %v", err)
 		}
 
 		decodedResponse.SignatureValidated = false
-		err := sp.Validate(decodedResponse)
-		if err != nil {
+		if err := sp.Validate(decodedResponse); err != nil {
+			return nil, err
+		}
+		if err := sp.validateInResponseTo(ctx, decodedResponse); err != nil {
 			return nil, err
 		}
 		return decodedResponse, nil
@@ -353,8 +301,10 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 		}
 		decodedResponse.SignatureValidated = responseSignatureValidated
 
-		err := sp.Validate(decodedResponse)
-		if err != nil {
+		if err := sp.Validate(decodedResponse); err != nil {
+			return nil, err
+		}
+		if err := sp.validateInResponseTo(ctx, decodedResponse); err != nil {
 			return nil, err
 		}
 		return decodedResponse, nil
@@ -427,8 +377,10 @@ func (sp *SAMLServiceProvider) ValidateEncodedResponse(encodedResponse string) (
 		return nil, err
 	}
 
-	err = sp.Validate(decodedResponse)
-	if err != nil {
+	if err := sp.Validate(decodedResponse); err != nil {
+		return nil, err
+	}
+	if err := sp.validateInResponseTo(ctx, decodedResponse); err != nil {
 		return nil, err
 	}
 
@@ -445,16 +397,55 @@ func DecodeUnverifiedBaseResponse(encodedResponse string) (*types.UnverifiedBase
 	}
 
 	var response *types.UnverifiedBaseResponse
+	var rawXML []byte
 
 	err = maybeDeflate(raw, defaultMaxDecompressedResponseSize, func(maybeXML []byte) error {
 		response = &types.UnverifiedBaseResponse{}
+		rawXML = maybeXML
 		return xml.Unmarshal(maybeXML, response)
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	// Extract Audience values from assertions (xml:"-" field can't be auto-populated).
+	response.Audiences = extractAudiences(rawXML)
+
 	return response, nil
+}
+
+// unverifiedAudiences is a helper struct for extracting Audience values from
+// a SAML response without full parsing.
+type unverifiedAudiences struct {
+	Assertions []struct {
+		Conditions struct {
+			AudienceRestrictions []struct {
+				Audiences []struct {
+					Value string `xml:",chardata"`
+				} `xml:"Audience"`
+			} `xml:"AudienceRestriction"`
+		} `xml:"Conditions"`
+	} `xml:"Assertion"`
+}
+
+func extractAudiences(rawXML []byte) []string {
+	var ua unverifiedAudiences
+	// Best-effort; ignore errors since this is supplementary info.
+	_ = xml.Unmarshal(rawXML, &ua)
+
+	seen := make(map[string]bool)
+	var audiences []string
+	for _, a := range ua.Assertions {
+		for _, ar := range a.Conditions.AudienceRestrictions {
+			for _, aud := range ar.Audiences {
+				if aud.Value != "" && !seen[aud.Value] {
+					seen[aud.Value] = true
+					audiences = append(audiences, aud.Value)
+				}
+			}
+		}
+	}
+	return audiences
 }
 
 // maybeDeflate invokes the passed decoder over the passed data. If an error is
@@ -533,7 +524,7 @@ func DecodeUnverifiedLogoutResponse(encodedResponse string) (*types.LogoutRespon
 	return response, nil
 }
 
-func (sp *SAMLServiceProvider) ValidateEncodedLogoutResponsePOST(encodedResponse string) (*types.LogoutResponse, error) {
+func (sp *ServiceProvider) ValidateEncodedLogoutResponsePOST(ctx context.Context, encodedResponse string) (*types.LogoutResponse, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedResponse)
 	if err != nil {
 		return nil, err
@@ -546,7 +537,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutResponsePOST(encodedResponse
 	}
 
 	var responseSignatureValidated bool
-	if !sp.SkipSignatureValidation {
+	if !sp.InsecureSkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
 		if errors.Is(err, dsig.ErrMissingSignature) {
 			return nil, fmt.Errorf("logout response has no signature")

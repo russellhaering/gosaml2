@@ -14,7 +14,7 @@
 
 package saml2
 
-import "github.com/russellhaering/gosaml2/types"
+import "github.com/russellhaering/gosaml2/v2/types"
 
 // Values is a convenience wrapper for a map of strings to Attributes, which
 // can be used for easy access to the string values of Attribute lists.

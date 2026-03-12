@@ -15,103 +15,85 @@
 package saml2
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
-//ErrParsing indicates that the value present in an assertion could not be
-//parsed. It can be inspected for the specific tag name, the contents, and the
-//intended type.
-type ErrParsing struct {
-	Tag, Value, Type string
-}
-
-func (ep ErrParsing) Error() string {
-	return fmt.Sprintf("Error parsing %s tag value as type %s", ep.Tag, ep.Value)
-}
-
-//Oft-used messages
-const (
-	ReasonUnsupported = "Unsupported"
-	ReasonExpired     = "Expired"
-)
-
-//ErrInvalidValue indicates that the expected value did not match the received
-//value.
-type ErrInvalidValue struct {
-	Key, Expected, Actual string
-	Reason                string
-}
-
-func (e ErrInvalidValue) Error() string {
-	if e.Reason == "" {
-		e.Reason = "Unrecognized"
-	}
-	return fmt.Sprintf("%s %s value, Expected: %s, Actual: %s", e.Reason, e.Key, e.Expected, e.Actual)
-}
-
-//Well-known methods of subject confirmation
+// Well-known methods of subject confirmation
 const (
 	SubjMethodBearer = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 )
 
-//VerifyAssertionConditions inspects an assertion element and makes sure that
-//all SAML2 contracts are upheld.
-func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assertion) (*WarningInfo, error) {
-	warningInfo := &WarningInfo{}
+// verifyAssertionConditions inspects an assertion's Conditions element and
+// enforces all SAML2 constraints. Time comparisons use the configured ClockSkew.
+// Audience and time violations are hard errors.
+func (sp *ServiceProvider) verifyAssertionConditions(assertion *types.Assertion, info *AssertionInfo) error {
 	now := sp.now()
+	skew := sp.clockSkew()
 
 	conditions := assertion.Conditions
 	if conditions == nil {
-		return nil, ErrMissingElement{Tag: ConditionsTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Conditions"}
 	}
 
-	if conditions.NotBefore == "" {
-		return nil, ErrMissingElement{Tag: ConditionsTag, Attribute: NotBeforeAttr}
-	}
+	// NotBefore is optional per spec; validate if present.
+	if conditions.NotBefore != "" {
+		notBefore, err := time.Parse(time.RFC3339, conditions.NotBefore)
+		if err != nil {
+			return &ValidationError{Reason: ErrMalformed, Detail: fmt.Sprintf("cannot parse NotBefore %q as time", conditions.NotBefore)}
+		}
 
-	notBefore, err := time.Parse(time.RFC3339, conditions.NotBefore)
-	if err != nil {
-		return nil, ErrParsing{Tag: NotBeforeAttr, Value: conditions.NotBefore, Type: "time.RFC3339"}
-	}
-
-	if now.Before(notBefore) {
-		warningInfo.InvalidTime = true
+		if now.Add(skew).Before(notBefore) {
+			return &ValidationError{
+				Reason: ErrNotYetValid,
+				Detail: fmt.Sprintf("NotBefore %s, now %s", conditions.NotBefore, now.Format(time.RFC3339)),
+			}
+		}
 	}
 
 	if conditions.NotOnOrAfter == "" {
-		return nil, ErrMissingElement{Tag: ConditionsTag, Attribute: NotOnOrAfterAttr}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "NotOnOrAfter attribute on Conditions"}
 	}
 
 	notOnOrAfter, err := time.Parse(time.RFC3339, conditions.NotOnOrAfter)
 	if err != nil {
-		return nil, ErrParsing{Tag: NotOnOrAfterAttr, Value: conditions.NotOnOrAfter, Type: "time.RFC3339"}
+		return &ValidationError{Reason: ErrMalformed, Detail: fmt.Sprintf("cannot parse NotOnOrAfter %q as time", conditions.NotOnOrAfter)}
 	}
 
-	if now.After(notOnOrAfter) {
-		warningInfo.InvalidTime = true
-	}
-
-	for _, audienceRestriction := range conditions.AudienceRestrictions {
-		matched := false
-
-		for _, audience := range audienceRestriction.Audiences {
-			if audience.Value == sp.AudienceURI {
-				matched = true
-				break
-			}
+	if now.Add(-skew).After(notOnOrAfter) {
+		return &ValidationError{
+			Reason: ErrExpired,
+			Detail: fmt.Sprintf("Conditions.NotOnOrAfter %s, now %s", conditions.NotOnOrAfter, now.Format(time.RFC3339)),
 		}
+	}
 
-		if !matched {
-			warningInfo.NotInAudience = true
-			break
+	if len(sp.AudienceURIs) > 0 {
+		for _, audienceRestriction := range conditions.AudienceRestrictions {
+			matched := false
+
+			for _, audience := range audienceRestriction.Audiences {
+				for _, uri := range sp.AudienceURIs {
+					if audience.Value == uri {
+						matched = true
+						break
+					}
+				}
+				if matched {
+					break
+				}
+			}
+
+			if !matched {
+				return &ValidationError{Reason: ErrAudienceMismatch}
+			}
 		}
 	}
 
 	if conditions.OneTimeUse != nil {
-		warningInfo.OneTimeUse = true
+		info.OneTimeUse = true
 	}
 
 	proxyRestriction := conditions.ProxyRestriction
@@ -125,117 +107,137 @@ func (sp *SAMLServiceProvider) VerifyAssertionConditions(assertion *types.Assert
 			proxyRestrictionInfo.Audience = append(proxyRestrictionInfo.Audience, audience.Value)
 		}
 
-		warningInfo.ProxyRestriction = proxyRestrictionInfo
+		info.ProxyRestriction = proxyRestrictionInfo
 	}
 
-	return warningInfo, nil
+	return nil
 }
 
-//Validate ensures that the assertion passed is valid for the current Service
-//Provider.
-func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
+// Validate ensures that the assertion passed is valid for the current Service
+// Provider.
+func (sp *ServiceProvider) Validate(response *types.Response) error {
 	err := sp.validateResponseAttributes(response)
 	if err != nil {
 		return err
 	}
 
 	if len(response.Assertions) == 0 {
-		return ErrMissingAssertion
+		return &ValidationError{Reason: ErrMissingAssertion}
 	}
 
 	issuer := response.Issuer
 	if issuer == nil {
-		// FIXME?: SAML Core 2.0 Section 3.2.2 has Response.Issuer as [Optional]
-		return ErrMissingElement{Tag: IssuerTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Issuer"}
 	}
 
-	if sp.IdentityProviderIssuer != "" && response.Issuer.Value != sp.IdentityProviderIssuer {
-		return ErrInvalidValue{
-			Key:      IssuerTag,
-			Expected: sp.IdentityProviderIssuer,
-			Actual:   response.Issuer.Value,
+	if sp.IDPEntityID != "" && response.Issuer.Value != sp.IDPEntityID {
+		return &ValidationError{
+			Reason: ErrBadIssuer,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.IDPEntityID, response.Issuer.Value),
 		}
 	}
 
 	status := response.Status
 	if status == nil {
-		return ErrMissingElement{Tag: StatusTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Status"}
 	}
 
 	statusCode := status.StatusCode
 	if statusCode == nil {
-		return ErrMissingElement{Tag: StatusCodeTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "StatusCode"}
 	}
 
 	if statusCode.Value != StatusCodeSuccess {
-		return ErrInvalidValue{
-			Key:      StatusCodeTag,
-			Expected: StatusCodeSuccess,
-			Actual:   statusCode.Value,
+		return &ValidationError{
+			Reason: ErrBadStatus,
+			Detail: fmt.Sprintf("expected %s, got %s", StatusCodeSuccess, statusCode.Value),
 		}
 	}
 
+	skew := sp.clockSkew()
+	now := sp.now()
+
 	for _, assertion := range response.Assertions {
+		if assertion.Version != "2.0" {
+			return &ValidationError{
+				Reason: ErrBadVersion,
+				Detail: fmt.Sprintf("expected assertion version 2.0, got %s", assertion.Version),
+			}
+		}
+
 		issuer = assertion.Issuer
 		if issuer == nil {
-			return ErrMissingElement{Tag: IssuerTag}
+			return &ValidationError{Reason: ErrMissingElement, Detail: "Issuer"}
 		}
-		if sp.IdentityProviderIssuer != "" && assertion.Issuer.Value != sp.IdentityProviderIssuer {
-			return ErrInvalidValue{
-				Key:      IssuerTag,
-				Expected: sp.IdentityProviderIssuer,
-				Actual:   issuer.Value,
+		if sp.IDPEntityID != "" && assertion.Issuer.Value != sp.IDPEntityID {
+			return &ValidationError{
+				Reason: ErrBadIssuer,
+				Detail: fmt.Sprintf("expected %s, got %s", sp.IDPEntityID, issuer.Value),
 			}
 		}
 
 		subject := assertion.Subject
 		if subject == nil {
-			return ErrMissingElement{Tag: SubjectTag}
+			return &ValidationError{Reason: ErrMissingElement, Detail: "Subject"}
 		}
 
 		subjectConfirmation := subject.SubjectConfirmation
 		if subjectConfirmation == nil {
-			return ErrMissingElement{Tag: SubjectConfirmationTag}
+			return &ValidationError{Reason: ErrMissingElement, Detail: "SubjectConfirmation"}
 		}
 
 		if subjectConfirmation.Method != SubjMethodBearer {
-			return ErrInvalidValue{
-				Reason:   ReasonUnsupported,
-				Key:      SubjectConfirmationTag,
-				Expected: SubjMethodBearer,
-				Actual:   subjectConfirmation.Method,
+			return &ValidationError{
+				Reason: ErrMalformed,
+				Detail: fmt.Sprintf("unsupported SubjectConfirmation method %s", subjectConfirmation.Method),
 			}
 		}
 
 		subjectConfirmationData := subjectConfirmation.SubjectConfirmationData
 		if subjectConfirmationData == nil {
-			return ErrMissingElement{Tag: SubjectConfirmationDataTag}
+			return &ValidationError{Reason: ErrMissingElement, Detail: "SubjectConfirmationData"}
 		}
 
-		if subjectConfirmationData.Recipient != sp.AssertionConsumerServiceURL {
-			return ErrInvalidValue{
-				Key:      RecipientAttr,
-				Expected: sp.AssertionConsumerServiceURL,
-				Actual:   subjectConfirmationData.Recipient,
+		if subjectConfirmationData.Recipient != sp.ACSURL {
+			return &ValidationError{
+				Reason: ErrBadRecipient,
+				Detail: fmt.Sprintf("expected %s, got %s", sp.ACSURL, subjectConfirmationData.Recipient),
+			}
+		}
+
+		// NotBefore is optional; validate if present.
+		if subjectConfirmationData.NotBefore != "" {
+			notBefore, err := time.Parse(time.RFC3339, subjectConfirmationData.NotBefore)
+			if err != nil {
+				return &ValidationError{
+					Reason: ErrMalformed,
+					Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotBefore %q as time", subjectConfirmationData.NotBefore),
+				}
+			}
+			if now.Add(skew).Before(notBefore) {
+				return &ValidationError{
+					Reason: ErrNotYetValid,
+					Detail: fmt.Sprintf("SubjectConfirmationData.NotBefore %s, now %s", subjectConfirmationData.NotBefore, now.Format(time.RFC3339)),
+				}
 			}
 		}
 
 		if subjectConfirmationData.NotOnOrAfter == "" {
-			return ErrMissingElement{Tag: SubjectConfirmationDataTag, Attribute: NotOnOrAfterAttr}
+			return &ValidationError{Reason: ErrMissingElement, Detail: "NotOnOrAfter attribute on SubjectConfirmationData"}
 		}
 
 		notOnOrAfter, err := time.Parse(time.RFC3339, subjectConfirmationData.NotOnOrAfter)
 		if err != nil {
-			return ErrParsing{Tag: NotOnOrAfterAttr, Value: subjectConfirmationData.NotOnOrAfter, Type: "time.RFC3339"}
+			return &ValidationError{
+				Reason: ErrMalformed,
+				Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotOnOrAfter %q as time", subjectConfirmationData.NotOnOrAfter),
+			}
 		}
 
-		now := sp.now()
-		if now.After(notOnOrAfter) {
-			return ErrInvalidValue{
-				Reason:   ReasonExpired,
-				Key:      NotOnOrAfterAttr,
-				Expected: now.Format(time.RFC3339),
-				Actual:   subjectConfirmationData.NotOnOrAfter,
+		if now.Add(-skew).After(notOnOrAfter) {
+			return &ValidationError{
+				Reason: ErrExpired,
+				Detail: fmt.Sprintf("NotOnOrAfter %s, now %s", subjectConfirmationData.NotOnOrAfter, now.Format(time.RFC3339)),
 			}
 		}
 
@@ -244,7 +246,7 @@ func (sp *SAMLServiceProvider) Validate(response *types.Response) error {
 	return nil
 }
 
-func (sp *SAMLServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutResponse) error {
+func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutResponse) error {
 	err := sp.validateLogoutResponseAttributes(response)
 	if err != nil {
 		return err
@@ -252,40 +254,37 @@ func (sp *SAMLServiceProvider) ValidateDecodedLogoutResponse(response *types.Log
 
 	issuer := response.Issuer
 	if issuer == nil {
-		// FIXME?: SAML Core 2.0 Section 3.2.2 has Response.Issuer as [Optional]
-		return ErrMissingElement{Tag: IssuerTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Issuer"}
 	}
 
-	if sp.IdentityProviderIssuer != "" && response.Issuer.Value != sp.IdentityProviderIssuer {
-		return ErrInvalidValue{
-			Key:      IssuerTag,
-			Expected: sp.IdentityProviderIssuer,
-			Actual:   response.Issuer.Value,
+	if sp.IDPEntityID != "" && response.Issuer.Value != sp.IDPEntityID {
+		return &ValidationError{
+			Reason: ErrBadIssuer,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.IDPEntityID, response.Issuer.Value),
 		}
 	}
 
 	status := response.Status
 	if status == nil {
-		return ErrMissingElement{Tag: StatusTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Status"}
 	}
 
 	statusCode := status.StatusCode
 	if statusCode == nil {
-		return ErrMissingElement{Tag: StatusCodeTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "StatusCode"}
 	}
 
 	if statusCode.Value != StatusCodeSuccess {
-		return ErrInvalidValue{
-			Key:      StatusCodeTag,
-			Expected: StatusCodeSuccess,
-			Actual:   statusCode.Value,
+		return &ValidationError{
+			Reason: ErrBadStatus,
+			Detail: fmt.Sprintf("expected %s, got %s", StatusCodeSuccess, statusCode.Value),
 		}
 	}
 
 	return nil
 }
 
-func (sp *SAMLServiceProvider) ValidateDecodedLogoutRequest(request *LogoutRequest) error {
+func (sp *ServiceProvider) ValidateDecodedLogoutRequest(request *LogoutRequest) error {
 	err := sp.validateLogoutRequestAttributes(request)
 	if err != nil {
 		return err
@@ -293,15 +292,76 @@ func (sp *SAMLServiceProvider) ValidateDecodedLogoutRequest(request *LogoutReque
 
 	issuer := request.Issuer
 	if issuer == nil {
-		// FIXME?: SAML Core 2.0 Section 3.2.2 has Response.Issuer as [Optional]
-		return ErrMissingElement{Tag: IssuerTag}
+		return &ValidationError{Reason: ErrMissingElement, Detail: "Issuer"}
 	}
 
-	if sp.IdentityProviderIssuer != "" && request.Issuer.Value != sp.IdentityProviderIssuer {
-		return ErrInvalidValue{
-			Key:      IssuerTag,
-			Expected: sp.IdentityProviderIssuer,
-			Actual:   request.Issuer.Value,
+	if sp.IDPEntityID != "" && request.Issuer.Value != sp.IDPEntityID {
+		return &ValidationError{
+			Reason: ErrBadIssuer,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.IDPEntityID, request.Issuer.Value),
+		}
+	}
+
+	// NotOnOrAfter is optional; validate if present.
+	if request.NotOnOrAfter != "" {
+		notOnOrAfter, err := time.Parse(time.RFC3339, request.NotOnOrAfter)
+		if err != nil {
+			return &ValidationError{
+				Reason: ErrMalformed,
+				Detail: fmt.Sprintf("cannot parse LogoutRequest.NotOnOrAfter %q as time", request.NotOnOrAfter),
+			}
+		}
+		skew := sp.clockSkew()
+		now := sp.now()
+		if now.Add(-skew).After(notOnOrAfter) {
+			return &ValidationError{
+				Reason: ErrExpired,
+				Detail: fmt.Sprintf("LogoutRequest.NotOnOrAfter %s, now %s", request.NotOnOrAfter, now.Format(time.RFC3339)),
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateInResponseTo checks the InResponseTo attribute against the
+// configured RequestTracker. When no RequestTracker is configured, validation
+// is skipped. When AllowIDPInitiated is true, missing InResponseTo is allowed.
+func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *types.Response) error {
+	if sp.RequestTracker == nil {
+		return nil
+	}
+
+	inResponseTo := response.InResponseTo
+
+	if inResponseTo == "" {
+		if sp.AllowIDPInitiated {
+			return nil
+		}
+		return &ValidationError{
+			Reason: ErrReplay,
+			Detail: "missing InResponseTo and IdP-initiated SSO is not allowed",
+		}
+	}
+
+	if err := sp.RequestTracker.ConsumeRequest(ctx, inResponseTo); err != nil {
+		return err
+	}
+
+	// Verify SubjectConfirmationData.InResponseTo matches Response.InResponseTo
+	for _, assertion := range response.Assertions {
+		if assertion.Subject == nil || assertion.Subject.SubjectConfirmation == nil {
+			continue
+		}
+		scd := assertion.Subject.SubjectConfirmation.SubjectConfirmationData
+		if scd == nil {
+			continue
+		}
+		if scd.InResponseTo != "" && scd.InResponseTo != inResponseTo {
+			return &ValidationError{
+				Reason: ErrReplay,
+				Detail: fmt.Sprintf("SubjectConfirmationData.InResponseTo %s does not match Response.InResponseTo %s", scd.InResponseTo, inResponseTo),
+			}
 		}
 	}
 

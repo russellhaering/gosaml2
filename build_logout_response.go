@@ -15,15 +15,18 @@
 package saml2
 
 import (
-	"bytes"
 	"encoding/base64"
-	"html/template"
+	"fmt"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/uuid"
+	"github.com/russellhaering/gosaml2/v2/uuid"
 )
 
-func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID string, includeSig bool) (*etree.Document, error) {
+func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID string, includeSig bool) (*etree.Document, error) {
+	if sp.EntityID == "" {
+		return nil, fmt.Errorf("EntityID must not be empty")
+	}
+
 	logoutResponse := &etree.Element{
 		Space: "samlp",
 		Tag:   "LogoutResponse",
@@ -37,17 +40,10 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 	logoutResponse.CreateAttr("ID", "_"+arId.String())
 	logoutResponse.CreateAttr("Version", "2.0")
 	logoutResponse.CreateAttr("IssueInstant", sp.now().UTC().Format(issueInstantFormat))
-	logoutResponse.CreateAttr("Destination", sp.IdentityProviderSLOURL)
+	logoutResponse.CreateAttr("Destination", sp.IDPSLOURL)
 	logoutResponse.CreateAttr("InResponseTo", reqID)
 
-	// NOTE(russell_h): In earlier versions we mistakenly sent the IdentityProviderIssuer
-	// in the AuthnRequest. For backwards compatibility we will fall back to that
-	// behavior when ServiceProviderIssuer isn't set.
-	if sp.ServiceProviderIssuer != "" {
-		logoutResponse.CreateElement("saml:Issuer").SetText(sp.ServiceProviderIssuer)
-	} else {
-		logoutResponse.CreateElement("saml:Issuer").SetText(sp.IdentityProviderIssuer)
-	}
+	logoutResponse.CreateElement("saml:Issuer").SetText(sp.EntityID)
 
 	status := logoutResponse.CreateElement("samlp:Status")
 	statusCode := status.CreateElement("samlp:StatusCode")
@@ -55,7 +51,6 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 
 	doc := etree.NewDocument()
 
-	// Only POST binding includes <Signature> in <AuthnRequest> (includeSig)
 	if includeSig {
 		signed, err := sp.SignLogoutResponse(logoutResponse)
 		if err != nil {
@@ -68,16 +63,20 @@ func (sp *SAMLServiceProvider) buildLogoutResponse(statusCodeValue string, reqID
 	}
 	return doc, nil
 }
-func (sp *SAMLServiceProvider) BuildLogoutResponseDocument(status string, reqID string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutResponseDocument(status string, reqID string) (*etree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, true)
 }
 
-func (sp *SAMLServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*etree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, false)
 }
 
-func (sp *SAMLServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
-	signed, err := sp.Signer().SignEnveloped(el)
+func (sp *ServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
+	signer, err := sp.Signer()
+	if err != nil {
+		return nil, err
+	}
+	signed, err := signer.SignEnveloped(el)
 	if err != nil {
 		return nil, err
 	}
@@ -99,64 +98,14 @@ func (sp *SAMLServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Ele
 	return signed, nil
 }
 
-func (sp *SAMLServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	respBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
 	}
-
-	encodedRespBuf := base64.StdEncoding.EncodeToString(respBuf)
-
-	var tmpl *template.Template
-	var rv bytes.Buffer
-
-	if relayState != "" {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`<html>` +
-			`<form method="post" action="{{.URL}}" id="SAMLResponseForm">` +
-			`<input type="hidden" name="SAMLResponse" value="{{.SAMLResponse}}" />` +
-			`<input type="hidden" name="RelayState" value="{{.RelayState}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Continue" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility='hidden';</script>` +
-			`<script>document.getElementById('SAMLResponseForm').submit();</script>` +
-			`</html>`))
-		data := struct {
-			URL          string
-			SAMLResponse string
-			RelayState   string
-		}{
-			URL:          sp.IdentityProviderSLOURL,
-			SAMLResponse: encodedRespBuf,
-			RelayState:   relayState,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	} else {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`<html>` +
-			`<form method="post" action="{{.URL}}" id="SAMLResponseForm">` +
-			`<input type="hidden" name="SAMLResponse" value="{{.SAMLResponse}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Continue" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility='hidden';</script>` +
-			`<script>document.getElementById('SAMLResponseForm').submit();</script>` +
-			`</html>`))
-		data := struct {
-			URL          string
-			SAMLResponse string
-		}{
-			URL:          sp.IdentityProviderSLOURL,
-			SAMLResponse: encodedRespBuf,
-		}
-
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	}
-
-	return rv.Bytes(), nil
+	return buildPOSTForm(sp.IDPSLOURL, "SAMLResponse", base64.StdEncoding.EncodeToString(respBuf), relayState)
 }
 
-func (sp *SAMLServiceProvider) BuildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) BuildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildLogoutResponseBodyPostFromDocument(relayState, doc)
 }

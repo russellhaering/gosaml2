@@ -16,6 +16,7 @@ package saml2
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
@@ -99,7 +100,7 @@ wlekRhVEjR0UhnM+nn2sqqbv7tDEPs63lZSDXCnR1PhscHrEuQ04rHI3OL0gCULVQFvJrj85IAZF
 	badInput = `<saml2:Assertion ID="id1684056077776386493060641"IssueInstant="2019-08-12T12:00:52.718Z"Version="2.0"xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion"xmlns:xs="http://www.w3.org/2001/XMLSchema"><saml2:Issuer Format="urn:oasis:names:tc:SAML:2.0:nameid-format:entity"xmlns="">http://www.okta.com/exk133onomIuOW98z357</l><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/><ds:Reference URI="#id1684056077776386493060641"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"><ec:InclusiveNamespaces PrefixList="xs"xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#"/></m></s><ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><ds:DigestValue>dC1cm0pLLjIWZC6G2Pmf0JogmqHztp9W1euXPd/TUHo=</e></e></o><ds:SignatureValue>YRSCFLIkIgjbbYLyfCIc8jsP2MUJPjn+nYWRdlVIDdXtYXXxklYqdBXQsxDwNcsOAIGS75PeVGryml3oBkUDg/MfK7z/fFPLXX7c7xgh7/DBAFlSXbwlJQxuXQ5eZcGesgG6nYRwU1hpW+yN7C2ODN9KHi5TUdiEhvy8vdlFSfxdy4Mn68nG/UZBqmHHIZdRG2/Hpcs29YyaVVZUCZ0w22b7zsPuOXHuStOSTQ6isxI2R268+ZNKERYaNMCAGX4zNlT3mHBV0NnZkbO3wmlOfKksL+Qx7L64xFc3PaervxWuPqh2FoWpTCqFdliLdvUfFDszKXJKhO0bj1U0aSrdzg==</e><s><s><s></X></X></o></e><saml2:Subject xmlns=""><saml2:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified">steven.james.johnstone@gmail.com</l><saml2:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml2:SubjectConfirmationData InResponseTo="_40a419f5-5c1c-43d0-5834-5caf268a5f01"NotOnOrAfter="2019-08-12T12:05:52.718Z"Recipient="https://127.0.0.1/login"/></l></l><saml2:Conditions NotBefore="2019-08-12T11:55:52.718Z"NotOnOrAfter="2019-08-12T12:05:52.718Z"xmlns=""><saml2:AudienceRestriction><saml2:Audience>37a8eec1ce19687d132fe29051dca629d164e2c4958ba141d5f4133a33f0688f.jazznetworks.com</l></l></l><saml2:AuthnStatement AuthnInstant="2019-08-12T12:00:52.718Z"SessionIndex="_40a419f5-5c1c-43d0-5834-5caf268a5f01"xmlns=""><saml2:AuthnContext><saml2:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</l></l></l><saml2:AttributeStatement xmlns=""><saml2:Attribute Name="FirstName"NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified"><saml2:AttributeValue xmlns=""xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"xsi:type="xs:string">Steven</l></l><saml2:Attribute Name="LastName"NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified"><saml2:AttributeValue xmlns=""xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"xsi:type="xs:string">Johnstone</l></l><saml2:Attribute Name="Email"NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified"><saml2:AttributeValue xmlns=""xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"xsi:type="xs:string">steven.james.johnstone@gmail.com`
 )
 
-func testEncryptedAssertion(t *testing.T, validateEncryptionCert bool) {
+func TestEncryptedAssertion(t *testing.T) {
 	var err error
 	tlsCert, err := tls.LoadX509KeyPair("./testdata/test.crt", "./testdata/test.key")
 	require.NoError(t, err, "could not load x509 key pair")
@@ -109,14 +110,46 @@ func testEncryptedAssertion(t *testing.T, validateEncryptionCert bool) {
 	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse idp cert pem block")
 
-	fakeTime := time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
+	// Time must be within assertion validity window (NotBefore=2016-04-28T22:41:49)
+	fakeTime := time.Date(2016, 04, 28, 22, 42, 00, 00, time.UTC)
+	sp := ServiceProvider{
+		ACSURL: "https://saml2.test.astuart.co/sso/saml2",
 		SPKeyStore: &KeyStore{
 			Signer: tlsCert.PrivateKey.(crypto.Signer),
 			Cert:   tlsCert.Certificate[0],
 		},
-		ValidateEncryptionCert: validateEncryptionCert,
+		IDPCertificates: []*x509.Certificate{idpCertParsed},
+		Clock:           func() time.Time { return fakeTime },
+	}
+
+	bs, err := ioutil.ReadFile("./testdata/saml.post")
+	require.NoError(t, err, "couldn't read post")
+
+	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))
+	require.NoError(t, err, "Assertion info should be retrieved with no error")
+}
+
+func TestEncryptedAssertionInvalidCert(t *testing.T) {
+	var err error
+	tlsCert, err := tls.LoadX509KeyPair("./testdata/test.crt", "./testdata/test.key")
+	require.NoError(t, err, "could not load x509 key pair")
+
+	block, _ := pem.Decode([]byte(idpCert))
+
+	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err, "couldn't parse idp cert pem block")
+
+	// Time before cert validity (cert NotBefore=2016-04-28T22:38:19).
+	// The decryption cert check happens before assertion conditions,
+	// so the cert error is returned first.
+	fakeTime := time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)
+	sp := ServiceProvider{
+		ACSURL: "https://saml2.test.astuart.co/sso/saml2",
+		SPKeyStore: &KeyStore{
+			Signer: tlsCert.PrivateKey.(crypto.Signer),
+			Cert:   tlsCert.Certificate[0],
+		},
+		ValidateEncryptionCert: true,
 		IDPCertificates:        []*x509.Certificate{idpCertParsed},
 		Clock:                  func() time.Time { return fakeTime },
 	}
@@ -124,21 +157,9 @@ func testEncryptedAssertion(t *testing.T, validateEncryptionCert bool) {
 	bs, err := ioutil.ReadFile("./testdata/saml.post")
 	require.NoError(t, err, "couldn't read post")
 
-	_, err = sp.RetrieveAssertionInfo(string(bs))
-	if validateEncryptionCert {
-		require.Error(t, err)
-		require.Equal(t, "error validating response: unable to get decryption certificate: decryption cert is not valid at this time", err.Error())
-	} else {
-		require.NoError(t, err, "Assertion info should be retrieved with no error")
-	}
-}
-
-func TestEncryptedAssertion(t *testing.T) {
-	testEncryptedAssertion(t, false)
-}
-
-func TestEncryptedAssertionInvalidCert(t *testing.T) {
-	testEncryptedAssertion(t, true)
+	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))
+	require.Error(t, err)
+	require.Equal(t, "error validating response: unable to get decryption certificate: decryption cert is not valid at this time", err.Error())
 }
 
 func TestCompressedResponse(t *testing.T) {
@@ -150,9 +171,9 @@ func TestCompressedResponse(t *testing.T) {
 	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
-	fakeTime := time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC)
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
+	fakeTime := time.Date(2017, 3, 17, 23, 28, 0, 0, time.UTC)
+	sp := ServiceProvider{
+		ACSURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
 		SPKeyStore: &KeyStore{
 			Signer: cert.PrivateKey.(crypto.Signer),
 			Cert:   cert.Certificate[0],
@@ -162,13 +183,11 @@ func TestCompressedResponse(t *testing.T) {
 		AllowSHA1:       true,
 	}
 
-	_, err = sp.RetrieveAssertionInfo(string(bs))
+	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))
 	require.NoError(t, err, "Assertion info should be retrieved with no error")
 }
 
 func TestDecodeColonsInLocalNames(t *testing.T) {
-	// Handling of double colons was improved in Go 1.7 such that this test no longer fails.
-	// See: https://go-review.googlesource.com/c/go/+/277892
 	if rtvalidator.Validate(bytes.NewReader([]byte(`<x::Root/>`))) == nil {
 		t.Skip()
 	}
@@ -178,8 +197,6 @@ func TestDecodeColonsInLocalNames(t *testing.T) {
 }
 
 func TestDecodeDoubleColonInjectionAttackResponse(t *testing.T) {
-	// Handling of double colons was improved in Go 1.7 such that this test no longer fails.
-	// See: https://go-review.googlesource.com/c/go/+/277892
 	if rtvalidator.Validate(bytes.NewReader([]byte(`<x::Root/>`))) == nil {
 		t.Skip()
 	}
@@ -194,15 +211,15 @@ func TestMalFormedInput(t *testing.T) {
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
 	fakeTime := time.Date(2019, 8, 12, 12, 00, 52, 718, time.UTC)
-	sp := &SAMLServiceProvider{
-		Clock:                       func() time.Time { return fakeTime },
-		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
-		SignAuthnRequests:           true,
-		IDPCertificates:             []*x509.Certificate{idpCertParsed},
-		ValidateEncryptionCert:      true,
+	sp := &ServiceProvider{
+		Clock:                  func() time.Time { return fakeTime },
+		ACSURL:                 "https://saml2.test.astuart.co/sso/saml2",
+		SignAuthnRequests:      true,
+		IDPCertificates:        []*x509.Certificate{idpCertParsed},
+		ValidateEncryptionCert: true,
 	}
 	base64Input := base64.StdEncoding.EncodeToString([]byte(badInput))
-	_, err = sp.RetrieveAssertionInfo(base64Input)
+	_, err = sp.RetrieveAssertionInfo(context.Background(), base64Input)
 	require.Errorf(t, err, "parent is nil")
 }
 
@@ -215,9 +232,9 @@ func TestCompressionBombInput(t *testing.T) {
 	idpCertParsed, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err, "couldn't parse okta cert pem block")
 
-	fakeTime := time.Date(2017, 3, 17, 20, 00, 0, 0, time.UTC)
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
+	fakeTime := time.Date(2017, 3, 17, 23, 28, 0, 0, time.UTC)
+	sp := ServiceProvider{
+		ACSURL: "https://f1f51ddc.ngrok.io/api/sso/saml2/acs/58cafd0573d4f375b8e70e8e",
 		SPKeyStore: &KeyStore{
 			Signer: cert.PrivateKey.(crypto.Signer),
 			Cert:   cert.Certificate[0],
@@ -227,6 +244,6 @@ func TestCompressionBombInput(t *testing.T) {
 		MaximumDecompressedBodySize: 2048,
 	}
 
-	_, err = sp.RetrieveAssertionInfo(string(bs))
+	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))
 	require.Error(t, err, "error validating response: deflated response exceeds maximum size of 2048 bytes")
 }

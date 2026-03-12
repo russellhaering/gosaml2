@@ -20,82 +20,58 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/goxmldsig/v2"
 )
 
-type ErrSaml struct {
-	Message string
-	System  error
-}
+type ServiceProvider struct {
+	// Service Provider identity
+	EntityID string
+	ACSURL   string
+	SLOURL   string
 
-func (serr ErrSaml) Error() string {
-	if serr.Message != "" {
-		return serr.Message
-	}
-	return "SAML error"
-}
+	// Identity Provider
+	IDPEntityID   string
+	IDPSSOURL     string
+	IDPSSOBinding string
+	IDPSLOURL     string
+	IDPSLOBinding string
 
-type SAMLServiceProvider struct {
-	IdentityProviderSSOURL     string
-	IdentityProviderSSOBinding string
-	IdentityProviderSLOURL     string
-	IdentityProviderSLOBinding string
-	IdentityProviderIssuer     string
+	// Certificates and keys
+	IDPCertificates []*x509.Certificate
+	SPKeyStore      *KeyStore
+	SPSigningKeyStore *KeyStore
 
-	AssertionConsumerServiceURL string
-	ServiceProviderSLOURL       string
-	ServiceProviderIssuer       string
+	// Security
+	InsecureSkipSignatureValidation bool
+	AllowSHA1                       bool
+	ValidateEncryptionCert          bool
+	AllowIDPInitiated               bool
 
+	// Signing
 	SignAuthnRequests              bool
 	SignAuthnRequestsAlgorithm     string
 	SignAuthnRequestsCanonicalizer dsig.Canonicalizer
 
-	// ForceAuthn attribute in authentication request forces the identity provider to
-	// re-authenticate the presenter directly rather than rely on a previous security context.
-	// NOTE: If both ForceAuthn and IsPassive are "true", the identity provider MUST NOT freshly
-	// authenticate the presenter unless the constraints of IsPassive can be met.
-	ForceAuthn bool
-	// IsPassive attribute in authentication request requires that the identity provider and the
-	// user agent itself MUST NOT visibly take control of the user interface from the requester
-	// and interact with the presenter in a noticeable fashion.
-	IsPassive bool
-	// RequestedAuthnContext allows service providers to require that the identity
-	// provider use specific authentication mechanisms. Leaving this unset will
-	// permit the identity provider to choose the auth method. To maximize compatibility
-	// with identity providers it is recommended to leave this unset.
+	// Validation
+	ClockSkew      time.Duration
+	AudienceURIs   []string
+	RequestTracker RequestTracker
+
+	// Request building
 	RequestedAuthnContext *RequestedAuthnContext
-	AudienceURI           string
+	ForceAuthn            bool
+	IsPassive             bool
+	NameIDFormat          string
 
-	// IDPCertificates are the trusted certificates from the identity provider.
-	IDPCertificates []*x509.Certificate
-
-	NameIdFormat            string
-	ValidateEncryptionCert  bool
-	SkipSignatureValidation bool
-	AllowMissingAttributes  bool
-
-	// AllowSHA1 permits SHA-1 for signature and digest algorithms.
-	// Default: false (SHA-1 is rejected).
-	AllowSHA1 bool
-
-	// Clock returns the current time. If nil, time.Now is used.
-	Clock func() time.Time
-
-	// SPKeyStore holds the SP encryption/decryption key and certificate.
-	SPKeyStore *KeyStore
-
-	// SPSigningKeyStore holds the SP signing key and certificate.
-	// If nil, SPKeyStore is used for signing.
-	SPSigningKeyStore *KeyStore
-
-	// MaximumDecompressedBodySize is the maximum size to which a compressed
-	// SAML document will be decompressed. If a compressed document exceeds
-	// this size during decompression an error will be returned.
+	// Advanced
+	Clock                       func() time.Time
 	MaximumDecompressedBodySize int64
+	MetadataValidDuration       time.Duration
 
 	signerMu sync.RWMutex
 	signer   *dsig.Signer
@@ -109,7 +85,7 @@ type KeyStore struct {
 
 // RequestedAuthnContext controls which authentication mechanisms are requested of
 // the identity provider. It is generally sufficient to omit this and let the
-// identity provider select an authentication mechansim.
+// identity provider select an authentication mechanism.
 type RequestedAuthnContext struct {
 	// The RequestedAuthnContext comparison policy to use. See the section 3.3.2.2.1
 	// of the SAML 2.0 specification for details. Constants named AuthnPolicyMatch*
@@ -123,7 +99,7 @@ type RequestedAuthnContext struct {
 	Contexts []string
 }
 
-func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
+func (sp *ServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	keyDescriptors := make([]types.KeyDescriptor, 0, 2)
 	if sp.getSigningKeyStore() != nil {
 		signingCertBytes, err := sp.GetSigningCertBytes()
@@ -165,148 +141,109 @@ func (sp *SAMLServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 			},
 		})
 	}
-	return &types.EntityDescriptor{
-		ValidUntil: sp.now().UTC().Add(time.Hour * 24 * 7), // 7 days
-		EntityID:   sp.ServiceProviderIssuer,
+
+	validDuration := sp.MetadataValidDuration
+	if validDuration == 0 {
+		validDuration = time.Hour * 24 * 7 // 7 days
+	}
+
+	desc := &types.EntityDescriptor{
+		ValidUntil: sp.now().UTC().Add(validDuration),
+		EntityID:   sp.EntityID,
 		SPSSODescriptor: &types.SPSSODescriptor{
 			AuthnRequestsSigned:        sp.SignAuthnRequests,
-			WantAssertionsSigned:       !sp.SkipSignatureValidation,
+			WantAssertionsSigned:       !sp.InsecureSkipSignatureValidation,
 			ProtocolSupportEnumeration: SAMLProtocolNamespace,
 			KeyDescriptors:             keyDescriptors,
 			AssertionConsumerServices: []types.IndexedEndpoint{{
 				Binding:  BindingHttpPost,
-				Location: sp.AssertionConsumerServiceURL,
+				Location: sp.ACSURL,
 				Index:    1,
 			}},
 		},
-	}, nil
-}
-
-func (sp *SAMLServiceProvider) MetadataWithSLO(validityHours int64) (*types.EntityDescriptor, error) {
-	signingCertBytes, err := sp.GetSigningCertBytes()
-	if err != nil {
-		return nil, err
-	}
-	encryptionCertBytes, err := sp.GetEncryptionCertBytes()
-	if err != nil {
-		return nil, err
 	}
 
-	if validityHours <= 0 {
-		// By default let's keep it to 7 days.
-		validityHours = int64(time.Hour * 24 * 7)
+	if sp.SLOURL != "" {
+		desc.SPSSODescriptor.SingleLogoutServices = []types.Endpoint{{
+			Binding:  BindingHttpPost,
+			Location: sp.SLOURL,
+		}}
 	}
 
-	return &types.EntityDescriptor{
-		ValidUntil: sp.now().UTC().Add(time.Duration(validityHours)), // default 7 days
-		EntityID:   sp.ServiceProviderIssuer,
-		SPSSODescriptor: &types.SPSSODescriptor{
-			AuthnRequestsSigned:        sp.SignAuthnRequests,
-			WantAssertionsSigned:       !sp.SkipSignatureValidation,
-			ProtocolSupportEnumeration: SAMLProtocolNamespace,
-			KeyDescriptors: []types.KeyDescriptor{
-				{
-					Use: "signing",
-					KeyInfo: types.KeyInfo{
-						X509Data: types.X509Data{
-							X509Certificates: []types.X509Certificate{{
-								Data: base64.StdEncoding.EncodeToString(signingCertBytes),
-							}},
-						},
-					},
-				},
-				{
-					Use: "encryption",
-					KeyInfo: types.KeyInfo{
-						X509Data: types.X509Data{
-							X509Certificates: []types.X509Certificate{{
-								Data: base64.StdEncoding.EncodeToString(encryptionCertBytes),
-							}},
-						},
-					},
-					EncryptionMethods: []types.EncryptionMethod{
-						{Algorithm: types.MethodAES128GCM, DigestMethod: nil},
-						{Algorithm: types.MethodAES192GCM, DigestMethod: nil},
-						{Algorithm: types.MethodAES256GCM, DigestMethod: nil},
-						{Algorithm: types.MethodAES128CBC, DigestMethod: nil},
-						{Algorithm: types.MethodAES256CBC, DigestMethod: nil},
-					},
-				},
-			},
-			AssertionConsumerServices: []types.IndexedEndpoint{{
-				Binding:  BindingHttpPost,
-				Location: sp.AssertionConsumerServiceURL,
-				Index:    1,
-			}},
-			SingleLogoutServices: []types.Endpoint{{
-				Binding:  BindingHttpPost,
-				Location: sp.ServiceProviderSLOURL,
-			}},
-		},
-	}, nil
+	return desc, nil
 }
 
 // now returns the current time using the configured clock, or time.Now.
-func (sp *SAMLServiceProvider) now() time.Time {
+func (sp *ServiceProvider) now() time.Time {
 	if sp.Clock != nil {
 		return sp.Clock()
 	}
 	return time.Now()
 }
 
+// clockSkew returns the configured clock skew, defaulting to 60s.
+func (sp *ServiceProvider) clockSkew() time.Duration {
+	if sp.ClockSkew != 0 {
+		return sp.ClockSkew
+	}
+	return 60 * time.Second
+}
+
 // getSigningKeyStore returns the key store to use for signing.
-func (sp *SAMLServiceProvider) getSigningKeyStore() *KeyStore {
+func (sp *ServiceProvider) getSigningKeyStore() *KeyStore {
 	if sp.SPSigningKeyStore != nil {
 		return sp.SPSigningKeyStore
 	}
 	return sp.SPKeyStore
 }
 
-func (sp *SAMLServiceProvider) GetEncryptionCertBytes() ([]byte, error) {
+func (sp *ServiceProvider) GetEncryptionCertBytes() ([]byte, error) {
 	if sp.SPKeyStore == nil {
-		return nil, ErrSaml{Message: "empty SP encryption certificate"}
+		return nil, fmt.Errorf("empty SP encryption certificate")
 	}
 	if len(sp.SPKeyStore.Cert) < 1 {
-		return nil, ErrSaml{Message: "empty SP encryption certificate"}
+		return nil, fmt.Errorf("empty SP encryption certificate")
 	}
 	return sp.SPKeyStore.Cert, nil
 }
 
-func (sp *SAMLServiceProvider) GetSigningCertBytes() ([]byte, error) {
+func (sp *ServiceProvider) GetSigningCertBytes() ([]byte, error) {
 	ks := sp.getSigningKeyStore()
 	if ks == nil {
-		return nil, ErrSaml{Message: "empty SP signing certificate"}
+		return nil, fmt.Errorf("empty SP signing certificate")
 	}
 	if len(ks.Cert) < 1 {
-		return nil, ErrSaml{Message: "empty SP signing certificate"}
+		return nil, fmt.Errorf("empty SP signing certificate")
 	}
 	return ks.Cert, nil
 }
 
 // Signer returns a dsig.Signer configured for this service provider.
-func (sp *SAMLServiceProvider) Signer() *dsig.Signer {
+func (sp *ServiceProvider) Signer() (*dsig.Signer, error) {
 	sp.signerMu.RLock()
 	s := sp.signer
 	sp.signerMu.RUnlock()
 
 	if s != nil {
-		return s
+		return s, nil
 	}
 
 	sp.signerMu.Lock()
 	defer sp.signerMu.Unlock()
 
+	// Re-check after acquiring write lock.
+	if sp.signer != nil {
+		return sp.signer, nil
+	}
+
 	ks := sp.getSigningKeyStore()
 	if ks == nil {
-		return nil
+		return nil, fmt.Errorf("no signing key store configured")
 	}
 
 	cert, err := x509.ParseCertificate(ks.Cert)
 	if err != nil {
-		// Ideally this function should return the error, but updating the function
-		// signature would be backward incompatible. Returning nil avoids the previous
-		// panic while preserving the existing API contract.
-		return nil
+		return nil, fmt.Errorf("error parsing signing certificate: %w", err)
 	}
 
 	sp.signer = &dsig.Signer{
@@ -318,7 +255,7 @@ func (sp *SAMLServiceProvider) Signer() *dsig.Signer {
 		sp.signer.Canonicalizer = sp.SignAuthnRequestsCanonicalizer
 	}
 
-	return sp.signer
+	return sp.signer, nil
 }
 
 // signatureAlgorithmHash returns the crypto.Hash for a given signature method URI.
@@ -377,20 +314,15 @@ type ProxyRestriction struct {
 	Audience []string
 }
 
-type WarningInfo struct {
-	OneTimeUse       bool
-	ProxyRestriction *ProxyRestriction
-	NotInAudience    bool
-	InvalidTime      bool
-}
-
 type AssertionInfo struct {
 	NameID                     string
+	NameIDFormat               string
 	Values                     Values
-	WarningInfo                *WarningInfo
 	SessionIndex               string
 	AuthnInstant               *time.Time
 	SessionNotOnOrAfter        *time.Time
 	Assertions                 []types.Assertion
 	ResponseSignatureValidated bool
+	OneTimeUse                 bool
+	ProxyRestriction           *ProxyRestriction
 }

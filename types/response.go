@@ -31,6 +31,7 @@ type UnverifiedBaseResponse struct {
 	Destination  string   `xml:"Destination,attr"`
 	Version      string   `xml:"Version,attr"`
 	Issuer       *Issuer  `xml:"Issuer"`
+	Audiences    []string `xml:"-"` // populated after parsing
 }
 
 type Response struct {
@@ -87,7 +88,7 @@ type Assertion struct {
 	Signature          *Signature          `xml:"Signature"`
 	Subject            *Subject            `xml:"Subject"`
 	Conditions         *Conditions         `xml:"Conditions"`
-	AttributeStatement *AttributeStatement `xml:"AttributeStatement"`
+	AttributeStatements []AttributeStatement `xml:"AttributeStatement"`
 	AuthnStatement     *AuthnStatement     `xml:"AuthnStatement"`
 	SignatureValidated bool                `xml:"-"` // not read, not dumped
 }
@@ -110,6 +111,7 @@ type AuthnContextClassRef struct {
 
 type NameID struct {
 	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion NameID"`
+	Format  string   `xml:"Format,attr,omitempty"`
 	Value   string   `xml:",chardata"`
 }
 
@@ -121,6 +123,7 @@ type SubjectConfirmation struct {
 
 type SubjectConfirmationData struct {
 	XMLName      xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion SubjectConfirmationData"`
+	NotBefore    string   `xml:"NotBefore,attr"`
 	NotOnOrAfter string   `xml:"NotOnOrAfter,attr"`
 	Recipient    string   `xml:"Recipient,attr"`
 	InResponseTo string   `xml:"InResponseTo,attr"`

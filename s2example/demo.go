@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -25,8 +26,8 @@ import (
 	"math/big"
 	"net/http"
 
-	saml2 "github.com/russellhaering/gosaml2"
-	"github.com/russellhaering/gosaml2/types"
+	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
 func main() {
@@ -71,15 +72,15 @@ func main() {
 	// to verify these.
 	randomKeyStore := randomKeyStoreForDemo()
 
-	sp := &saml2.SAMLServiceProvider{
-		IdentityProviderSSOURL:      metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
-		IdentityProviderIssuer:      metadata.EntityID,
-		ServiceProviderIssuer:       "http://example.com/saml/acs/example",
-		AssertionConsumerServiceURL: "http://localhost:8080/v1/_saml_callback",
-		SignAuthnRequests:           true,
-		AudienceURI:                 "http://example.com/saml/acs/example",
-		IDPCertificates:             idpCerts,
-		SPKeyStore:                  randomKeyStore,
+	sp := &saml2.ServiceProvider{
+		IDPSSOURL:        metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
+		IDPEntityID:      metadata.EntityID,
+		EntityID:         "http://example.com/saml/acs/example",
+		ACSURL:           "http://localhost:8080/v1/_saml_callback",
+		SignAuthnRequests: true,
+		AudienceURIs:     []string{"http://example.com/saml/acs/example"},
+		IDPCertificates:  idpCerts,
+		SPKeyStore:       randomKeyStore,
 	}
 
 	http.HandleFunc("/v1/_saml_callback", func(rw http.ResponseWriter, req *http.Request) {
@@ -89,18 +90,8 @@ func main() {
 			return
 		}
 
-		assertionInfo, err := sp.RetrieveAssertionInfo(req.FormValue("SAMLResponse"))
+		assertionInfo, err := sp.RetrieveAssertionInfo(context.Background(), req.FormValue("SAMLResponse"))
 		if err != nil {
-			rw.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		if assertionInfo.WarningInfo.InvalidTime {
-			rw.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		if assertionInfo.WarningInfo.NotInAudience {
 			rw.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -112,11 +103,6 @@ func main() {
 		for key, val := range assertionInfo.Values {
 			fmt.Fprintf(rw, "  %s: %+v\n", key, val)
 		}
-
-		fmt.Fprintf(rw, "\n")
-
-		fmt.Fprintf(rw, "Warnings:\n")
-		fmt.Fprintf(rw, "%+v\n", assertionInfo.WarningInfo)
 	})
 
 	println("Visit this URL To Authenticate:")
@@ -128,7 +114,7 @@ func main() {
 	println(authURL)
 
 	println("Supply:")
-	fmt.Printf("  SP ACS URL      : %s\n", sp.AssertionConsumerServiceURL)
+	fmt.Printf("  SP ACS URL      : %s\n", sp.ACSURL)
 
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {

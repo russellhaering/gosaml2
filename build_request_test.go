@@ -36,12 +36,12 @@ func TestRedirect(t *testing.T) {
 
 	spURL := "https://sp.test"
 
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
-		SignAuthnRequests:           false,
+	sp := ServiceProvider{
+		ACSURL:           spURL,
+		AudienceURIs:     []string{spURL},
+		EntityID:         spURL,
+		IDPSSOURL:        "https://idp.test/saml/sso",
+		SignAuthnRequests: false,
 	}
 
 	require.NoError(t, sp.AuthRedirect(w, r, "foobar"))
@@ -80,12 +80,12 @@ func TestRedirect(t *testing.T) {
 
 func TestRequestedAuthnContextOmitted(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
-		SignAuthnRequests:           false,
+	sp := ServiceProvider{
+		ACSURL:           spURL,
+		AudienceURIs:     []string{spURL},
+		EntityID:         spURL,
+		IDPSSOURL:        "https://idp.test/saml/sso",
+		SignAuthnRequests: false,
 	}
 
 	request, err := sp.BuildAuthRequest()
@@ -101,11 +101,11 @@ func TestRequestedAuthnContextOmitted(t *testing.T) {
 
 func TestRequestedAuthnContextIncluded(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
+	sp := ServiceProvider{
+		ACSURL:       spURL,
+		AudienceURIs: []string{spURL},
+		EntityID:     spURL,
+		IDPSSOURL:    "https://idp.test/saml/sso",
 		RequestedAuthnContext: &RequestedAuthnContext{
 			Comparison: AuthnPolicyMatchExact,
 			Contexts: []string{
@@ -132,11 +132,11 @@ func TestRequestedAuthnContextIncluded(t *testing.T) {
 
 func TestForceAuthnOmitted(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
+	sp := ServiceProvider{
+		ACSURL:       spURL,
+		AudienceURIs: []string{spURL},
+		EntityID:     spURL,
+		IDPSSOURL:    "https://idp.test/saml/sso",
 	}
 
 	request, err := sp.BuildAuthRequest()
@@ -152,12 +152,12 @@ func TestForceAuthnOmitted(t *testing.T) {
 
 func TestForceAuthnIncluded(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
-		ForceAuthn:                  true,
+	sp := ServiceProvider{
+		ACSURL:       spURL,
+		AudienceURIs: []string{spURL},
+		EntityID:     spURL,
+		IDPSSOURL:    "https://idp.test/saml/sso",
+		ForceAuthn:   true,
 	}
 
 	request, err := sp.BuildAuthRequest()
@@ -174,11 +174,11 @@ func TestForceAuthnIncluded(t *testing.T) {
 
 func TestIsPassiveOmitted(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
+	sp := ServiceProvider{
+		ACSURL:       spURL,
+		AudienceURIs: []string{spURL},
+		EntityID:     spURL,
+		IDPSSOURL:    "https://idp.test/saml/sso",
 	}
 
 	request, err := sp.BuildAuthRequest()
@@ -194,12 +194,12 @@ func TestIsPassiveOmitted(t *testing.T) {
 
 func TestIsPassiveIncluded(t *testing.T) {
 	spURL := "https://sp.test"
-	sp := SAMLServiceProvider{
-		AssertionConsumerServiceURL: spURL,
-		AudienceURI:                 spURL,
-		IdentityProviderIssuer:      spURL,
-		IdentityProviderSSOURL:      "https://idp.test/saml/sso",
-		IsPassive:                   true,
+	sp := ServiceProvider{
+		ACSURL:       spURL,
+		AudienceURIs: []string{spURL},
+		EntityID:     spURL,
+		IDPSSOURL:    "https://idp.test/saml/sso",
+		IsPassive:    true,
 	}
 
 	request, err := sp.BuildAuthRequest()

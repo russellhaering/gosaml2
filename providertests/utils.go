@@ -1,11 +1,11 @@
 // Copyright 2016 Russell Haering et al.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     https://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,25 +26,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/russellhaering/gosaml2"
-	"github.com/russellhaering/gosaml2/types"
+	"github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
 
-func scenarioIndexes(errs map[int]string, warns map[int]scenarioWarnings) (idxs []int) {
-	for idx, _ := range errs {
-		idxs = append(idxs, idx)
-	}
-	for idx, _ := range warns {
+func scenarioIndexes(errs map[int]string) (idxs []int) {
+	for idx := range errs {
 		idxs = append(idxs, idx)
 	}
 	sort.Ints(idxs)
 	return
-}
-
-type scenarioWarnings struct {
-	InvalidTime   bool
-	NotInAudience bool
 }
 
 func scenarioErrorChecker(i int, scenarioErrors map[int]string) func(*testing.T, error) {
@@ -54,14 +46,6 @@ func scenarioErrorChecker(i int, scenarioErrors map[int]string) func(*testing.T,
 		} else {
 			require.NoError(t, err)
 		}
-	}
-}
-
-func scenarioWarningChecker(i int, scenarioWarns map[int]scenarioWarnings) func(*testing.T, *saml2.WarningInfo) {
-	return func(t *testing.T, warningInfo *saml2.WarningInfo) {
-		expectedWarnings := scenarioWarns[i]
-		require.Equal(t, expectedWarnings.InvalidTime, warningInfo.InvalidTime, "InvalidTime mismatch")
-		require.Equal(t, expectedWarnings.NotInAudience, warningInfo.NotInAudience, "NotInAudience mismatch")
 	}
 }
 
@@ -150,11 +134,10 @@ func LoadCertificates(path string) []*x509.Certificate {
 }
 
 type ProviderTestScenario struct {
-	ScenarioName     string
-	Response         string
-	ServiceProvider  *saml2.SAMLServiceProvider
-	CheckError       func(*testing.T, error)
-	CheckWarningInfo func(*testing.T, *saml2.WarningInfo)
+	ScenarioName    string
+	Response        string
+	ServiceProvider *saml2.ServiceProvider
+	CheckError      func(*testing.T, error)
 }
 
 func getAtTime(idx int, scenarioAtTimes map[int]string) (atTime time.Time) {
@@ -166,7 +149,7 @@ func getAtTime(idx int, scenarioAtTimes map[int]string) (atTime time.Time) {
 	return // zero time
 }
 
-func spAtTime(template *saml2.SAMLServiceProvider, atTime time.Time, rawResp string) *saml2.SAMLServiceProvider {
+func spAtTime(template *saml2.ServiceProvider, atTime time.Time, rawResp string) *saml2.ServiceProvider {
 	resp := &types.Response{}
 	if rawResp == "" {
 		panic(fmt.Errorf("empty rawResp"))
@@ -180,25 +163,24 @@ func spAtTime(template *saml2.SAMLServiceProvider, atTime time.Time, rawResp str
 		panic(fmt.Errorf("cannot parse Response XML: %v", err))
 	}
 
-	sp := &saml2.SAMLServiceProvider{
-		IdentityProviderSSOURL:      template.IdentityProviderSSOURL,
-		IdentityProviderSSOBinding:  template.IdentityProviderSSOBinding,
-		IdentityProviderSLOURL:      template.IdentityProviderSLOURL,
-		IdentityProviderSLOBinding:  template.IdentityProviderSLOBinding,
-		IdentityProviderIssuer:      template.IdentityProviderIssuer,
-		AssertionConsumerServiceURL: template.AssertionConsumerServiceURL,
-		ServiceProviderSLOURL:       template.ServiceProviderSLOURL,
-		ServiceProviderIssuer:       template.ServiceProviderIssuer,
-		SignAuthnRequests:           template.SignAuthnRequests,
-		AudienceURI:                 template.AudienceURI,
-		IDPCertificates:             template.IDPCertificates,
-		NameIdFormat:                template.NameIdFormat,
-		ValidateEncryptionCert:      template.ValidateEncryptionCert,
-		SkipSignatureValidation:     template.SkipSignatureValidation,
-		AllowMissingAttributes:      template.AllowMissingAttributes,
-		AllowSHA1:                   template.AllowSHA1,
-		SPKeyStore:                  template.SPKeyStore,
-		SPSigningKeyStore:           template.SPSigningKeyStore,
+	sp := &saml2.ServiceProvider{
+		IDPSSOURL:                       template.IDPSSOURL,
+		IDPSSOBinding:                   template.IDPSSOBinding,
+		IDPSLOURL:                       template.IDPSLOURL,
+		IDPSLOBinding:                   template.IDPSLOBinding,
+		IDPEntityID:                     template.IDPEntityID,
+		ACSURL:                          template.ACSURL,
+		SLOURL:                          template.SLOURL,
+		EntityID:                        template.EntityID,
+		SignAuthnRequests:               template.SignAuthnRequests,
+		AudienceURIs:                    template.AudienceURIs,
+		IDPCertificates:                 template.IDPCertificates,
+		NameIDFormat:                    template.NameIDFormat,
+		ValidateEncryptionCert:          template.ValidateEncryptionCert,
+		InsecureSkipSignatureValidation: template.InsecureSkipSignatureValidation,
+		AllowSHA1:                       template.AllowSHA1,
+		SPKeyStore:                      template.SPKeyStore,
+		SPSigningKeyStore:               template.SPSigningKeyStore,
 	} // copy fields from template, we only set the clock below
 	if atTime.IsZero() {
 		// Prefer more official Assertion IssueInstant over Response IssueIntant

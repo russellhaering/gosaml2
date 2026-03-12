@@ -62,7 +62,9 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 			return nil, fmt.Errorf("cannot open AES-GCM: %s", err)
 		}
 		return plainText, nil
-	case MethodAES128CBC, MethodAES256CBC, MethodTripleDESCBC:
+	case MethodTripleDESCBC:
+		return nil, fmt.Errorf("3DES encryption is no longer supported; IdP should use AES")
+	case MethodAES128CBC, MethodAES256CBC:
 		if len(data)%k.BlockSize() != 0 {
 			return nil, fmt.Errorf("encrypted data is not a multiple of the expected CBC block size %d: actual size %d", k.BlockSize(), len(data))
 		}

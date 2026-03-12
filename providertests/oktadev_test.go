@@ -19,42 +19,35 @@ import (
 	"testing"
 	"time"
 
-	saml2 "github.com/russellhaering/gosaml2"
+	saml2 "github.com/russellhaering/gosaml2/v2"
 )
 
 var oktaScenarioErrors = map[int]string{
 	1:  "error validating response: dsig: missing signature referencing the top-level element",
 	3:  "error validating response: dsig: signing certificate not in trusted set",
-	4:  "error validating response: Unrecognized Destination value, Expected: http://dba9a5fc.ngrok.io/v1/_saml_callback, Actual: fake.identifier.example.com",
-	5:  "error validating response: Unrecognized Issuer value, Expected: http://example.com/saml/acs/example, Actual: fake.identifier.example.com",
-	7:  "error validating response: missing Issuer element",
-	8:  "error validating response: missing NotOnOrAfter attribute on SubjectConfirmationData element",
-	9:  "missing NotOnOrAfter attribute on Conditions element",
-	10: "missing NotBefore attribute on Conditions element",
+	4:  "error validating response: saml: destination mismatch: expected http://dba9a5fc.ngrok.io/v1/_saml_callback, got fake.identifier.example.com",
+	5:  "error validating response: saml: issuer mismatch: expected http://example.com/saml/acs/example, got fake.identifier.example.com",
+	6:  "saml: audience mismatch",
+	7:  "error validating response: saml: missing required element: Issuer",
+	8:  "error validating response: saml: missing required element: NotOnOrAfter attribute on SubjectConfirmationData",
+	9:  "saml: missing required element: NotOnOrAfter attribute on Conditions",
+	10: "saml: missing required element: NotOnOrAfter attribute on Conditions",
+	11: "saml: assertion expired: Conditions.NotOnOrAfter 2004-07-25T22:18:00.000Z, now 2017-04-04T17:54:00Z",
 	12: "error validating response: dsig: missing signature referencing the top-level element",
 	13: "error validating response: dsig: computed digest does not match signed digest value",
-	14: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: Failure",
-	15: "error validating response: Unrecognized StatusCode value, Expected: urn:oasis:names:tc:SAML:2.0:status:Success, Actual: urn:oasis:names:tc:SAML:2.0:status:Requester",
-}
-
-var oktaScenarioWarnings = map[int]scenarioWarnings{
-	6: scenarioWarnings{
-		NotInAudience: true,
-	},
-	11: scenarioWarnings{
-		InvalidTime: true,
-	},
+	14: "error validating response: saml: response status not success: expected urn:oasis:names:tc:SAML:2.0:status:Success, got Failure",
+	15: "error validating response: saml: response status not success: expected urn:oasis:names:tc:SAML:2.0:status:Success, got urn:oasis:names:tc:SAML:2.0:status:Requester",
 }
 
 func TestOktaDevCasesLocally(t *testing.T) {
-	sp := &saml2.SAMLServiceProvider{
-		IdentityProviderSSOURL:      "http://example.com/saml/acs/example",
-		IdentityProviderIssuer:      "http://example.com/saml/acs/example",
-		AssertionConsumerServiceURL: "http://dba9a5fc.ngrok.io/v1/_saml_callback",
-		AudienceURI:                 "http://example.com/saml/acs/example",
-		IDPCertificates:             LoadCertificates("./testdata/saml.oktadev.com/oktadev.pem"),
-		AllowSHA1:                   true,
-		Clock:                       fakeClock(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC)),
+	sp := &saml2.ServiceProvider{
+		IDPSSOURL:        "http://example.com/saml/acs/example",
+		IDPEntityID:      "http://example.com/saml/acs/example",
+		ACSURL:           "http://dba9a5fc.ngrok.io/v1/_saml_callback",
+		AudienceURIs:     []string{"http://example.com/saml/acs/example"},
+		IDPCertificates:  LoadCertificates("./testdata/saml.oktadev.com/oktadev.pem"),
+		AllowSHA1:        true,
+		Clock:            fakeClock(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC)),
 	}
 
 	scenarios := []ProviderTestScenario{}
@@ -65,9 +58,7 @@ func TestOktaDevCasesLocally(t *testing.T) {
 			ScenarioName:    fmt.Sprintf("Scenario_%d", i),
 			Response:        response,
 			ServiceProvider: sp,
-			// Capture the value of i by passing it to a function.
-			CheckError:       scenarioErrorChecker(i, oktaScenarioErrors),
-			CheckWarningInfo: scenarioWarningChecker(i, oktaScenarioWarnings),
+			CheckError:      scenarioErrorChecker(i, oktaScenarioErrors),
 		})
 	}
 

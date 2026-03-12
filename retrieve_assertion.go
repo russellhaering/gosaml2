@@ -14,58 +14,33 @@
 
 package saml2
 
-import "fmt"
-
-//ErrMissingElement is the error type that indicates an element and/or attribute is
-//missing. It provides a structured error that can be more appropriately acted
-//upon.
-type ErrMissingElement struct {
-	Tag, Attribute string
-}
-
-type ErrVerification struct {
-	Cause error
-}
-
-func (e ErrVerification) Error() string {
-	return fmt.Sprintf("error validating response: %s", e.Cause.Error())
-}
-
-//ErrMissingAssertion indicates that an appropriate assertion element could not
-//be found in the SAML Response
-var (
-	ErrMissingAssertion = ErrMissingElement{Tag: AssertionTag}
+import (
+	"context"
+	"fmt"
 )
 
-func (e ErrMissingElement) Error() string {
-	if e.Attribute != "" {
-		return fmt.Sprintf("missing %s attribute on %s element", e.Attribute, e.Tag)
-	}
-	return fmt.Sprintf("missing %s element", e.Tag)
-}
-
-//RetrieveAssertionInfo takes an encoded response and returns the AssertionInfo
-//contained, or an error message if an error has been encountered.
-func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*AssertionInfo, error) {
+// RetrieveAssertionInfo takes an encoded response and returns the AssertionInfo
+// contained, or an error message if an error has been encountered.
+func (sp *ServiceProvider) RetrieveAssertionInfo(ctx context.Context, encodedResponse string) (*AssertionInfo, error) {
 	assertionInfo := &AssertionInfo{
 		Values: make(Values),
 	}
 
-	response, err := sp.ValidateEncodedResponse(encodedResponse)
+	response, err := sp.ValidateEncodedResponse(ctx, encodedResponse)
 	if err != nil {
-		return nil, ErrVerification{Cause: err}
+		return nil, fmt.Errorf("error validating response: %w", err)
 	}
 
 	// TODO: Support multiple assertions
 	if len(response.Assertions) == 0 {
-		return nil, ErrMissingAssertion
+		return nil, &ValidationError{Reason: ErrMissingAssertion}
 	}
 
 	assertion := response.Assertions[0]
 	assertionInfo.Assertions = response.Assertions
 	assertionInfo.ResponseSignatureValidated = response.SignatureValidated
 
-	warningInfo, err := sp.VerifyAssertionConditions(&assertion)
+	err = sp.verifyAssertionConditions(&assertion, assertionInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -73,23 +48,19 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 	//Get the NameID
 	subject := assertion.Subject
 	if subject == nil {
-		return nil, ErrMissingElement{Tag: SubjectTag}
+		return nil, &ValidationError{Reason: ErrMissingElement, Detail: "Subject"}
 	}
 
 	nameID := subject.NameID
 	if nameID == nil {
-		return nil, ErrMissingElement{Tag: NameIdTag}
+		return nil, &ValidationError{Reason: ErrMissingElement, Detail: "NameID"}
 	}
 
 	assertionInfo.NameID = nameID.Value
+	assertionInfo.NameIDFormat = nameID.Format
 
 	//Get the actual assertion attributes
-	attributeStatement := assertion.AttributeStatement
-	if attributeStatement == nil && !sp.AllowMissingAttributes {
-		return nil, ErrMissingElement{Tag: AttributeStatementTag}
-	}
-
-	if attributeStatement != nil {
+	for _, attributeStatement := range assertion.AttributeStatements {
 		for _, attribute := range attributeStatement.Attributes {
 			assertionInfo.Values[attribute.Name] = attribute
 		}
@@ -106,6 +77,5 @@ func (sp *SAMLServiceProvider) RetrieveAssertionInfo(encodedResponse string) (*A
 		assertionInfo.SessionIndex = assertion.AuthnStatement.SessionIndex
 	}
 
-	assertionInfo.WarningInfo = warningInfo
 	return assertionInfo, nil
 }

@@ -15,6 +15,7 @@
 package saml2
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -22,28 +23,25 @@ import (
 	dsig "github.com/russellhaering/goxmldsig/v2"
 )
 
-func (sp *SAMLServiceProvider) validateLogoutRequestAttributes(request *LogoutRequest) error {
-	if request.Destination != "" && request.Destination != sp.ServiceProviderSLOURL {
-		return ErrInvalidValue{
-			Key:      DestinationAttr,
-			Expected: sp.ServiceProviderSLOURL,
-			Actual:   request.Destination,
+func (sp *ServiceProvider) validateLogoutRequestAttributes(request *LogoutRequest) error {
+	if request.Destination != "" && request.Destination != sp.SLOURL {
+		return &ValidationError{
+			Reason: ErrBadDestination,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.SLOURL, request.Destination),
 		}
 	}
 
 	if request.Version != "2.0" {
-		return ErrInvalidValue{
-			Reason:   ReasonUnsupported,
-			Key:      "SAML version",
-			Expected: "2.0",
-			Actual:   request.Version,
+		return &ValidationError{
+			Reason: ErrBadVersion,
+			Detail: fmt.Sprintf("expected 2.0, got %s", request.Version),
 		}
 	}
 
 	return nil
 }
 
-func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest string) (*LogoutRequest, error) {
+func (sp *ServiceProvider) ValidateEncodedLogoutRequestPOST(ctx context.Context, encodedRequest string) (*LogoutRequest, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedRequest)
 	if err != nil {
 		return nil, err
@@ -56,7 +54,7 @@ func (sp *SAMLServiceProvider) ValidateEncodedLogoutRequestPOST(encodedRequest s
 	}
 
 	var requestSignatureValidated bool
-	if !sp.SkipSignatureValidation {
+	if !sp.InsecureSkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
 		if errors.Is(err, dsig.ErrMissingSignature) {
 			return nil, fmt.Errorf("logout request has no signature")
