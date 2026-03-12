@@ -56,6 +56,13 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 			return nil, fmt.Errorf("cannot create AES-GCM: %s", err)
 		}
 
+		// The data must contain at least the nonce (typically 12 bytes) plus
+		// the GCM authentication tag (16 bytes). Reject short ciphertext to
+		// avoid slice-bounds panics on crafted input.
+		if len(data) < c.NonceSize()+c.Overhead() {
+			return nil, fmt.Errorf("AES-GCM ciphertext too short: need at least %d bytes, got %d", c.NonceSize()+c.Overhead(), len(data))
+		}
+
 		nonce, data := data[:c.NonceSize()], data[c.NonceSize():]
 		plainText, err := c.Open(nil, nonce, data, nil)
 		if err != nil {
@@ -65,6 +72,10 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 	case MethodTripleDESCBC:
 		return nil, fmt.Errorf("3DES encryption is no longer supported; IdP should use AES")
 	case MethodAES128CBC, MethodAES256CBC:
+		// CBC requires at least two blocks: one for the IV and one for data.
+		if len(data) < 2*k.BlockSize() {
+			return nil, fmt.Errorf("AES-CBC ciphertext too short: need at least %d bytes, got %d", 2*k.BlockSize(), len(data))
+		}
 		if len(data)%k.BlockSize() != 0 {
 			return nil, fmt.Errorf("encrypted data is not a multiple of the expected CBC block size %d: actual size %d", k.BlockSize(), len(data))
 		}
