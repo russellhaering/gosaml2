@@ -1,0 +1,5 @@
+<n0:local xmlns:n0="foo:bar">
+ <n1:elem2 xmlns:n1="http://example.net" xml:lang="en">
+  <n3:stuff xmlns:n3="ftp://example.org"></n3:stuff>
+ </n1:elem2>
+</n0:local>

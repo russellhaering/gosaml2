@@ -35,8 +35,8 @@ import (
 
 	"github.com/beevik/etree"
 	"github.com/russellhaering/gosaml2/v2/types"
-	dsig "github.com/russellhaering/goxmldsig/v2"
-	"github.com/russellhaering/goxmldsig/v2/etreeutils"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/require"
 )
 

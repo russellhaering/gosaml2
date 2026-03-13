@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	dsig "github.com/russellhaering/goxmldsig/v2"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 	"github.com/stretchr/testify/require"
 )
 

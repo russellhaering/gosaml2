@@ -1,0 +1,7 @@
+<root xmlns:p="http://first">
+ <a xmlns:p="http://second">
+  <b xmlns:p="http://third">
+   <p:c></p:c>
+  </b>
+ </a>
+</root>

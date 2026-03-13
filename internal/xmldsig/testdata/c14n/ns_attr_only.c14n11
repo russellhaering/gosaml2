@@ -1,0 +1,3 @@
+<doc xmlns:a="http://a">
+ <elem a:attr="val">text</elem>
+</doc>

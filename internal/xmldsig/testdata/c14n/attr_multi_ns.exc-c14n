@@ -1,0 +1,3 @@
+<doc>
+ <e xmlns:a="http://a" xmlns:b="http://b" x="3" a:x="1" b:x="2"></e>
+</doc>

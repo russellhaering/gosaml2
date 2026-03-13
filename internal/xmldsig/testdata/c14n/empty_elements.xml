@@ -1,0 +1,5 @@
+<doc>
+ <empty/>
+ <also-empty></also-empty>
+ <with-attr attr="val"/>
+</doc>

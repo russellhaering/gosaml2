@@ -1,0 +1,5 @@
+<foo xmlns="http://example.com">
+ <bar xmlns="http://other.com">
+  <baz xmlns="http://example.com"></baz>
+ </bar>
+</foo>

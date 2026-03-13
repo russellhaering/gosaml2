@@ -1,0 +1,17 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_abc123" IssueInstant="2024-01-01T00:00:00Z" Version="2.0">
+ <saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">https://idp.example.com</saml:Issuer>
+ <samlp:Status>
+  <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"></samlp:StatusCode>
+ </samlp:Status>
+ <saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_def456" IssueInstant="2024-01-01T00:00:00Z" Version="2.0">
+  <saml:Issuer>https://idp.example.com</saml:Issuer>
+  <saml:Subject>
+   <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">user@example.com</saml:NameID>
+  </saml:Subject>
+  <saml:Conditions NotBefore="2024-01-01T00:00:00Z" NotOnOrAfter="2024-01-01T01:00:00Z">
+   <saml:AudienceRestriction>
+    <saml:Audience>https://sp.example.com</saml:Audience>
+   </saml:AudienceRestriction>
+  </saml:Conditions>
+ </saml:Assertion>
+</samlp:Response>

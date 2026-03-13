@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	dsig "github.com/russellhaering/goxmldsig/v2"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
 func (sp *ServiceProvider) validateLogoutRequestAttributes(request *LogoutRequest) error {

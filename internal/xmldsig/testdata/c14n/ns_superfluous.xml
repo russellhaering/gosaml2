@@ -1,0 +1,5 @@
+<a:foo xmlns:a="http://a">
+ <a:bar xmlns:a="http://a">
+  <a:baz xmlns:a="http://a"/>
+ </a:bar>
+</a:foo>

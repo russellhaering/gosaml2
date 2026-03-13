@@ -1,0 +1,7 @@
+<a xmlns:p1="http://ns1" xmlns:p2="http://ns2">
+ <b xmlns:p3="http://ns3">
+  <c xmlns:p4="http://ns4">
+   <p1:d p2:attr="v1" p3:attr="v2" p4:attr="v3"/>
+  </c>
+ </b>
+</a>

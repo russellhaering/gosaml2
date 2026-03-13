@@ -26,7 +26,7 @@ import (
 	"io"
 
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
-	dsig "github.com/russellhaering/goxmldsig/v2"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
 // ValidateEncodedAuthnRequestPOST decodes and validates a base64-encoded AuthnRequest
