@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 )
 
 var oktaScenarioErrors = map[int]string{
@@ -40,7 +40,7 @@ var oktaScenarioErrors = map[int]string{
 }
 
 func TestOktaDevCasesLocally(t *testing.T) {
-	sp := &saml2.ServiceProvider{
+	serviceProv := &sp.ServiceProvider{
 		IDPSSOURL:        "http://example.com/saml/acs/example",
 		IDPEntityID:      "http://example.com/saml/acs/example",
 		ACSURL:           "http://dba9a5fc.ngrok.io/v1/_saml_callback",
@@ -57,7 +57,7 @@ func TestOktaDevCasesLocally(t *testing.T) {
 		scenarios = append(scenarios, ProviderTestScenario{
 			ScenarioName:    fmt.Sprintf("Scenario_%d", i),
 			Response:        response,
-			ServiceProvider: sp,
+			ServiceProvider: serviceProv,
 			CheckError:      scenarioErrorChecker(i, oktaScenarioErrors),
 		})
 	}

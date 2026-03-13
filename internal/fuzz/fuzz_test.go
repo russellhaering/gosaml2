@@ -38,6 +38,7 @@ import (
 
 	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	spkg "github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
@@ -186,8 +187,8 @@ func signedResponseB64(f *testing.F, xml string, km *fuzzKeyMaterial) string {
 }
 
 // fuzzSP creates a configured SP for fuzz tests that require validation.
-func fuzzSP(km *fuzzKeyMaterial) *saml2.ServiceProvider {
-	return &saml2.ServiceProvider{
+func fuzzSP(km *fuzzKeyMaterial) *spkg.ServiceProvider {
+	return &spkg.ServiceProvider{
 		EntityID:        "https://sp.example.com",
 		ACSURL:          "https://sp.example.com/acs",
 		SLOURL:          "https://sp.example.com/slo",
@@ -222,12 +223,12 @@ func FuzzDecodeResponse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		encodedResponse := base64.StdEncoding.EncodeToString(data)
 
-		_, err := saml2.DecodeUnverifiedBaseResponse(encodedResponse)
+		_, err := spkg.DecodeUnverifiedBaseResponse(encodedResponse)
 		if err != nil {
 			return
 		}
 
-		sp := &saml2.ServiceProvider{}
+		sp := &spkg.ServiceProvider{}
 		_, _ = sp.ValidateEncodedResponse(context.Background(), encodedResponse)
 	})
 }
@@ -238,12 +239,12 @@ func FuzzLogoutResponse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		encodedResponse := base64.StdEncoding.EncodeToString(data)
 
-		_, err := saml2.DecodeUnverifiedLogoutResponse(encodedResponse)
+		_, err := spkg.DecodeUnverifiedLogoutResponse(encodedResponse)
 		if err != nil {
 			return
 		}
 
-		sp := &saml2.ServiceProvider{}
+		sp := &spkg.ServiceProvider{}
 		_, _ = sp.ValidateEncodedLogoutResponsePOST(context.Background(), encodedResponse)
 	})
 }
@@ -254,7 +255,7 @@ func FuzzLogoutRequest(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		encodedRequest := base64.StdEncoding.EncodeToString(data)
 
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			InsecureSkipSignatureValidation: true,
 		}
 		_, _ = sp.ValidateEncodedLogoutRequestPOST(context.Background(), encodedRequest)
@@ -274,7 +275,7 @@ func FuzzBuildRequest(f *testing.F) {
 			return
 		}
 
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			IDPSSOURL:        "https://idp.example.com/sso",
 			IDPEntityID:      "https://idp.example.com/",
 			ACSURL:           "https://sp.example.com/acs",
@@ -448,7 +449,7 @@ func FuzzRedirectBinding(f *testing.F) {
 	f.Add("dGVzdA==", "", "", "")
 
 	f.Fuzz(func(t *testing.T, encodedMessage, relayState, sigAlg, signature string) {
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			InsecureSkipSignatureValidation: true,
 		}
 
@@ -553,7 +554,7 @@ func FuzzParseEntityDescriptor(f *testing.F) {
 		}
 
 		// Also exercise ConfigureFromMetadata to catch panics in endpoint selection.
-		sp := &saml2.ServiceProvider{}
+		sp := &spkg.ServiceProvider{}
 		_ = sp.ConfigureFromMetadata(ed)
 	})
 }
@@ -623,14 +624,14 @@ func FuzzDecryptSymmetricKey(f *testing.F) {
 func FuzzRedirectSignatureVerification(f *testing.F) {
 	km := newFuzzKeyMaterial(f)
 
-	rsaSP := &saml2.ServiceProvider{
+	rsaSP := &spkg.ServiceProvider{
 		IDPCertificates: []*x509.Certificate{km.rsaCert},
 		SLOURL:          "https://sp.example.com/slo",
 		IDPEntityID:     "https://idp.example.com/",
 		Clock:           func() time.Time { return km.fakeTime },
 	}
 
-	ecSP := &saml2.ServiceProvider{
+	ecSP := &spkg.ServiceProvider{
 		IDPCertificates: []*x509.Certificate{km.ecCert},
 		SLOURL:          "https://sp.example.com/slo",
 		IDPEntityID:     "https://idp.example.com/",
@@ -761,7 +762,7 @@ func FuzzMetadataConfigureRoundTrip(f *testing.F) {
 	f.Add("https://sp.test", "https://sp.test/acs", "", true, false)
 
 	f.Fuzz(func(t *testing.T, entityID, acsURL, sloURL string, signRequests, wantEnc bool) {
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			EntityID:         entityID,
 			ACSURL:           acsURL,
 			SLOURL:           sloURL,
@@ -788,7 +789,7 @@ func FuzzMetadataConfigureRoundTrip(f *testing.F) {
 			return
 		}
 
-		sp2 := &saml2.ServiceProvider{}
+		sp2 := &spkg.ServiceProvider{}
 		_ = sp2.ConfigureFromMetadata(md)
 	})
 }
@@ -845,7 +846,7 @@ func FuzzBuildLogoutRequest(f *testing.F) {
 	f.Add("<script>alert(1)</script>", "'; DROP TABLE--", "&relay=evil", true)
 
 	f.Fuzz(func(t *testing.T, nameID, sessionIndex, relayState string, sign bool) {
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			EntityID:         "https://sp.example.com",
 			ACSURL:           "https://sp.example.com/acs",
 			SLOURL:           "https://sp.example.com/slo",
@@ -885,7 +886,7 @@ func FuzzBuildLogoutResponse(f *testing.F) {
 	f.Add("urn:oasis:names:tc:SAML:2.0:status:PartialLogout", "_req_2", "<script>")
 
 	f.Fuzz(func(t *testing.T, status, reqID, relayState string) {
-		sp := &saml2.ServiceProvider{
+		sp := &spkg.ServiceProvider{
 			EntityID:    "https://sp.example.com",
 			SLOURL:      "https://sp.example.com/slo",
 			IDPEntityID: "https://idp.example.com/",
@@ -963,7 +964,7 @@ func FuzzValidateEncodedResponseWithEncryption(f *testing.F) {
 
 	f.Add([]byte(encResponse))
 
-	sp := &saml2.ServiceProvider{
+	sp := &spkg.ServiceProvider{
 		EntityID:    "https://sp.example.com",
 		ACSURL:      "https://sp.example.com/acs",
 		IDPEntityID: "https://idp.example.com/",

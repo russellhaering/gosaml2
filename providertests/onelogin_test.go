@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 )
 
 var oneLoginScenarioErrors = map[int]string{
@@ -96,7 +96,7 @@ var oneLoginAtTimes = map[int]string{
 }
 
 func TestOneLoginCasesLocally(t *testing.T) {
-	sp := &saml2.ServiceProvider{
+	serviceProv := &sp.ServiceProvider{
 		IDPSSOURL:              "https://saml.idp.nope/h9gkjzvb3e",
 		IDPEntityID:            "https://saml.idp.nope/h9gkjzvb3e",
 		ACSURL:                 "https://saml.sp.nope/session/sso/saml/acs/rq5jwkvb8z",
@@ -114,7 +114,7 @@ func TestOneLoginCasesLocally(t *testing.T) {
 		scenarios = append(scenarios, ProviderTestScenario{
 			ScenarioName:    fmt.Sprintf("Scenario_%02d", idx),
 			Response:        response,
-			ServiceProvider: spAtTime(sp, getAtTime(idx, oneLoginAtTimes), response),
+			ServiceProvider: spAtTime(serviceProv, getAtTime(idx, oneLoginAtTimes), response),
 			CheckError:      scenarioErrorChecker(idx, oneLoginScenarioErrors),
 		})
 	}

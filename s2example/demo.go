@@ -27,6 +27,7 @@ import (
 	"net/http"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
@@ -72,7 +73,7 @@ func main() {
 	// to verify these.
 	randomKeyStore := randomKeyStoreForDemo()
 
-	sp := &saml2.ServiceProvider{
+	s := &sp.ServiceProvider{
 		IDPSSOURL:        metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
 		IDPEntityID:      metadata.EntityID,
 		EntityID:         "http://example.com/saml/acs/example",
@@ -90,7 +91,7 @@ func main() {
 			return
 		}
 
-		assertionInfo, err := sp.RetrieveAssertionInfo(context.Background(), req.FormValue("SAMLResponse"))
+		assertionInfo, err := s.RetrieveAssertionInfo(context.Background(), req.FormValue("SAMLResponse"))
 		if err != nil {
 			rw.WriteHeader(http.StatusForbidden)
 			return
@@ -106,7 +107,7 @@ func main() {
 	})
 
 	println("Visit this URL To Authenticate:")
-	authURL, err := sp.BuildAuthURL("")
+	authURL, err := s.BuildAuthURL("")
 	if err != nil {
 		panic(err)
 	}
@@ -114,7 +115,7 @@ func main() {
 	println(authURL)
 
 	println("Supply:")
-	fmt.Printf("  SP ACS URL      : %s\n", sp.ACSURL)
+	fmt.Printf("  SP ACS URL      : %s\n", s.ACSURL)
 
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {

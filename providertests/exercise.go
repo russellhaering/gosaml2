@@ -20,14 +20,14 @@ import (
 	"context"
 	"testing"
 
-	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/stretchr/testify/require"
 )
 
 func ExerciseProviderTestScenarios(t *testing.T, scenarios []ProviderTestScenario) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.ScenarioName, func(t *testing.T) {
-			_, err := saml2.DecodeUnverifiedBaseResponse(scenario.Response)
+			_, err := sp.DecodeUnverifiedBaseResponse(scenario.Response)
 			// DecodeUnverifiedBaseResponse is more permissive than RetrieveAssertionInfo.
 			// If an error _is_ returned it should match, but it is OK for no error to be
 			// returned even when one is expected during full validation.

@@ -15,8 +15,6 @@
 package saml2
 
 import (
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 
@@ -32,60 +30,8 @@ func ParseEntityDescriptor(data []byte) (*types.EntityDescriptor, error) {
 	return ed, nil
 }
 
-// ConfigureFromMetadata populates the ServiceProvider's IdP-related fields
-// from an EntityDescriptor. It extracts the entity ID, SSO/SLO endpoints,
-// and signing certificates from the IDPSSODescriptor.
-//
-// For SSO endpoints it prefers HTTP-POST, falling back to HTTP-Redirect.
-// For SLO endpoints it prefers HTTP-POST, falling back to HTTP-Redirect.
-func (sp *ServiceProvider) ConfigureFromMetadata(ed *types.EntityDescriptor) error {
-	sp.IDPEntityID = ed.EntityID
-
-	idp := ed.IDPSSODescriptor
-	if idp == nil {
-		return fmt.Errorf("entity descriptor does not contain an IDPSSODescriptor")
-	}
-
-	// Extract SSO endpoint.
-	ssoURL, ssoBinding := selectEndpoint(idp.SingleSignOnServices)
-	if ssoURL == "" {
-		return fmt.Errorf("no SingleSignOnService endpoint found in IdP metadata")
-	}
-	sp.IDPSSOURL = ssoURL
-	sp.IDPSSOBinding = ssoBinding
-
-	// Extract SLO endpoint (optional).
-	if len(idp.SingleLogoutServices) > 0 {
-		sloURL, sloBinding := selectSLOEndpoint(idp.SingleLogoutServices)
-		sp.IDPSLOURL = sloURL
-		sp.IDPSLOBinding = sloBinding
-	}
-
-	// Extract signing certificates.
-	var certs []*x509.Certificate
-	for _, kd := range idp.KeyDescriptors {
-		if kd.Use != "" && kd.Use != "signing" {
-			continue
-		}
-		for _, x509Cert := range kd.KeyInfo.X509Data.X509Certificates {
-			certData, err := base64.StdEncoding.DecodeString(x509Cert.Data)
-			if err != nil {
-				return fmt.Errorf("error decoding IdP certificate: %w", err)
-			}
-			cert, err := x509.ParseCertificate(certData)
-			if err != nil {
-				return fmt.Errorf("error parsing IdP certificate: %w", err)
-			}
-			certs = append(certs, cert)
-		}
-	}
-	sp.IDPCertificates = certs
-
-	return nil
-}
-
-// selectEndpoint picks the best SSO endpoint, preferring HTTP-POST over HTTP-Redirect.
-func selectEndpoint(services []types.SingleSignOnService) (string, string) {
+// SelectEndpoint picks the best SSO endpoint, preferring HTTP-POST over HTTP-Redirect.
+func SelectEndpoint(services []types.SingleSignOnService) (string, string) {
 	var fallbackURL, fallbackBinding string
 	for _, svc := range services {
 		if svc.Binding == BindingHttpPost {
@@ -99,8 +45,8 @@ func selectEndpoint(services []types.SingleSignOnService) (string, string) {
 	return fallbackURL, fallbackBinding
 }
 
-// selectSLOEndpoint picks the best SLO endpoint, preferring HTTP-POST over HTTP-Redirect.
-func selectSLOEndpoint(services []types.SingleLogoutService) (string, string) {
+// SelectSLOEndpoint picks the best SLO endpoint, preferring HTTP-POST over HTTP-Redirect.
+func SelectSLOEndpoint(services []types.SingleLogoutService) (string, string) {
 	var fallbackURL, fallbackBinding string
 	for _, svc := range services {
 		if svc.Binding == BindingHttpPost {

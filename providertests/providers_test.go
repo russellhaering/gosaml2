@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 )
 
 func fakeClock(t time.Time) func() time.Time {
@@ -30,7 +30,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "Auth0",
 			Response:     LoadXMLResponse("./testdata/auth0_response.xml"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:       "https://scaleft-test.auth0.com/samlp/rlXOZ4kOUTQaTV8icSXrfZUd1qtD1NhK",
 				IDPEntityID:     "urn:scaleft-test.auth0.com",
 				ACSURL:          "http://localhost:8080/v1/_saml_callback",
@@ -43,7 +43,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "Adfs",
 			Response:     LoadRawResponse("./testdata/adfs_response.b64"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:                       "https://do.not.need/this/not/sending/authn",
 				IDPEntityID:                     "http://fs.spstest2.com/adfs/services/trust",
 				ACSURL:                          "https://saml.test.nope/session/sso/saml/acs/dknhyszjl7",
@@ -58,7 +58,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "AdfsEncrypted",
 			Response:     LoadRawResponse("./testdata/adfs_response_enc.b64"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:         "https://do.not.need/this/not/sending/authn",
 				IDPEntityID:       "http://fs.spstest2.com/adfs/services/trust",
 				ACSURL:            "https://saml.test.nope/session/sso/saml/acs/dknhyszjl7",
@@ -73,7 +73,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "OktaEncrypted",
 			Response:     LoadRawResponse("./testdata/oktaenc_response.b64"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:         "https://do.not.need/this/not/sending/authn",
 				IDPEntityID:       "http://www.okta.com/exkbb59wb20X96NY20h7",
 				ACSURL:            "https://saml.test.nope/session/sso/saml/acs/skv8dv26wh",
@@ -88,7 +88,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "Okta",
 			Response:     LoadXMLResponse("./testdata/okta_response.xml"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:        "https://dev-116807.oktapreview.com/app/scaleftdev116807_test_1/exk659aytfMeNI49v0h7/sso/saml",
 				IDPEntityID:      "http://www.okta.com/exk659aytfMeNI49v0h7",
 				ACSURL:           "http://localhost:8080/v1/_saml_callback",
@@ -101,7 +101,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "OneLogin",
 			Response:     LoadXMLResponse("./testdata/onelogin_response.xml"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:                       "https://launchdarkly-dev.onelogin.com/trust/saml2/http-post/sso/634027",
 				IDPEntityID:                     "https://app.onelogin.com/saml/metadata/634027",
 				ACSURL:                          "http://884d40bf.ngrok.io/api/sso/saml2/acs/58af624473d4f375b8e70d81",
@@ -115,7 +115,7 @@ func TestValidateResponses(t *testing.T) {
 		{
 			ScenarioName: "OracleAccessManager",
 			Response:     LoadXMLResponse("./testdata/oam_response.xml"),
-			ServiceProvider: &saml2.ServiceProvider{
+			ServiceProvider: &sp.ServiceProvider{
 				IDPSSOURL:                       "https://deaoam-dev02.jpl.nasa.gov:14101/oam/fed",
 				IDPEntityID:                     "https://deaoam-dev02.jpl.nasa.gov:14101/oam/fed",
 				ACSURL:                          "http://127.0.0.1:5556/callback",

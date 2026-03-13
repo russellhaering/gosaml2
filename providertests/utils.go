@@ -26,7 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/russellhaering/gosaml2/v2"
+	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
@@ -136,7 +137,7 @@ func LoadCertificates(path string) []*x509.Certificate {
 type ProviderTestScenario struct {
 	ScenarioName    string
 	Response        string
-	ServiceProvider *saml2.ServiceProvider
+	ServiceProvider *sp.ServiceProvider
 	CheckError      func(*testing.T, error)
 }
 
@@ -149,7 +150,7 @@ func getAtTime(idx int, scenarioAtTimes map[int]string) (atTime time.Time) {
 	return // zero time
 }
 
-func spAtTime(template *saml2.ServiceProvider, atTime time.Time, rawResp string) *saml2.ServiceProvider {
+func spAtTime(template *sp.ServiceProvider, atTime time.Time, rawResp string) *sp.ServiceProvider {
 	resp := &types.Response{}
 	if rawResp == "" {
 		panic(fmt.Errorf("empty rawResp"))
@@ -163,7 +164,7 @@ func spAtTime(template *saml2.ServiceProvider, atTime time.Time, rawResp string)
 		panic(fmt.Errorf("cannot parse Response XML: %v", err))
 	}
 
-	sp := &saml2.ServiceProvider{
+	spCopy := &sp.ServiceProvider{
 		IDPSSOURL:                       template.IDPSSOURL,
 		IDPSSOBinding:                   template.IDPSSOBinding,
 		IDPSLOURL:                       template.IDPSLOURL,
@@ -194,6 +195,6 @@ func spAtTime(template *saml2.ServiceProvider, atTime time.Time, rawResp string)
 		}
 	}
 	clockTime := atTime
-	sp.Clock = func() time.Time { return clockTime }
-	return sp
+	spCopy.Clock = func() time.Time { return clockTime }
+	return spCopy
 }

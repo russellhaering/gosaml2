@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/sp"
 )
 
 var pingFedScenarioErrors = map[int]string{
@@ -31,7 +31,7 @@ var pingFedScenarioErrors = map[int]string{
 var pingFedAtTimes = map[int]string{}
 
 func TestPingFedCasesLocally(t *testing.T) {
-	sp := &saml2.ServiceProvider{
+	serviceProv := &sp.ServiceProvider{
 		IDPSSOURL:              "https://saml.test.nope:9031/eid/sxpmrhbkzn",
 		IDPEntityID:            "https://saml.test.nope:9031/eid/sxpmrhbkzn",
 		ACSURL:                 "https://saml.test.nope/session/sso/saml/acs/hp24dqnpvq",
@@ -48,7 +48,7 @@ func TestPingFedCasesLocally(t *testing.T) {
 		scenarios = append(scenarios, ProviderTestScenario{
 			ScenarioName:    fmt.Sprintf("Scenario_%02d", idx),
 			Response:        response,
-			ServiceProvider: spAtTime(sp, getAtTime(idx, pingFedAtTimes), response),
+			ServiceProvider: spAtTime(serviceProv, getAtTime(idx, pingFedAtTimes), response),
 			CheckError:      scenarioErrorChecker(idx, pingFedScenarioErrors),
 		})
 	}
