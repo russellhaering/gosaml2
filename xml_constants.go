@@ -71,4 +71,18 @@ const (
 const (
 	SAMLAssertionNamespace = "urn:oasis:names:tc:SAML:2.0:assertion"
 	SAMLProtocolNamespace  = "urn:oasis:names:tc:SAML:2.0:protocol"
+	XMLEncNamespace        = "http://www.w3.org/2001/04/xmlenc#"
+	XMLDSigNamespace       = "http://www.w3.org/2000/09/xmldsig#"
+)
+
+const (
+	AuthnRequestTag          = "AuthnRequest"
+	LogoutRequestTag         = "LogoutRequest"
+	EncryptedDataTypeElement = "http://www.w3.org/2001/04/xmlenc#Element"
+)
+
+const (
+	StatusCodeRequester     = "urn:oasis:names:tc:SAML:2.0:status:Requester"
+	StatusCodeResponder     = "urn:oasis:names:tc:SAML:2.0:status:Responder"
+	StatusCodeRequestDenied = "urn:oasis:names:tc:SAML:2.0:status:RequestDenied"
 )

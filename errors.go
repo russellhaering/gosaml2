@@ -32,6 +32,9 @@ var (
 	ErrMissingElement   = errors.New("saml: missing required element")
 	ErrBadVersion       = errors.New("saml: unsupported SAML version")
 	ErrMalformed        = errors.New("saml: malformed SAML document")
+	ErrUnknownSP        = errors.New("saml: unknown service provider")
+	ErrBadACSURL        = errors.New("saml: invalid assertion consumer service URL")
+	ErrEncryptionFailed = errors.New("saml: assertion encryption failed")
 )
 
 // ValidationError wraps a sentinel error with human-readable context.
