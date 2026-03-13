@@ -162,25 +162,9 @@ func (ek *EncryptedKey) DecryptSymmetricKey(cert *tls.Certificate) (cipher.Block
 
 			return b, nil
 		case MethodRSAv1_5:
-			pt, err := rsa.DecryptPKCS1v15(rand.Reader, pk, cipherText)
-			if err != nil {
-				return nil, fmt.Errorf("rsa internal error: %v", err)
-			}
-
-			//From https://docs.oasis-open.org/security/saml/v2.0/saml-core-2.0-os.pdf the xml encryption
-			//methods to be supported are from http://www.w3.org/2001/04/xmlenc#Element.
-			//https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/Overview.html#Element.
-			//https://www.w3.org/TR/2002/REC-xmlenc-core-20021210/#sec-Algorithms
-			//Sec 5.4 Key Transport:
-			//The RSA v1.5 Key Transport algorithm given below are those used in conjunction with TRIPLEDES
-			//Please also see https://www.w3.org/TR/xmlenc-core/#sec-Algorithms and
-			//https://www.w3.org/TR/xmlenc-core/#rsav15note.
-			b, err := aes.NewCipher(pt)
-			if err != nil {
-				return nil, err
-			}
-
-			return b, nil
+			// RSA PKCS#1 v1.5 key transport is vulnerable to Bleichenbacher's
+			// chosen-ciphertext attack (CWE-780). It is no longer accepted.
+			return nil, fmt.Errorf("RSA PKCS#1 v1.5 key transport is no longer supported due to Bleichenbacher attack vulnerability; IdP should use RSA-OAEP")
 		default:
 			return nil, fmt.Errorf("unsupported encryption algorithm: %s", ek.EncryptionMethod.Algorithm)
 		}

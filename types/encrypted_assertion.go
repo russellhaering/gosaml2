@@ -83,25 +83,54 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 		c := cipher.NewCBCDecrypter(k, nonce)
 		c.CryptBlocks(data, data)
 
-		// Remove zero bytes
-		data = bytes.TrimRight(data, "\x00")
-
-		if len(data) == 0 {
-			return nil, fmt.Errorf("CBC decrypted data is empty after trimming zero bytes")
+		// Validate and remove padding. Tries PKCS#7 first (per XML Encryption
+		// spec §5.2), then falls back to zero-padding for compatibility.
+		// All failures return the same error to prevent padding oracle attacks.
+		plaintext, err := removePadding(data, k.BlockSize())
+		if err != nil {
+			return nil, fmt.Errorf("invalid CBC padding")
 		}
-
-		// Validate and remove padding. The pad length byte indicates
-		// how many bytes to strip. Bounds-check to prevent panics from
-		// crafted ciphertext.
-		padLength := int(data[len(data)-1])
-		if padLength == 0 || padLength > len(data) || padLength > k.BlockSize() {
-			return nil, fmt.Errorf("invalid CBC padding length: %d (data length: %d, block size: %d)", padLength, len(data), k.BlockSize())
-		}
-
-		return data[:len(data)-padLength], nil
+		return plaintext, nil
 	default:
 		return nil, fmt.Errorf("unknown symmetric encryption method %#v", ea.EncryptionMethod.Algorithm)
 	}
+}
+
+// removePadding removes padding from CBC-decrypted data.
+//
+// It handles two padding schemes:
+//   - PKCS#7/PKCS#5 (per XML Encryption spec §5.2): the last byte indicates
+//     the pad count. The pad count must be in range 1..blockSize.
+//   - Zero-padding: some IdPs pad with zero bytes instead of PKCS#7.
+//     Zero-trim is only applied when the last byte is 0x00, so it never
+//     interferes with PKCS#7 interpretation.
+//
+// All error paths return the same generic message to prevent padding oracle
+// attacks (CWE-649).
+func removePadding(data []byte, blockSize int) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("invalid padding")
+	}
+
+	padLength := int(data[len(data)-1])
+
+	// PKCS#7: last byte is the pad count, must be in range 1..blockSize.
+	if padLength >= 1 && padLength <= blockSize && padLength <= len(data) {
+		return data[:len(data)-padLength], nil
+	}
+
+	// Zero-padding fallback: some IdPs pad with zeros instead of PKCS#7.
+	// This path is only reached when the last byte is 0x00 (padLength == 0),
+	// so it never conflicts with the PKCS#7 path above. XML content never
+	// contains null bytes, so stripping trailing zeros is safe for SAML.
+	if padLength == 0 {
+		trimmed := bytes.TrimRight(data, "\x00")
+		if len(trimmed) > 0 {
+			return trimmed, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid padding")
 }
 
 // Decrypt decrypts and unmarshals the EncryptedAssertion.

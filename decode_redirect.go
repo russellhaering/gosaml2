@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/url"
 
+	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
@@ -63,8 +64,14 @@ func (sp *ServiceProvider) verifyRedirectSignature(
 	// Determine hash algorithm from SigAlg URI.
 	hash := signatureAlgorithmHash(sigAlg)
 	if hash == 0 {
-		hash = crypto.SHA256
+		return fmt.Errorf("unsupported or unrecognized signature algorithm: %s", sigAlg)
 	}
+
+	// Reject SHA1 unless explicitly allowed, matching the POST binding behavior.
+	if (hash == crypto.SHA1) && !sp.AllowSHA1 {
+		return fmt.Errorf("SHA1 signature algorithm is not allowed (set AllowSHA1 to enable)")
+	}
+
 	if !hash.Available() {
 		return fmt.Errorf("hash algorithm %v not available", hash)
 	}
@@ -73,9 +80,18 @@ func (sp *ServiceProvider) verifyRedirectSignature(
 	hashed.Write(signedContent)
 	digest := hashed.Sum(nil)
 
+	now := sp.now()
+
 	// Try each trusted certificate.
 	var lastErr error
 	for _, cert := range sp.IDPCertificates {
+		// Check certificate validity period.
+		if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+			lastErr = fmt.Errorf("IDP certificate is not valid at this time (notBefore=%s, notAfter=%s)",
+				cert.NotBefore, cert.NotAfter)
+			continue
+		}
+
 		switch pub := cert.PublicKey.(type) {
 		case *rsa.PublicKey:
 			lastErr = rsa.VerifyPKCS1v15(pub, hash, digest, sigBytes)
@@ -138,6 +154,12 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponseRedirect(
 		return nil, err
 	}
 
+	// Run xml-roundtrip-validator to block parser differential attacks
+	// (CVE-2020-29509 class), matching POST binding behavior.
+	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+		return nil, fmt.Errorf("redirect logout response XML validation failed: %v", err)
+	}
+
 	response := &types.LogoutResponse{}
 	if err := xml.Unmarshal(raw, response); err != nil {
 		return nil, fmt.Errorf("unable to unmarshal logout response: %v", err)
@@ -163,6 +185,12 @@ func (sp *ServiceProvider) ValidateEncodedLogoutRequestRedirect(
 	raw, err := sp.decodeRedirectMessage(samlRequest)
 	if err != nil {
 		return nil, err
+	}
+
+	// Run xml-roundtrip-validator to block parser differential attacks
+	// (CVE-2020-29509 class), matching POST binding behavior.
+	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+		return nil, fmt.Errorf("redirect logout request XML validation failed: %v", err)
 	}
 
 	request := &LogoutRequest{}

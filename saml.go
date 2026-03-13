@@ -259,7 +259,7 @@ func (sp *ServiceProvider) Signer() (*dsig.Signer, error) {
 }
 
 // signatureAlgorithmHash returns the crypto.Hash for a given signature method URI.
-// Returns 0 (which defaults to SHA256 in the Signer) if unrecognized or empty.
+// Returns 0 if unrecognized or empty; callers must treat 0 as an error.
 func signatureAlgorithmHash(algorithm string) crypto.Hash {
 	switch algorithm {
 	case dsig.RSASHA1SignatureMethod, dsig.ECDSASHA1SignatureMethod:
