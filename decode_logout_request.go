@@ -17,10 +17,7 @@ package saml2
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
-
-	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
 func (sp *ServiceProvider) validateLogoutRequestAttributes(request *LogoutRequest) error {
@@ -56,7 +53,7 @@ func (sp *ServiceProvider) ValidateEncodedLogoutRequestPOST(ctx context.Context,
 	var requestSignatureValidated bool
 	if !sp.InsecureSkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
-		if errors.Is(err, dsig.ErrMissingSignature) {
+		if missing, err := isSignatureMissing(err); missing {
 			return nil, fmt.Errorf("logout request has no signature")
 		} else if err != nil {
 			return nil, err

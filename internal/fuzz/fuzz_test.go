@@ -465,7 +465,7 @@ func FuzzRedirectBinding(f *testing.F) {
 // XML signature verification enabled. The seed corpus contains a properly signed
 // response; the fuzzer mutates the base64-encoded, signed XML. This is the most
 // security-critical fuzz target — it covers signature wrapping attacks and
-// goxmldsig integration.
+// xmldsig integration.
 func FuzzSignedResponse(f *testing.F) {
 	km := newFuzzKeyMaterial(f)
 	sp := fuzzSP(km)

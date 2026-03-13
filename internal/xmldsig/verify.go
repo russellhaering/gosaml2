@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 )
 
 var uriRegexp = regexp.MustCompile("^#[a-zA-Z_][\\w.-]*$")
@@ -53,7 +52,7 @@ type Verifier struct {
 
 func (v *Verifier) idAttribute() string {
 	if v.IDAttribute == "" {
-		return DefaultIdAttr
+		return defaultIdAttr
 	}
 	return v.IDAttribute
 }
@@ -187,39 +186,39 @@ func (v *Verifier) parseVerifiedSignedInfo(canonicalBytes []byte) (*parsedSignat
 	ps := &parsedSignature{}
 
 	// Extract Reference
-	refEl := findChildByTag(signedInfo, ReferenceTag)
+	refEl := findChildByTag(signedInfo, referenceTag)
 	if refEl == nil {
 		return nil, fmt.Errorf("%w: missing Reference in SignedInfo", ErrMalformedSignature)
 	}
 
-	ps.refURI = refEl.SelectAttrValue(URIAttr, "")
+	ps.refURI = refEl.SelectAttrValue(uriAttr, "")
 
 	// DigestMethod
-	digestMethodEl := findChildByTag(refEl, DigestMethodTag)
+	digestMethodEl := findChildByTag(refEl, digestMethodTag)
 	if digestMethodEl == nil {
 		return nil, fmt.Errorf("%w: missing DigestMethod", ErrMalformedSignature)
 	}
-	ps.digestMethod = digestMethodEl.SelectAttrValue(AlgorithmAttr, "")
+	ps.digestMethod = digestMethodEl.SelectAttrValue(algorithmAttr, "")
 
 	// DigestValue
-	digestValueEl := findChildByTag(refEl, DigestValueTag)
+	digestValueEl := findChildByTag(refEl, digestValueTag)
 	if digestValueEl == nil {
 		return nil, fmt.Errorf("%w: missing DigestValue", ErrMalformedSignature)
 	}
 	ps.digestValue = digestValueEl.Text()
 
 	// Transforms
-	transformsEl := findChildByTag(refEl, TransformsTag)
+	transformsEl := findChildByTag(refEl, transformsTag)
 	if transformsEl != nil {
 		for _, child := range transformsEl.ChildElements() {
-			if child.Tag == TransformTag {
+			if child.Tag == transformTag {
 				t := parsedTransform{
-					algorithm: child.SelectAttrValue(AlgorithmAttr, ""),
+					algorithm: child.SelectAttrValue(algorithmAttr, ""),
 				}
 				// Check for InclusiveNamespaces
 				for _, grandchild := range child.ChildElements() {
-					if grandchild.Tag == InclusiveNamespacesTag {
-						t.prefixList = grandchild.SelectAttrValue(PrefixListAttr, "")
+					if grandchild.Tag == inclusiveNamespacesTag {
+						t.prefixList = grandchild.SelectAttrValue(prefixListAttr, "")
 					}
 				}
 				ps.transforms = append(ps.transforms, t)
@@ -245,7 +244,7 @@ func (v *Verifier) findSignature(el *etree.Element) (*parsedSignature, error) {
 	idAttr := el.SelectAttrValue(v.idAttribute(), "")
 
 	var found *parsedSignature
-	nsCtx, err := etreeutils.NSBuildParentContext(el)
+	nsCtx, err := NSBuildParentContext(el)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +264,7 @@ func (v *Verifier) findSignature(el *etree.Element) (*parsedSignature, error) {
 			continue
 		}
 
-		if currentNS != Namespace || child.Tag != SignatureTag {
+		if currentNS != namespace || child.Tag != signatureTag {
 			continue
 		}
 
@@ -304,14 +303,14 @@ func validateShape(signatureEl *etree.Element) error {
 		childCounts[child.Tag]++
 	}
 
-	if childCounts[SignedInfoTag] != 1 || childCounts[KeyInfoTag] > 1 || childCounts[SignatureValueTag] != 1 {
+	if childCounts[signedInfoTag] != 1 || childCounts[keyInfoTag] > 1 || childCounts[signatureValueTag] != 1 {
 		return ErrMalformedSignature
 	}
 	return nil
 }
 
 // parseSignatureElement extracts all fields from a ds:Signature using etree only.
-func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *etree.Element) (*parsedSignature, error) {
+func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *etree.Element) (*parsedSignature, error) {
 	sig := &parsedSignature{
 		el: sigEl,
 	}
@@ -332,7 +331,7 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 		if err != nil {
 			continue
 		}
-		if ns == Namespace && child.Tag == SignedInfoTag {
+		if ns == namespace && child.Tag == signedInfoTag {
 			signedInfoEl = child
 			break
 		}
@@ -348,14 +347,14 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 	}
 
 	// Get C14N method from SignedInfo before detaching
-	c14nMethodEl := findChildByTag(signedInfoEl, CanonicalizationMethodTag)
+	c14nMethodEl := findChildByTag(signedInfoEl, canonicalizationMethodTag)
 	if c14nMethodEl == nil {
 		return nil, fmt.Errorf("%w: missing CanonicalizationMethod", ErrMalformedSignature)
 	}
-	sig.c14nMethod = c14nMethodEl.SelectAttrValue(AlgorithmAttr, "")
+	sig.c14nMethod = c14nMethodEl.SelectAttrValue(algorithmAttr, "")
 
 	// Detach and canonicalize SignedInfo
-	detachedSignedInfo, err := etreeutils.NSDetach(signedInfoCtx, signedInfoEl)
+	detachedSignedInfo, err := NSDetach(signedInfoCtx, signedInfoEl)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +362,7 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 	// Apply the canonicalization method specified in SignedInfo
 	switch alg := AlgorithmID(sig.c14nMethod); alg {
 	case CanonicalXML10ExclusiveAlgorithmId, CanonicalXML10ExclusiveWithCommentsAlgorithmId:
-		err := etreeutils.TransformExcC14n(detachedSignedInfo, "", alg == CanonicalXML10ExclusiveWithCommentsAlgorithmId)
+		err := TransformExcC14n(detachedSignedInfo, "", alg == CanonicalXML10ExclusiveWithCommentsAlgorithmId)
 		if err != nil {
 			return nil, err
 		}
@@ -378,44 +377,44 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 	sig.signedInfoEl = detachedSignedInfo
 
 	// SignatureMethod
-	sigMethodEl := findChildByTag(signedInfoEl, SignatureMethodTag)
+	sigMethodEl := findChildByTag(signedInfoEl, signatureMethodTag)
 	if sigMethodEl == nil {
 		return nil, fmt.Errorf("%w: missing SignatureMethod", ErrMalformedSignature)
 	}
-	sig.sigMethod = sigMethodEl.SelectAttrValue(AlgorithmAttr, "")
+	sig.sigMethod = sigMethodEl.SelectAttrValue(algorithmAttr, "")
 
 	// Reference
-	refEl := findChildByTag(signedInfoEl, ReferenceTag)
+	refEl := findChildByTag(signedInfoEl, referenceTag)
 	if refEl == nil {
 		return nil, fmt.Errorf("%w: missing Reference", ErrMalformedSignature)
 	}
-	sig.refURI = refEl.SelectAttrValue(URIAttr, "")
+	sig.refURI = refEl.SelectAttrValue(uriAttr, "")
 
 	// DigestMethod
-	digestMethodEl := findChildByTag(refEl, DigestMethodTag)
+	digestMethodEl := findChildByTag(refEl, digestMethodTag)
 	if digestMethodEl == nil {
 		return nil, fmt.Errorf("%w: missing DigestMethod", ErrMalformedSignature)
 	}
-	sig.digestMethod = digestMethodEl.SelectAttrValue(AlgorithmAttr, "")
+	sig.digestMethod = digestMethodEl.SelectAttrValue(algorithmAttr, "")
 
 	// DigestValue
-	digestValueEl := findChildByTag(refEl, DigestValueTag)
+	digestValueEl := findChildByTag(refEl, digestValueTag)
 	if digestValueEl == nil {
 		return nil, fmt.Errorf("%w: missing DigestValue", ErrMalformedSignature)
 	}
 	sig.digestValue = digestValueEl.Text()
 
 	// Transforms
-	transformsEl := findChildByTag(refEl, TransformsTag)
+	transformsEl := findChildByTag(refEl, transformsTag)
 	if transformsEl != nil {
 		for _, child := range transformsEl.ChildElements() {
-			if child.Tag == TransformTag {
+			if child.Tag == transformTag {
 				t := parsedTransform{
-					algorithm: child.SelectAttrValue(AlgorithmAttr, ""),
+					algorithm: child.SelectAttrValue(algorithmAttr, ""),
 				}
 				for _, grandchild := range child.ChildElements() {
-					if grandchild.Tag == InclusiveNamespacesTag {
-						t.prefixList = grandchild.SelectAttrValue(PrefixListAttr, "")
+					if grandchild.Tag == inclusiveNamespacesTag {
+						t.prefixList = grandchild.SelectAttrValue(prefixListAttr, "")
 					}
 				}
 				sig.transforms = append(sig.transforms, t)
@@ -426,7 +425,7 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 	// SignatureValue
 	var sigValueEl *etree.Element
 	for _, child := range sigEl.ChildElements() {
-		if child.Tag == SignatureValueTag {
+		if child.Tag == signatureValueTag {
 			sigValueEl = child
 			break
 		}
@@ -438,11 +437,11 @@ func (v *Verifier) parseSignatureElement(parentCtx etreeutils.NSContext, sigEl *
 
 	// KeyInfo certs (optional)
 	for _, child := range sigEl.ChildElements() {
-		if child.Tag == KeyInfoTag {
+		if child.Tag == keyInfoTag {
 			for _, x509data := range child.ChildElements() {
-				if x509data.Tag == X509DataTag {
+				if x509data.Tag == x509DataTag {
 					for _, certEl := range x509data.ChildElements() {
-						if certEl.Tag == X509CertificateTag {
+						if certEl.Tag == x509CertificateTag {
 							sig.keyInfoCerts = append(sig.keyInfoCerts, certEl.Text())
 						}
 					}

@@ -10,13 +10,12 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ==========================================================================
-// Parser Differential Audit — goxmldsig v2
+// Parser Differential Audit — xmldsig
 //
 // These tests investigate whether the v2 library (which uses etree instead
 // of encoding/xml for parsing) is still vulnerable to the class of parser
@@ -27,7 +26,7 @@ import (
 // If the re-parsed element differs semantically from the bytes that were
 // digested, we have a parser differential.
 //
-// Additionally, NSUnmarshalElement in etreeutils uses encoding/xml for
+// Additionally, NSUnmarshalElement uses encoding/xml for
 // deserialization. If consumers (like gosaml2) use this to extract claims
 // from the verified element, the encoding/xml bugs could resurface.
 // ==========================================================================
@@ -92,7 +91,7 @@ func reparseElement(t *testing.T, el *etree.Element) *etree.Element {
 func filterSignature(els []*etree.Element) []*etree.Element {
 	var out []*etree.Element
 	for _, el := range els {
-		if el.Tag != SignatureTag {
+		if el.Tag != signatureTag {
 			out = append(out, el)
 		}
 	}
@@ -231,11 +230,11 @@ func TestParserDiffNSUnmarshalElement(t *testing.T) {
 
 	verified := signAndVerify(t, samlXML)
 
-	ctx, err := etreeutils.NSBuildParentContext(verified)
+	ctx, err := NSBuildParentContext(verified)
 	require.NoError(t, err)
 
 	var assertion Assertion
-	err = etreeutils.NSUnmarshalElement(ctx, verified, &assertion)
+	err = NSUnmarshalElement(ctx, verified, &assertion)
 	require.NoError(t, err)
 
 	assert.Equal(t, "https://idp.example.com", assertion.Issuer)
@@ -255,7 +254,7 @@ func TestParserDiffNSUnmarshalElement(t *testing.T) {
 }
 
 // =========================================================================
-// Test 4: Namespace prefix rebinding
+// Test 4: namespace prefix rebinding
 // =========================================================================
 func TestParserDiffNamespacePrefixRebinding(t *testing.T) {
 	rebindXML := `<root xmlns:p="http://first" ID="_rebind1">` +
@@ -289,7 +288,7 @@ func TestParserDiffNamespacePrefixRebinding(t *testing.T) {
 	assert.Equal(t, "in-second-namespace", innerChildren[0].Text())
 
 	// Verify namespace context resolves correctly after re-parse
-	ctx := etreeutils.NewDefaultNSContext()
+	ctx := NewDefaultNSContext()
 	rootCtx, err := ctx.SubContext(verified)
 	require.NoError(t, err)
 
@@ -410,11 +409,11 @@ func TestParserDiffCommentInjection(t *testing.T) {
 		Subject Subject  `xml:"urn:oasis:names:tc:SAML:2.0:assertion Subject"`
 	}
 
-	ctx, err := etreeutils.NSBuildParentContext(verified)
+	ctx, err := NSBuildParentContext(verified)
 	require.NoError(t, err)
 
 	var assertion Assertion
-	err = etreeutils.NSUnmarshalElement(ctx, verified, &assertion)
+	err = NSUnmarshalElement(ctx, verified, &assertion)
 	require.NoError(t, err)
 
 	assert.Equal(t, nameID.Text(), assertion.Subject.NameID,
@@ -638,11 +637,11 @@ func TestParserDiffNSUnmarshalResidualRisk(t *testing.T) {
 
 			etreeVal := findDescendantByTag(verified, "NameID").Text()
 
-			ctx, err := etreeutils.NSBuildParentContext(verified)
+			ctx, err := NSBuildParentContext(verified)
 			require.NoError(t, err)
 
 			var assertion Assertion
-			err = etreeutils.NSUnmarshalElement(ctx, verified, &assertion)
+			err = NSUnmarshalElement(ctx, verified, &assertion)
 			require.NoError(t, err)
 
 			xmlVal := assertion.Subject.NameID
@@ -683,10 +682,10 @@ func TestParserDiffSameNamespaceDifferentPrefixes(t *testing.T) {
 			Value string `xml:",chardata"`
 		} `xml:"urn:same child"`
 	}
-	ctx, err := etreeutils.NSBuildParentContext(verified)
+	ctx, err := NSBuildParentContext(verified)
 	require.NoError(t, err)
 	var r Root
-	err = etreeutils.NSUnmarshalElement(ctx, verified, &r)
+	err = NSUnmarshalElement(ctx, verified, &r)
 	require.NoError(t, err)
 
 	require.Len(t, r.Children, 2, "encoding/xml must see 2 children in urn:same")
@@ -787,11 +786,11 @@ func TestParserDiffFullSAMLPipeline(t *testing.T) {
 		Assertion SAMLAssertion  `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
 	}
 
-	ctx, err := etreeutils.NSBuildParentContext(verified)
+	ctx, err := NSBuildParentContext(verified)
 	require.NoError(t, err)
 
 	var resp Response
-	err = etreeutils.NSUnmarshalElement(ctx, verified, &resp)
+	err = NSUnmarshalElement(ctx, verified, &resp)
 	require.NoError(t, err)
 
 	assert.Equal(t, "https://idp.example.com", resp.Issuer)
@@ -880,7 +879,7 @@ func TestParserDiffTamperDetection(t *testing.T) {
 
 	// Verified element must NOT contain a Signature (it was stripped)
 	for _, child := range result.Element.ChildElements() {
-		assert.NotEqual(t, SignatureTag, child.Tag,
+		assert.NotEqual(t, signatureTag, child.Tag,
 			"verified element should not contain Signature")
 	}
 
@@ -934,14 +933,14 @@ func TestParserDiffCanonicalBytesConsistency(t *testing.T) {
 	// Extract digest from signed document
 	var sigEl *etree.Element
 	for _, child := range signed.ChildElements() {
-		if child.Tag == SignatureTag {
+		if child.Tag == signatureTag {
 			sigEl = child
 			break
 		}
 	}
 	require.NotNil(t, sigEl)
 
-	digestValueEl := findDescendantByTag(sigEl, DigestValueTag)
+	digestValueEl := findDescendantByTag(sigEl, digestValueTag)
 	require.NotNil(t, digestValueEl)
 
 	digestB64 := digestValueEl.Text()

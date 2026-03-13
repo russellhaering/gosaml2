@@ -200,18 +200,18 @@ func TestCertCrypto_KeyInfoOnlyFirstCertUsed(t *testing.T) {
 	// Find existing KeyInfo and add attacker cert at position 0
 	var keyInfo *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == KeyInfoTag {
+		if c.Tag == keyInfoTag {
 			keyInfo = c
 			break
 		}
 	}
 	require.NotNil(t, keyInfo)
 
-	x509Data := keyInfo.FindElement("./" + X509DataTag)
+	x509Data := keyInfo.FindElement("./" + x509DataTag)
 	require.NotNil(t, x509Data)
 
 	// Prepend attacker cert
-	attackerCertEl := etree.NewElement(X509CertificateTag)
+	attackerCertEl := etree.NewElement(x509CertificateTag)
 	attackerCertEl.Space = x509Data.ChildElements()[0].Space
 	attackerCertEl.SetText(base64.StdEncoding.EncodeToString(cert2.Raw))
 
@@ -249,18 +249,18 @@ func TestCertCrypto_KeyInfoSecondCertIgnored(t *testing.T) {
 	require.NotNil(t, sig)
 	var keyInfo *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == KeyInfoTag {
+		if c.Tag == keyInfoTag {
 			keyInfo = c
 			break
 		}
 	}
 	require.NotNil(t, keyInfo)
 
-	x509Data := keyInfo.FindElement("./" + X509DataTag)
+	x509Data := keyInfo.FindElement("./" + x509DataTag)
 	require.NotNil(t, x509Data)
 
 	// Append garbage cert
-	garbageCertEl := etree.NewElement(X509CertificateTag)
+	garbageCertEl := etree.NewElement(x509CertificateTag)
 	garbageCertEl.Space = x509Data.ChildElements()[0].Space
 	garbageCertEl.SetText("THIS_IS_NOT_VALID_BASE64_CERT_DATA!!!!")
 	x509Data.AddChild(garbageCertEl)
@@ -309,7 +309,7 @@ func TestCertCrypto_ECDSASignatureMalleability(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -393,19 +393,19 @@ func TestCertCrypto_AlgorithmConfusionRSAMethodECDSACert(t *testing.T) {
 	// Tamper: change SignatureMethod to RSA
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	signedInfoEl := sig.FindElement("./" + SignedInfoTag)
+	signedInfoEl := sig.FindElement("./" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
-	sigMethodEl := signedInfoEl.FindElement("./" + SignatureMethodTag)
+	sigMethodEl := signedInfoEl.FindElement("./" + signatureMethodTag)
 	require.NotNil(t, sigMethodEl)
 
 	// Overwrite Algorithm to RSA-SHA256
 	for _, attr := range sigMethodEl.Attr {
-		if attr.Key == AlgorithmAttr {
-			sigMethodEl.RemoveAttr(AlgorithmAttr)
+		if attr.Key == algorithmAttr {
+			sigMethodEl.RemoveAttr(algorithmAttr)
 			break
 		}
 	}
-	sigMethodEl.CreateAttr(AlgorithmAttr, RSASHA256SignatureMethod)
+	sigMethodEl.CreateAttr(algorithmAttr, RSASHA256SignatureMethod)
 
 	signed = reparse(t, signed)
 
@@ -434,13 +434,13 @@ func TestCertCrypto_AlgorithmConfusionECDSAMethodRSACert(t *testing.T) {
 	// Tamper: change SignatureMethod to ECDSA
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	signedInfoEl := sig.FindElement("./" + SignedInfoTag)
+	signedInfoEl := sig.FindElement("./" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
-	sigMethodEl := signedInfoEl.FindElement("./" + SignatureMethodTag)
+	sigMethodEl := signedInfoEl.FindElement("./" + signatureMethodTag)
 	require.NotNil(t, sigMethodEl)
 
-	sigMethodEl.RemoveAttr(AlgorithmAttr)
-	sigMethodEl.CreateAttr(AlgorithmAttr, ECDSASHA256SignatureMethod)
+	sigMethodEl.RemoveAttr(algorithmAttr)
+	sigMethodEl.CreateAttr(algorithmAttr, ECDSASHA256SignatureMethod)
 
 	signed = reparse(t, signed)
 
@@ -465,13 +465,13 @@ func TestCertCrypto_UnknownAlgorithmURI(t *testing.T) {
 	// Tamper: set unknown algorithm
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	signedInfoEl := sig.FindElement("./" + SignedInfoTag)
+	signedInfoEl := sig.FindElement("./" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
-	sigMethodEl := signedInfoEl.FindElement("./" + SignatureMethodTag)
+	sigMethodEl := signedInfoEl.FindElement("./" + signatureMethodTag)
 	require.NotNil(t, sigMethodEl)
 
-	sigMethodEl.RemoveAttr(AlgorithmAttr)
-	sigMethodEl.CreateAttr(AlgorithmAttr, "http://attacker.com/custom-algo")
+	sigMethodEl.RemoveAttr(algorithmAttr)
+	sigMethodEl.CreateAttr(algorithmAttr, "http://attacker.com/custom-algo")
 
 	signed = reparse(t, signed)
 
@@ -497,15 +497,15 @@ func TestCertCrypto_UnknownDigestAlgorithmURI(t *testing.T) {
 	// Tamper: set unknown digest algorithm
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	signedInfoEl := sig.FindElement("./" + SignedInfoTag)
+	signedInfoEl := sig.FindElement("./" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
-	refEl := signedInfoEl.FindElement("./" + ReferenceTag)
+	refEl := signedInfoEl.FindElement("./" + referenceTag)
 	require.NotNil(t, refEl)
-	digestMethodEl := refEl.FindElement("./" + DigestMethodTag)
+	digestMethodEl := refEl.FindElement("./" + digestMethodTag)
 	require.NotNil(t, digestMethodEl)
 
-	digestMethodEl.RemoveAttr(AlgorithmAttr)
-	digestMethodEl.CreateAttr(AlgorithmAttr, "http://attacker.com/md5")
+	digestMethodEl.RemoveAttr(algorithmAttr)
+	digestMethodEl.CreateAttr(algorithmAttr, "http://attacker.com/md5")
 
 	signed = reparse(t, signed)
 
@@ -653,7 +653,7 @@ func TestCertCrypto_RSATruncatedSignature(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -692,7 +692,7 @@ func TestCertCrypto_RSAPaddedSignature(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -736,7 +736,7 @@ func TestCertCrypto_ECDSAWrongLengthSignature(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -777,7 +777,7 @@ func TestCertCrypto_Base64WhitespaceInSignatureValue(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -815,7 +815,7 @@ func TestCertCrypto_InvalidBase64SignatureValue(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -848,7 +848,7 @@ func TestCertCrypto_EmptySignatureValue(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}
@@ -879,7 +879,7 @@ func TestCertCrypto_InvalidBase64InKeyInfoCert(t *testing.T) {
 	// Replace cert data with invalid base64
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	certEl := sig.FindElement("./" + KeyInfoTag + "/" + X509DataTag + "/" + X509CertificateTag)
+	certEl := sig.FindElement("./" + keyInfoTag + "/" + x509DataTag + "/" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText("!!!NOT-BASE64-CERT!!!")
 
@@ -907,7 +907,7 @@ func TestCertCrypto_MalformedDERInKeyInfoCert(t *testing.T) {
 	// Replace cert data with valid base64 but garbage DER
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	certEl := sig.FindElement("./" + KeyInfoTag + "/" + X509DataTag + "/" + X509CertificateTag)
+	certEl := sig.FindElement("./" + keyInfoTag + "/" + x509DataTag + "/" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText(base64.StdEncoding.EncodeToString([]byte("not-a-real-certificate")))
 
@@ -1265,11 +1265,11 @@ func TestCertCrypto_DigestValueTampering(t *testing.T) {
 	// Find and tamper DigestValue
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	signedInfoEl := sig.FindElement("./" + SignedInfoTag)
+	signedInfoEl := sig.FindElement("./" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
-	refEl := signedInfoEl.FindElement("./" + ReferenceTag)
+	refEl := signedInfoEl.FindElement("./" + referenceTag)
 	require.NotNil(t, refEl)
-	digestValueEl := refEl.FindElement("./" + DigestValueTag)
+	digestValueEl := refEl.FindElement("./" + digestValueTag)
 	require.NotNil(t, digestValueEl)
 
 	// Replace with a different valid base64 digest
@@ -1459,7 +1459,7 @@ func TestCertCrypto_MultipleSignaturesRejected(t *testing.T) {
 	// Count signature elements
 	var sigCount int
 	for _, c := range signed2.ChildElements() {
-		if c.Tag == SignatureTag {
+		if c.Tag == signatureTag {
 			sigCount++
 		}
 	}
@@ -1497,7 +1497,7 @@ func TestCertCrypto_MissingSignedInfo(t *testing.T) {
 	sig := findSig(signed)
 	require.NotNil(t, sig)
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignedInfoTag {
+		if c.Tag == signedInfoTag {
 			sig.RemoveChild(c)
 			break
 		}
@@ -1528,7 +1528,7 @@ func TestCertCrypto_MissingSignatureValue(t *testing.T) {
 	sig := findSig(signed)
 	require.NotNil(t, sig)
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sig.RemoveChild(c)
 			break
 		}
@@ -1580,7 +1580,7 @@ func TestCertCrypto_VerifyResultElementIsCanonicalized(t *testing.T) {
 		"canonical result should have the signed content")
 
 	// The result should NOT have the Signature element (it's enveloped, removed during canonicalization)
-	resultSig := result.Element.FindElement("./" + SignatureTag)
+	resultSig := result.Element.FindElement("./" + signatureTag)
 	assert.Nil(t, resultSig, "canonical result should not contain Signature")
 }
 
@@ -1610,7 +1610,7 @@ func TestCertCrypto_ECDSAZeroSignatureRejected(t *testing.T) {
 	require.NotNil(t, sig)
 	var sigValueEl *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignatureValueTag {
+		if c.Tag == signatureValueTag {
 			sigValueEl = c
 			break
 		}

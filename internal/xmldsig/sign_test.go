@@ -35,51 +35,51 @@ func testSignWithSigner(t *testing.T, signer *Signer, sigMethodID string, digest
 	require.NoError(t, err)
 	require.NotEmpty(t, signed)
 
-	sig := signed.FindElement("//" + SignatureTag)
+	sig := signed.FindElement("//" + signatureTag)
 	require.NotEmpty(t, sig)
 
-	signedInfo := sig.FindElement("//" + SignedInfoTag)
+	signedInfo := sig.FindElement("//" + signedInfoTag)
 	require.NotEmpty(t, signedInfo)
 
-	canonicalizationMethodElement := signedInfo.FindElement("//" + CanonicalizationMethodTag)
+	canonicalizationMethodElement := signedInfo.FindElement("//" + canonicalizationMethodTag)
 	require.NotEmpty(t, canonicalizationMethodElement)
 
-	canonicalizationMethodAttr := canonicalizationMethodElement.SelectAttr(AlgorithmAttr)
+	canonicalizationMethodAttr := canonicalizationMethodElement.SelectAttr(algorithmAttr)
 	require.NotEmpty(t, canonicalizationMethodAttr)
 	require.Equal(t, CanonicalXML11AlgorithmId.String(), canonicalizationMethodAttr.Value)
 
-	signatureMethodElement := signedInfo.FindElement("//" + SignatureMethodTag)
+	signatureMethodElement := signedInfo.FindElement("//" + signatureMethodTag)
 	require.NotEmpty(t, signatureMethodElement)
 
-	signatureMethodAttr := signatureMethodElement.SelectAttr(AlgorithmAttr)
+	signatureMethodAttr := signatureMethodElement.SelectAttr(algorithmAttr)
 	require.NotEmpty(t, signatureMethodAttr)
 	require.Equal(t, sigMethodID, signatureMethodAttr.Value)
 
-	referenceElement := signedInfo.FindElement("//" + ReferenceTag)
+	referenceElement := signedInfo.FindElement("//" + referenceTag)
 	require.NotEmpty(t, referenceElement)
 
-	idAttr := referenceElement.SelectAttr(URIAttr)
+	idAttr := referenceElement.SelectAttr(uriAttr)
 	require.NotEmpty(t, idAttr)
 	require.Equal(t, "#"+id, idAttr.Value)
 
-	transformsElement := referenceElement.FindElement("//" + TransformsTag)
+	transformsElement := referenceElement.FindElement("//" + transformsTag)
 	require.NotEmpty(t, transformsElement)
 
-	transformElement := transformsElement.FindElement("//" + TransformTag)
+	transformElement := transformsElement.FindElement("//" + transformTag)
 	require.NotEmpty(t, transformElement)
 
-	algorithmAttr := transformElement.SelectAttr(AlgorithmAttr)
-	require.NotEmpty(t, algorithmAttr)
-	require.Equal(t, EnvelopedSignatureAlgorithmId.String(), algorithmAttr.Value)
+	transformAlgo := transformElement.SelectAttr(algorithmAttr)
+	require.NotEmpty(t, transformAlgo)
+	require.Equal(t, EnvelopedSignatureAlgorithmId.String(), transformAlgo.Value)
 
-	digestMethodElement := referenceElement.FindElement("//" + DigestMethodTag)
+	digestMethodElement := referenceElement.FindElement("//" + digestMethodTag)
 	require.NotEmpty(t, digestMethodElement)
 
-	digestMethodAttr := digestMethodElement.SelectAttr(AlgorithmAttr)
-	require.NotEmpty(t, digestMethodElement)
-	require.Equal(t, digestAlgorithmIdentifiers[digestAlgo], digestMethodAttr.Value)
+	digestMethodAlgo := digestMethodElement.SelectAttr(algorithmAttr)
+	require.NotEmpty(t, digestMethodAlgo)
+	require.Equal(t, digestAlgorithmIdentifiers[digestAlgo], digestMethodAlgo.Value)
 
-	digestValueElement := referenceElement.FindElement("//" + DigestValueTag)
+	digestValueElement := referenceElement.FindElement("//" + digestValueTag)
 	require.NotEmpty(t, digestValueElement)
 	require.Equal(t, base64.StdEncoding.EncodeToString(digest), digestValueElement.Text())
 }
@@ -90,8 +90,8 @@ func TestSignErrors(t *testing.T) {
 		Key:         key,
 		Certs:       []*x509.Certificate{cert},
 		Hash:        crypto.SHA512_256,
-		IDAttribute: DefaultIdAttr,
-		Prefix:      DefaultPrefix,
+		IDAttribute: defaultIdAttr,
+		Prefix:      defaultSigPrefix,
 	}
 
 	authnRequest := &etree.Element{

@@ -487,7 +487,7 @@ var mutationMenu = []mutation{
 
 func mutSwapDigestValue(el *etree.Element, data []byte) *etree.Element {
 	el = el.Copy()
-	dv := el.FindElement("//" + DigestValueTag)
+	dv := el.FindElement("//" + digestValueTag)
 	if dv == nil {
 		return nil
 	}
@@ -501,7 +501,7 @@ func mutSwapDigestValue(el *etree.Element, data []byte) *etree.Element {
 
 func mutTruncateSignatureValue(el *etree.Element, data []byte) *etree.Element {
 	el = el.Copy()
-	sv := el.FindElement("//" + SignatureValueTag)
+	sv := el.FindElement("//" + signatureValueTag)
 	if sv == nil {
 		return nil
 	}
@@ -519,7 +519,7 @@ func mutTruncateSignatureValue(el *etree.Element, data []byte) *etree.Element {
 
 func mutExtendDigestValue(el *etree.Element, data []byte) *etree.Element {
 	el = el.Copy()
-	dv := el.FindElement("//" + DigestValueTag)
+	dv := el.FindElement("//" + digestValueTag)
 	if dv == nil {
 		return nil
 	}
@@ -537,31 +537,31 @@ func mutExtendDigestValue(el *etree.Element, data []byte) *etree.Element {
 
 func mutEmptyCanonicalizationAlgo(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	cm := el.FindElement("//" + CanonicalizationMethodTag)
+	cm := el.FindElement("//" + canonicalizationMethodTag)
 	if cm == nil {
 		return nil
 	}
-	cm.CreateAttr(AlgorithmAttr, "")
+	cm.CreateAttr(algorithmAttr, "")
 	return el
 }
 
 func mutEmptySignatureMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	sm := el.FindElement("//" + SignatureMethodTag)
+	sm := el.FindElement("//" + signatureMethodTag)
 	if sm == nil {
 		return nil
 	}
-	sm.CreateAttr(AlgorithmAttr, "")
+	sm.CreateAttr(algorithmAttr, "")
 	return el
 }
 
 func mutDuplicateSignedInfo(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	sig := el.FindElement("//" + SignatureTag)
+	sig := el.FindElement("//" + signatureTag)
 	if sig == nil {
 		return nil
 	}
-	si := findChildByTag(sig, SignedInfoTag)
+	si := findChildByTag(sig, signedInfoTag)
 	if si == nil {
 		return nil
 	}
@@ -574,7 +574,7 @@ func mutReorderSigChildren(el *etree.Element, _ []byte) *etree.Element {
 	// inject a bogus text node inside SignedInfo so that the
 	// canonical SignedInfo actually changes.
 	el = el.Copy()
-	si := el.FindElement("//" + SignedInfoTag)
+	si := el.FindElement("//" + signedInfoTag)
 	if si == nil {
 		return nil
 	}
@@ -585,19 +585,19 @@ func mutReorderSigChildren(el *etree.Element, _ []byte) *etree.Element {
 
 func mutInjectNestedSignature(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	si := el.FindElement("//" + SignedInfoTag)
+	si := el.FindElement("//" + signedInfoTag)
 	if si == nil {
 		return nil
 	}
-	nested := etree.NewElement(SignatureTag)
-	nested.Space = DefaultPrefix
-	nested.CreateAttr("xmlns:"+DefaultPrefix, Namespace)
-	nsi := nested.CreateElement(SignedInfoTag)
-	nsi.Space = DefaultPrefix
-	nsi.CreateElement(CanonicalizationMethodTag).CreateAttr(AlgorithmAttr, "http://fake")
-	nsi.CreateElement(SignatureMethodTag).CreateAttr(AlgorithmAttr, "http://fake")
-	nsv := nested.CreateElement(SignatureValueTag)
-	nsv.Space = DefaultPrefix
+	nested := etree.NewElement(signatureTag)
+	nested.Space = defaultSigPrefix
+	nested.CreateAttr("xmlns:"+defaultSigPrefix, namespace)
+	nsi := nested.CreateElement(signedInfoTag)
+	nsi.Space = defaultSigPrefix
+	nsi.CreateElement(canonicalizationMethodTag).CreateAttr(algorithmAttr, "http://fake")
+	nsi.CreateElement(signatureMethodTag).CreateAttr(algorithmAttr, "http://fake")
+	nsv := nested.CreateElement(signatureValueTag)
+	nsv.Space = defaultSigPrefix
 	nsv.SetText("ZmFrZQ==")
 	si.AddChild(nested)
 	return el
@@ -605,17 +605,17 @@ func mutInjectNestedSignature(el *etree.Element, _ []byte) *etree.Element {
 
 func mutInjectExtraReference(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	si := el.FindElement("//" + SignedInfoTag)
+	si := el.FindElement("//" + signedInfoTag)
 	if si == nil {
 		return nil
 	}
-	ref := etree.NewElement(ReferenceTag)
+	ref := etree.NewElement(referenceTag)
 	ref.Space = si.Space
-	ref.CreateAttr(URIAttr, "#evil")
-	dm := ref.CreateElement(DigestMethodTag)
+	ref.CreateAttr(uriAttr, "#evil")
+	dm := ref.CreateElement(digestMethodTag)
 	dm.Space = si.Space
-	dm.CreateAttr(AlgorithmAttr, "http://www.w3.org/2001/04/xmlenc#sha256")
-	dvEl := ref.CreateElement(DigestValueTag)
+	dm.CreateAttr(algorithmAttr, "http://www.w3.org/2001/04/xmlenc#sha256")
+	dvEl := ref.CreateElement(digestValueTag)
 	dvEl.Space = si.Space
 	dvEl.SetText("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 	si.AddChild(ref)
@@ -624,11 +624,11 @@ func mutInjectExtraReference(el *etree.Element, _ []byte) *etree.Element {
 
 func mutRemoveAllTransforms(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	ref := el.FindElement("//" + ReferenceTag)
+	ref := el.FindElement("//" + referenceTag)
 	if ref == nil {
 		return nil
 	}
-	tr := findChildByTag(ref, TransformsTag)
+	tr := findChildByTag(ref, transformsTag)
 	if tr == nil {
 		return nil
 	}
@@ -638,21 +638,21 @@ func mutRemoveAllTransforms(el *etree.Element, _ []byte) *etree.Element {
 
 func mutReplaceDigestMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	dm := el.FindElement("//" + DigestMethodTag)
+	dm := el.FindElement("//" + digestMethodTag)
 	if dm == nil {
 		return nil
 	}
-	dm.CreateAttr(AlgorithmAttr, "http://www.w3.org/2099/unknown#digest")
+	dm.CreateAttr(algorithmAttr, "http://www.w3.org/2099/unknown#digest")
 	return el
 }
 
 func mutReplaceSignatureMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
 	el = el.Copy()
-	sm := el.FindElement("//" + SignatureMethodTag)
+	sm := el.FindElement("//" + signatureMethodTag)
 	if sm == nil {
 		return nil
 	}
-	sm.CreateAttr(AlgorithmAttr, "http://www.w3.org/2099/unknown#sig")
+	sm.CreateAttr(algorithmAttr, "http://www.w3.org/2099/unknown#sig")
 	return el
 }
 
@@ -736,6 +736,73 @@ func FuzzStructuredSignature(f *testing.F) {
 		if err == nil {
 			t.Errorf("mutation %q was accepted on a structurally modified document", mut.name)
 		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Fuzz targets for namespace traversal and exclusive canonicalization
+// (formerly in etreeutils package)
+// ---------------------------------------------------------------------------
+
+func FuzzNSTraverse(f *testing.F) {
+	f.Add([]byte(`<root xmlns:a="http://a"><a:child>text</a:child></root>`))
+	f.Add([]byte(`<r xmlns="http://default" xmlns:x="http://x"><x:a><b xmlns:y="http://y"><y:c x:d="val"/></b></x:a></r>`))
+	f.Add([]byte(`<a xmlns:n1="http://n1" xmlns:n2="http://n2" xmlns:n3="http://n3"><n1:b n2:attr="v"><n3:c/></n1:b></a>`))
+	f.Add([]byte(`<e xml:lang="en"><e xml:space="preserve"><e/></e></e>`))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		doc := etree.NewDocument()
+		err := doc.ReadFromBytes(data)
+		if err != nil {
+			return
+		}
+
+		root := doc.Root()
+		if root == nil {
+			return
+		}
+
+		ctx := NewDefaultNSContext()
+
+		// Exercise tree traversal — looking for panics and hangs.
+		NSTraverse(ctx, root, func(_ NSContext, _ *etree.Element) error {
+			return nil
+		})
+
+		// Exercise find iterate with a common namespace.
+		NSFindIterate(root, "http://www.w3.org/2000/09/xmldsig#", "Signature", func(_ NSContext, _ *etree.Element) error {
+			return ErrTraversalHalted
+		})
+
+		// Exercise select one.
+		NSSelectOne(root, "http://www.w3.org/2000/09/xmldsig#", "SignedInfo")
+	})
+}
+
+func FuzzTransformExcC14n(f *testing.F) {
+	f.Add([]byte(`<root xmlns:a="http://a" xmlns:b="http://b"><a:child b:attr="val">text</a:child></root>`), "")
+	f.Add([]byte(`<r xmlns="http://d"><child xmlns:x="http://x" x:a="1"/></r>`), "x")
+	f.Add([]byte(`<e xmlns:ns1="http://ns1"><ns1:a><!-- comment --></ns1:a></e>`), "ns1")
+
+	f.Fuzz(func(t *testing.T, data []byte, prefixList string) {
+		doc := etree.NewDocument()
+		err := doc.ReadFromBytes(data)
+		if err != nil {
+			return
+		}
+
+		root := doc.Root()
+		if root == nil {
+			return
+		}
+
+		// Test with comments=false
+		el := root.Copy()
+		TransformExcC14n(el, prefixList, false)
+
+		// Test with comments=true
+		el = root.Copy()
+		TransformExcC14n(el, prefixList, true)
 	})
 }
 

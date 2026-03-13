@@ -145,7 +145,7 @@ func TestDifferentialC14NAgainstXmllint(t *testing.T) {
 				if !bytes.Equal(got, expected) {
 					t.Errorf("DIVERGENCE from xmllint!\n"+
 						"--- xmllint (%s) ---\n%s\n"+
-						"--- goxmldsig ---\n%s\n"+
+						"--- xmldsig ---\n%s\n"+
 						"--- diff ---\n%s",
 						method.xmllintFlag, string(expected), string(got),
 						diffStrings(string(expected), string(got)))
@@ -259,7 +259,7 @@ func TestDifferentialC14NInlineInputs(t *testing.T) {
 					t.Errorf("DIVERGENCE from xmllint!\n"+
 						"input: %s\n"+
 						"--- xmllint (%s) ---\n%s\n"+
-						"--- goxmldsig ---\n%s",
+						"--- xmldsig ---\n%s",
 						input.xml, method.xmllintFlag, string(expected), string(got))
 				}
 			})
@@ -330,7 +330,7 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 		}
 	}
 	if !hasNSDecl && siCopy.Space != "" {
-		siCopy.CreateAttr("xmlns:"+siCopy.Space, Namespace)
+		siCopy.CreateAttr("xmlns:"+siCopy.Space, namespace)
 	}
 	siDoc := etree.NewDocument()
 	siDoc.SetRoot(siCopy)
@@ -370,7 +370,7 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 			if !bytes.Equal(got, expected) {
 				t.Errorf("SignedInfo canonicalization DIVERGES!\n"+
 					"--- xmllint ---\n%s\n"+
-					"--- goxmldsig ---\n%s",
+					"--- xmldsig ---\n%s",
 					string(expected), string(got))
 			}
 		})
@@ -700,7 +700,7 @@ func FuzzDifferentialC14N(f *testing.F) {
 		}
 
 		if !bytes.Equal(got, ref) {
-			t.Errorf("DIVERGENCE!\ninput: %s\nxmllint: %s\ngoxmldsig: %s",
+			t.Errorf("DIVERGENCE!\ninput: %s\nxmllint: %s\nxmldsig: %s",
 				xmlStr, string(ref), string(got))
 		}
 	})

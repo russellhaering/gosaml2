@@ -17,7 +17,6 @@ import (
 	"math/big"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 )
 
 // Signer creates enveloped XML digital signatures.
@@ -47,14 +46,14 @@ type Signer struct {
 
 func (s *Signer) idAttribute() string {
 	if s.IDAttribute == "" {
-		return DefaultIdAttr
+		return defaultIdAttr
 	}
 	return s.IDAttribute
 }
 
 func (s *Signer) prefix() string {
 	if s.Prefix == "" {
-		return DefaultPrefix
+		return defaultSigPrefix
 	}
 	return s.Prefix
 }
@@ -194,43 +193,43 @@ func (s *Signer) constructSignedInfo(el *etree.Element, enveloped bool) (*etree.
 	}
 
 	signedInfo := &etree.Element{
-		Tag:   SignedInfoTag,
+		Tag:   signedInfoTag,
 		Space: s.prefix(),
 	}
 
 	// /SignedInfo/CanonicalizationMethod
-	canonicalizationMethod := s.createNamespacedElement(signedInfo, CanonicalizationMethodTag)
-	canonicalizationMethod.CreateAttr(AlgorithmAttr, string(s.canonicalizer().Algorithm()))
+	canonicalizationMethod := s.createNamespacedElement(signedInfo, canonicalizationMethodTag)
+	canonicalizationMethod.CreateAttr(algorithmAttr, string(s.canonicalizer().Algorithm()))
 
 	// /SignedInfo/SignatureMethod
-	signatureMethod := s.createNamespacedElement(signedInfo, SignatureMethodTag)
-	signatureMethod.CreateAttr(AlgorithmAttr, signatureMethodIdentifier)
+	signatureMethod := s.createNamespacedElement(signedInfo, signatureMethodTag)
+	signatureMethod.CreateAttr(algorithmAttr, signatureMethodIdentifier)
 
 	// /SignedInfo/Reference
-	reference := s.createNamespacedElement(signedInfo, ReferenceTag)
+	reference := s.createNamespacedElement(signedInfo, referenceTag)
 
 	dataId := el.SelectAttrValue(s.idAttribute(), "")
 	if dataId == "" {
-		reference.CreateAttr(URIAttr, "")
+		reference.CreateAttr(uriAttr, "")
 	} else {
-		reference.CreateAttr(URIAttr, "#"+dataId)
+		reference.CreateAttr(uriAttr, "#"+dataId)
 	}
 
 	// /SignedInfo/Reference/Transforms
-	transforms := s.createNamespacedElement(reference, TransformsTag)
+	transforms := s.createNamespacedElement(reference, transformsTag)
 	if enveloped {
-		envelopedTransform := s.createNamespacedElement(transforms, TransformTag)
-		envelopedTransform.CreateAttr(AlgorithmAttr, EnvelopedSignatureAlgorithmId.String())
+		envelopedTransform := s.createNamespacedElement(transforms, transformTag)
+		envelopedTransform.CreateAttr(algorithmAttr, EnvelopedSignatureAlgorithmId.String())
 	}
-	canonicalizationAlgorithm := s.createNamespacedElement(transforms, TransformTag)
-	canonicalizationAlgorithm.CreateAttr(AlgorithmAttr, string(s.canonicalizer().Algorithm()))
+	canonicalizationAlgorithm := s.createNamespacedElement(transforms, transformTag)
+	canonicalizationAlgorithm.CreateAttr(algorithmAttr, string(s.canonicalizer().Algorithm()))
 
 	// /SignedInfo/Reference/DigestMethod
-	digestMethod := s.createNamespacedElement(reference, DigestMethodTag)
-	digestMethod.CreateAttr(AlgorithmAttr, digestAlgorithmIdentifier)
+	digestMethod := s.createNamespacedElement(reference, digestMethodTag)
+	digestMethod.CreateAttr(algorithmAttr, digestAlgorithmIdentifier)
 
 	// /SignedInfo/Reference/DigestValue
-	digestValue := s.createNamespacedElement(reference, DigestValueTag)
+	digestValue := s.createNamespacedElement(reference, digestValueTag)
 	digestValue.SetText(base64.StdEncoding.EncodeToString(digest))
 
 	return signedInfo, nil
@@ -243,7 +242,7 @@ func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.E
 	}
 
 	sig := &etree.Element{
-		Tag:   SignatureTag,
+		Tag:   signatureTag,
 		Space: s.prefix(),
 	}
 
@@ -252,11 +251,11 @@ func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.E
 		xmlns += ":" + s.prefix()
 	}
 
-	sig.CreateAttr(xmlns, Namespace)
+	sig.CreateAttr(xmlns, namespace)
 	sig.AddChild(signedInfo)
 
 	// Build cascading NS contexts for proper canonicalization of SignedInfo
-	rootNSCtx, err := etreeutils.NSBuildParentContext(el)
+	rootNSCtx, err := NSBuildParentContext(el)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +270,7 @@ func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.E
 		return nil, err
 	}
 
-	detachedSignedInfo, err := etreeutils.NSDetach(sigNSCtx, signedInfo)
+	detachedSignedInfo, err := NSDetach(sigNSCtx, signedInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -286,13 +285,13 @@ func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.E
 		return nil, err
 	}
 
-	signatureValue := s.createNamespacedElement(sig, SignatureValueTag)
+	signatureValue := s.createNamespacedElement(sig, signatureValueTag)
 	signatureValue.SetText(base64.StdEncoding.EncodeToString(rawSignature))
 
-	keyInfo := s.createNamespacedElement(sig, KeyInfoTag)
-	x509Data := s.createNamespacedElement(keyInfo, X509DataTag)
+	keyInfo := s.createNamespacedElement(sig, keyInfoTag)
+	x509Data := s.createNamespacedElement(keyInfo, x509DataTag)
 	for _, cert := range s.Certs {
-		x509Certificate := s.createNamespacedElement(x509Data, X509CertificateTag)
+		x509Certificate := s.createNamespacedElement(x509Data, x509CertificateTag)
 		x509Certificate.SetText(base64.StdEncoding.EncodeToString(cert.Raw))
 	}
 

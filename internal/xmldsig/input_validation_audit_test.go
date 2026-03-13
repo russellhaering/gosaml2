@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,7 +109,7 @@ func TestInputValidation_DeeplyNestedXML_TransformExcC14n(t *testing.T) {
 			}
 			close(done)
 		}()
-		_ = etreeutils.TransformExcC14n(root, "", false)
+		_ = TransformExcC14n(root, "", false)
 	}()
 
 	select {
@@ -136,15 +135,15 @@ func TestInputValidation_DeeplyNestedXML_NSTraverseLimit(t *testing.T) {
 		current = current.CreateElement("level")
 	}
 
-	ctx := etreeutils.NewDefaultNSContext()
+	ctx := NewDefaultNSContext()
 	count := 0
-	err := etreeutils.NSTraverse(ctx, root, func(ctx etreeutils.NSContext, el *etree.Element) error {
+	err := NSTraverse(ctx, root, func(ctx NSContext, el *etree.Element) error {
 		count++
 		return nil
 	})
 
 	require.Error(t, err, "NSTraverse should hit traversal limit")
-	require.ErrorIs(t, err, etreeutils.ErrTraversalLimit)
+	require.ErrorIs(t, err, ErrTraversalLimit)
 	t.Logf("NSTraverse visited %d elements before hitting limit (tree depth=%d)", count, depth)
 }
 
@@ -171,7 +170,7 @@ func TestInputValidation_NSBuildParentContext_DeepParentChain(t *testing.T) {
 			}
 			close(done)
 		}()
-		_, _ = etreeutils.NSBuildParentContext(current)
+		_, _ = NSBuildParentContext(current)
 	}()
 
 	select {
@@ -220,7 +219,7 @@ func TestInputValidation_HugeAttributeList_SortPerformance(t *testing.T) {
 	done := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
-		sort.Sort(etreeutils.SortedAttrs(attrs))
+		sort.Sort(SortedAttrs(attrs))
 		done <- time.Since(start)
 	}()
 
@@ -245,7 +244,7 @@ func TestInputValidation_LargeBase64DigestValue(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
 	// Replace DigestValue with a huge base64 string (~10MB)
-	digestValueEl := signed.FindElement("//" + DigestValueTag)
+	digestValueEl := signed.FindElement("//" + digestValueTag)
 	require.NotNil(t, digestValueEl)
 	hugeB64 := strings.Repeat("QUFBQUFBQUFBQUFBQUFBQQ==", 500000)
 	digestValueEl.SetText(hugeB64)
@@ -269,7 +268,7 @@ func TestInputValidation_LargeBase64DigestValue(t *testing.T) {
 func TestInputValidation_LargeBase64SignatureValue(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	sigValueEl := signed.FindElement("//" + SignatureValueTag)
+	sigValueEl := signed.FindElement("//" + signatureValueTag)
 	require.NotNil(t, sigValueEl)
 	hugeB64 := strings.Repeat("QUFBQUFBQUFBQUFBQUFBQQ==", 500000)
 	sigValueEl.SetText(hugeB64)
@@ -406,9 +405,9 @@ func TestInputValidation_NilVerifier_TrustedCerts(t *testing.T) {
 func TestInputValidation_MalformedSignature_EmptyAlgorithm(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	c14nEl := signed.FindElement("//" + CanonicalizationMethodTag)
+	c14nEl := signed.FindElement("//" + canonicalizationMethodTag)
 	require.NotNil(t, c14nEl)
-	c14nEl.CreateAttr(AlgorithmAttr, "")
+	c14nEl.CreateAttr(algorithmAttr, "")
 
 	var panicked bool
 	var panicVal interface{}
@@ -432,9 +431,9 @@ func TestInputValidation_MalformedSignature_EmptyAlgorithm(t *testing.T) {
 func TestInputValidation_MalformedSignature_EmptySignatureMethod(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	sigMethodEl := signed.FindElement("//" + SignatureMethodTag)
+	sigMethodEl := signed.FindElement("//" + signatureMethodTag)
 	require.NotNil(t, sigMethodEl)
-	sigMethodEl.CreateAttr(AlgorithmAttr, "")
+	sigMethodEl.CreateAttr(algorithmAttr, "")
 
 	_, err := verifier.Verify(signed)
 	require.Error(t, err, "Should reject empty SignatureMethod")
@@ -444,9 +443,9 @@ func TestInputValidation_MalformedSignature_EmptySignatureMethod(t *testing.T) {
 func TestInputValidation_MalformedSignature_EmptyDigestMethod(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	digestMethodEl := signed.FindElement("//" + DigestMethodTag)
+	digestMethodEl := signed.FindElement("//" + digestMethodTag)
 	require.NotNil(t, digestMethodEl)
-	digestMethodEl.CreateAttr(AlgorithmAttr, "")
+	digestMethodEl.CreateAttr(algorithmAttr, "")
 
 	_, err := verifier.Verify(signed)
 	require.Error(t, err, "Should reject empty DigestMethod")
@@ -582,9 +581,9 @@ func TestInputValidation_ReferenceURI_RegexDefinedButUnused(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
 	// Manually set Reference URI to something that fails the regex
-	refEl := signed.FindElement("//" + ReferenceTag)
+	refEl := signed.FindElement("//" + referenceTag)
 	require.NotNil(t, refEl)
-	refEl.CreateAttr(URIAttr, "javascript:alert(1)")
+	refEl.CreateAttr(uriAttr, "javascript:alert(1)")
 
 	_, err := verifier.Verify(signed)
 	require.Error(t, err)
@@ -598,14 +597,14 @@ func TestInputValidation_ReferenceURI_RegexDefinedButUnused(t *testing.T) {
 func TestInputValidation_TransformOrdering_EnvelopedNotFirst(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	transformsEl := signed.FindElement("//" + TransformsTag)
+	transformsEl := signed.FindElement("//" + transformsTag)
 	require.NotNil(t, transformsEl)
 
 	transforms := transformsEl.ChildElements()
 	require.GreaterOrEqual(t, len(transforms), 2)
 
-	firstAlgo := transforms[0].SelectAttrValue(AlgorithmAttr, "")
-	secondAlgo := transforms[1].SelectAttrValue(AlgorithmAttr, "")
+	firstAlgo := transforms[0].SelectAttrValue(algorithmAttr, "")
+	secondAlgo := transforms[1].SelectAttrValue(algorithmAttr, "")
 
 	t.Logf("Transform order: [0]=%s, [1]=%s", firstAlgo, secondAlgo)
 	require.Equal(t, string(EnvelopedSignatureAlgorithmId), firstAlgo,
@@ -635,20 +634,20 @@ func TestInputValidation_MultipleReferences(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
 	// Inject a second Reference into SignedInfo
-	signedInfoEl := signed.FindElement("//" + SignedInfoTag)
+	signedInfoEl := signed.FindElement("//" + signedInfoTag)
 	require.NotNil(t, signedInfoEl)
 
-	existingRef := signedInfoEl.FindElement(ReferenceTag)
+	existingRef := signedInfoEl.FindElement(referenceTag)
 	require.NotNil(t, existingRef)
 
 	newRef := existingRef.Copy()
-	newRef.CreateAttr(URIAttr, "#_injected")
+	newRef.CreateAttr(uriAttr, "#_injected")
 	signedInfoEl.AddChild(newRef)
 
 	// Count References
 	refCount := 0
 	for _, child := range signedInfoEl.ChildElements() {
-		if child.Tag == ReferenceTag {
+		if child.Tag == referenceTag {
 			refCount++
 		}
 	}
@@ -836,7 +835,7 @@ func TestInputValidation_MultipleSignaturesReferencingSameElement(t *testing.T) 
 	signed, verifier := makeSignedDoc(t)
 
 	// Add a second Signature (duplicate the first)
-	sigEl := signed.FindElement("//" + SignatureTag)
+	sigEl := signed.FindElement("//" + signatureTag)
 	require.NotNil(t, sigEl)
 	signed.AddChild(sigEl.Copy())
 
@@ -859,7 +858,7 @@ func TestInputValidation_RefURI_MismatchedID(t *testing.T) {
 func TestInputValidation_InvalidBase64_DigestValue(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	digestVal := signed.FindElement("//" + DigestValueTag)
+	digestVal := signed.FindElement("//" + digestValueTag)
 	require.NotNil(t, digestVal)
 	digestVal.SetText("!!!not-base64!!!")
 
@@ -885,7 +884,7 @@ func TestInputValidation_InvalidBase64_DigestValue(t *testing.T) {
 func TestInputValidation_InvalidBase64_SignatureValue(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	sigVal := signed.FindElement("//" + SignatureValueTag)
+	sigVal := signed.FindElement("//" + signatureValueTag)
 	require.NotNil(t, sigVal)
 	sigVal.SetText("!!!not-base64!!!")
 
@@ -911,7 +910,7 @@ func TestInputValidation_InvalidBase64_SignatureValue(t *testing.T) {
 func TestInputValidation_InvalidBase64_Certificate(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	certEl := signed.FindElement("//" + X509CertificateTag)
+	certEl := signed.FindElement("//" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText("!!!not-base64!!!")
 
@@ -969,13 +968,13 @@ func TestInputValidation_SHA1_AllowedWhenExplicit(t *testing.T) {
 func TestInputValidation_UnknownTransformAlgorithm(t *testing.T) {
 	signed, verifier := makeSignedDoc(t)
 
-	transformsEl := signed.FindElement("//" + TransformsTag)
+	transformsEl := signed.FindElement("//" + transformsTag)
 	require.NotNil(t, transformsEl)
 
 	for _, child := range transformsEl.ChildElements() {
-		algo := child.SelectAttrValue(AlgorithmAttr, "")
+		algo := child.SelectAttrValue(algorithmAttr, "")
 		if algo != string(EnvelopedSignatureAlgorithmId) {
-			child.CreateAttr(AlgorithmAttr, "http://example.com/unknown-transform")
+			child.CreateAttr(algorithmAttr, "http://example.com/unknown-transform")
 		}
 	}
 
@@ -1069,7 +1068,7 @@ func TestInputValidation_Verifier_NoKeyInfo_MultipleTrustedCerts(t *testing.T) {
 	_, cert2 := randomTestKeyAndCert()
 
 	// Remove KeyInfo
-	keyInfoEl := signed.FindElement("//" + KeyInfoTag)
+	keyInfoEl := signed.FindElement("//" + keyInfoTag)
 	if keyInfoEl != nil {
 		keyInfoEl.Parent().RemoveChild(keyInfoEl)
 	}
@@ -1202,9 +1201,9 @@ func TestInputValidation_EmptyRefURI(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the Reference URI is empty
-	refEl := signed.FindElement("//" + ReferenceTag)
+	refEl := signed.FindElement("//" + referenceTag)
 	require.NotNil(t, refEl)
-	uri := refEl.SelectAttrValue(URIAttr, "MISSING")
+	uri := refEl.SelectAttrValue(uriAttr, "MISSING")
 	require.Equal(t, "", uri, "URI should be empty when element has no ID")
 
 	verifier := &Verifier{TrustedCerts: []*x509.Certificate{cert}}

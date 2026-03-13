@@ -1,4 +1,4 @@
-package etreeutils
+package xmldsig
 
 import (
 	"errors"

@@ -6,33 +6,33 @@ import (
 )
 
 const (
-	DefaultPrefix = "ds"
-	Namespace     = "http://www.w3.org/2000/09/xmldsig#"
+	defaultSigPrefix = "ds"
+	namespace     = "http://www.w3.org/2000/09/xmldsig#"
 )
 
 // Tags
 const (
-	SignatureTag              = "Signature"
-	SignedInfoTag             = "SignedInfo"
-	CanonicalizationMethodTag = "CanonicalizationMethod"
-	SignatureMethodTag        = "SignatureMethod"
-	ReferenceTag              = "Reference"
-	TransformsTag             = "Transforms"
-	TransformTag              = "Transform"
-	DigestMethodTag           = "DigestMethod"
-	DigestValueTag            = "DigestValue"
-	SignatureValueTag         = "SignatureValue"
-	KeyInfoTag                = "KeyInfo"
-	X509DataTag               = "X509Data"
-	X509CertificateTag        = "X509Certificate"
-	InclusiveNamespacesTag    = "InclusiveNamespaces"
+	signatureTag              = "Signature"
+	signedInfoTag             = "SignedInfo"
+	canonicalizationMethodTag = "CanonicalizationMethod"
+	signatureMethodTag        = "SignatureMethod"
+	referenceTag              = "Reference"
+	transformsTag             = "Transforms"
+	transformTag              = "Transform"
+	digestMethodTag           = "DigestMethod"
+	digestValueTag            = "DigestValue"
+	signatureValueTag         = "SignatureValue"
+	keyInfoTag                = "KeyInfo"
+	x509DataTag               = "X509Data"
+	x509CertificateTag        = "X509Certificate"
+	inclusiveNamespacesTag    = "InclusiveNamespaces"
 )
 
 const (
-	AlgorithmAttr  = "Algorithm"
-	URIAttr        = "URI"
-	DefaultIdAttr  = "ID"
-	PrefixListAttr = "PrefixList"
+	algorithmAttr  = "Algorithm"
+	uriAttr        = "URI"
+	defaultIdAttr  = "ID"
+	prefixListAttr = "PrefixList"
 )
 
 type AlgorithmID string

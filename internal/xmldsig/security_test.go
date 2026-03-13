@@ -65,7 +65,7 @@ func newVerifier(certs ...*x509.Certificate) *Verifier {
 
 func findSig(el *etree.Element) *etree.Element {
 	for _, c := range el.ChildElements() {
-		if c.Tag == SignatureTag {
+		if c.Tag == signatureTag {
 			return c
 		}
 	}
@@ -78,7 +78,7 @@ func removeKeyInfoFromSig(el *etree.Element) {
 		return
 	}
 	for _, c := range sig.ChildElements() {
-		if c.Tag == KeyInfoTag {
+		if c.Tag == keyInfoTag {
 			sig.RemoveChild(c)
 			return
 		}
@@ -451,10 +451,10 @@ func TestAlgo_UnknownSignatureAlgorithm(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_r1")
 
-	sm := signed.FindElement("//" + SignatureMethodTag)
+	sm := signed.FindElement("//" + signatureMethodTag)
 	require.NotNil(t, sm)
 	for i, a := range sm.Attr {
-		if a.Key == AlgorithmAttr {
+		if a.Key == algorithmAttr {
 			sm.Attr[i].Value = "http://example.com/bogus-sig"
 			break
 		}
@@ -469,10 +469,10 @@ func TestAlgo_UnknownDigestAlgorithm(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_r1")
 
-	dm := signed.FindElement("//" + DigestMethodTag)
+	dm := signed.FindElement("//" + digestMethodTag)
 	require.NotNil(t, dm)
 	for i, a := range dm.Attr {
-		if a.Key == AlgorithmAttr {
+		if a.Key == algorithmAttr {
 			dm.Attr[i].Value = "http://example.com/bogus-digest"
 			break
 		}
@@ -487,7 +487,7 @@ func TestTamper_ModifiedSignatureValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_r1")
 
-	sv := signed.FindElement("//" + SignatureValueTag)
+	sv := signed.FindElement("//" + signatureValueTag)
 	require.NotNil(t, sv)
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sv.Text()))
 	require.NoError(t, err)
@@ -503,7 +503,7 @@ func TestTamper_ModifiedDigestValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_r1")
 
-	dv := signed.FindElement("//" + DigestValueTag)
+	dv := signed.FindElement("//" + digestValueTag)
 	require.NotNil(t, dv)
 	dv.SetText(base64.StdEncoding.EncodeToString([]byte("fakefakefakefakefakefakefakefake")))
 
@@ -626,7 +626,7 @@ func TestCert_SwappedKeyInfoCert(t *testing.T) {
 
 	signed := signDoc(t, key, cert, "_r1")
 
-	certEl := signed.FindElement("//" + X509CertificateTag)
+	certEl := signed.FindElement("//" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText(base64.StdEncoding.EncodeToString(attackerCert.Raw))
 
@@ -746,13 +746,13 @@ func TestCrossRef_PercentEncodedURI(t *testing.T) {
 	signed := signAndReparse(t, key, cert, el)
 
 	// Tamper: change the Reference URI to a percent-encoded equivalent.
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 
 	// Original URI is "#_id1"; replace with percent-encoded form.
 	// %5F = underscore, so "#%5Fid1" is semantically "#_id1" in URL terms.
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#%5Fid1"
 			break
 		}
@@ -784,10 +784,10 @@ func TestCrossRef_PercentEncodedAlpha(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#%41%42%43"
 			break
 		}
@@ -816,10 +816,10 @@ func TestCrossRef_XPointerURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#xpointer(/)"
 			break
 		}
@@ -844,10 +844,10 @@ func TestCrossRef_XPointerID(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#xpointer(id('_xp2'))"
 			break
 		}
@@ -873,9 +873,9 @@ func TestCrossRef_EmptyURI_ValidRoundTrip(t *testing.T) {
 	signed := signAndReparse(t, key, cert, el)
 
 	// Confirm the Reference URI is indeed empty.
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
-	assert.Equal(t, "", ref.SelectAttrValue(URIAttr, "MISSING"))
+	assert.Equal(t, "", ref.SelectAttrValue(uriAttr, "MISSING"))
 
 	result, err := newVerifier(cert).Verify(signed)
 	require.NoError(t, err)
@@ -918,10 +918,10 @@ func TestCrossRef_EmptyURI_MatchesElementWithID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Tamper: change Reference URI to empty.
-	ref := rawSigned.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := rawSigned.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = ""
 			break
 		}
@@ -956,10 +956,10 @@ func TestCrossRef_ExternalHTTPURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "http://evil.com/doc.xml"
 			break
 		}
@@ -983,10 +983,10 @@ func TestCrossRef_ExternalHTTPSURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "https://evil.com/doc.xml"
 			break
 		}
@@ -1010,10 +1010,10 @@ func TestCrossRef_FileURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "file:///etc/passwd"
 			break
 		}
@@ -1042,10 +1042,10 @@ func TestCrossRef_URIWithQueryString(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_id1?extra=param"
 			break
 		}
@@ -1068,10 +1068,10 @@ func TestCrossRef_URIWithAnchorSuffix(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_id1#extra"
 			break
 		}
@@ -1100,10 +1100,10 @@ func TestCrossRef_CaseSensitiveID(t *testing.T) {
 		el.CreateElement("Data").SetText("payload")
 		signed := signAndReparse(t, key, cert, el)
 
-		ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+		ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 		require.NotNil(t, ref)
 		for i, a := range ref.Attr {
-			if a.Key == URIAttr {
+			if a.Key == uriAttr {
 				ref.Attr[i].Value = "#_abc"
 				break
 			}
@@ -1123,10 +1123,10 @@ func TestCrossRef_CaseSensitiveID(t *testing.T) {
 		el.CreateElement("Data").SetText("payload")
 		signed := signAndReparse(t, key, cert, el)
 
-		ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+		ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 		require.NotNil(t, ref)
 		for i, a := range ref.Attr {
-			if a.Key == URIAttr {
+			if a.Key == uriAttr {
 				ref.Attr[i].Value = "#_ABC"
 				break
 			}
@@ -1167,10 +1167,10 @@ func TestCrossRef_URIWithLeadingSpace(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "# _id1"
 			break
 		}
@@ -1190,10 +1190,10 @@ func TestCrossRef_URIWithTrailingSpace(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_id1 "
 			break
 		}
@@ -1213,10 +1213,10 @@ func TestCrossRef_URIWithTab(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#\t_id1"
 			break
 		}
@@ -1236,10 +1236,10 @@ func TestCrossRef_URIWithNewline(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_id1\n"
 			break
 		}
@@ -1266,10 +1266,10 @@ func TestCrossRef_BareHashURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#"
 			break
 		}
@@ -1297,10 +1297,10 @@ func TestCrossRef_URIMismatch(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_completely_different"
 			break
 		}
@@ -1388,10 +1388,10 @@ func TestCrossRef_URIOnlyWhitespace(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#   "
 			break
 		}
@@ -1417,10 +1417,10 @@ func TestCrossRef_URIWithNullByte(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_id1\x00"
 			break
 		}
@@ -1529,10 +1529,10 @@ func TestCrossRef_RelativeURI(t *testing.T) {
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
 
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "doc.xml#_id"
 			break
 		}
@@ -1576,14 +1576,14 @@ func TestCrossRef_URITamperingInvalidatesSignature(t *testing.T) {
 	sig := findSig(rawSigned)
 	require.NotNil(t, sig)
 
-	ref := sig.FindElement("./" + SignedInfoTag + "/" + ReferenceTag)
+	ref := sig.FindElement("./" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
-	origURI := ref.SelectAttrValue(URIAttr, "")
+	origURI := ref.SelectAttrValue(uriAttr, "")
 	assert.Equal(t, "#_orig", origURI)
 
 	// Change URI to point to the evil element.
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_evil"
 			break
 		}
@@ -1624,12 +1624,12 @@ func TestCrossRef_DigestSwapWithDifferentURI(t *testing.T) {
 	signedB := signAndReparse(t, key, cert, elB)
 
 	// Extract digest from B.
-	dvB := signedB.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + DigestValueTag)
+	dvB := signedB.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + digestValueTag)
 	require.NotNil(t, dvB)
 	digestB := dvB.Text()
 
 	// Swap B's digest into A's SignedInfo.
-	dvA := signedA.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + DigestValueTag)
+	dvA := signedA.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + digestValueTag)
 	require.NotNil(t, dvA)
 	dvA.SetText(digestB)
 
@@ -1721,10 +1721,10 @@ func TestCrossRef_UnicodeNormalization(t *testing.T) {
 	signed := signAndReparse(t, key, cert, el)
 
 	// Tamper: change Reference URI to use decomposed é (e + combining accent).
-	ref := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
 	for i, a := range ref.Attr {
-		if a.Key == URIAttr {
+		if a.Key == uriAttr {
 			ref.Attr[i].Value = "#_cafe\u0301" // decomposed form
 			break
 		}
@@ -1755,9 +1755,9 @@ func TestCrossRef_IDContainingHash(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the Reference URI is "##weird".
-	ref := rawSigned.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := rawSigned.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
-	assert.Equal(t, "##weird", ref.SelectAttrValue(URIAttr, ""))
+	assert.Equal(t, "##weird", ref.SelectAttrValue(uriAttr, ""))
 
 	signed := reparse(t, rawSigned)
 	result, err := newVerifier(cert).Verify(signed)
@@ -1787,7 +1787,7 @@ func TestCrossRef_VerifyResultIsCanonicalElement(t *testing.T) {
 
 	// The returned element should not contain the Signature (it was removed
 	// by the enveloped-signature transform).
-	sigInResult := result.Element.FindElement("./" + SignatureTag)
+	sigInResult := result.Element.FindElement("./" + signatureTag)
 	assert.Nil(t, sigInResult, "verified element should not contain the Signature")
 
 	// Content must match.
@@ -1797,7 +1797,7 @@ func TestCrossRef_VerifyResultIsCanonicalElement(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test: Crafted XML with Signature Not in dsig Namespace
+// Test: Crafted XML with Signature Not in dsig namespace
 // ---------------------------------------------------------------------------
 
 func TestCrossRef_FakeSignatureWrongNamespace(t *testing.T) {
@@ -1842,9 +1842,9 @@ func TestCrossRef_EmptyIDAttribute(t *testing.T) {
 	require.NoError(t, err)
 
 	// The Reference URI should be "" because SelectAttrValue returns "".
-	ref := rawSigned.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag)
+	ref := rawSigned.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag)
 	require.NotNil(t, ref)
-	assert.Equal(t, "", ref.SelectAttrValue(URIAttr, "MISSING"))
+	assert.Equal(t, "", ref.SelectAttrValue(uriAttr, "MISSING"))
 
 	signed := reparse(t, rawSigned)
 	result, err := newVerifier(cert).Verify(signed)
@@ -1925,12 +1925,12 @@ func TestCrossRef_SignedInfoCoversDigestMethod(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_dm")
 
-	dm := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + DigestMethodTag)
+	dm := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + digestMethodTag)
 	require.NotNil(t, dm)
 
 	// Change digest algorithm to SHA-384.
 	for i, a := range dm.Attr {
-		if a.Key == AlgorithmAttr {
+		if a.Key == algorithmAttr {
 			dm.Attr[i].Value = "http://www.w3.org/2001/04/xmldsig-more#sha384"
 			break
 		}
@@ -1948,7 +1948,7 @@ func TestCrossRef_SignedInfoCoversTransforms(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_tr")
 
-	transforms := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + TransformsTag)
+	transforms := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + transformsTag)
 	require.NotNil(t, transforms)
 
 	// Remove the first Transform (enveloped-signature).
@@ -1975,13 +1975,13 @@ func TestCrossRef_ForgedSignatureWithCorrectDigest(t *testing.T) {
 	signed := signDoc(t, key, cert, "_forge")
 
 	// Extract the correct DigestValue.
-	dv := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + DigestValueTag)
+	dv := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + digestValueTag)
 	require.NotNil(t, dv)
 	correctDigest := dv.Text()
 	require.NotEmpty(t, correctDigest)
 
 	// Tamper: corrupt the SignatureValue but leave DigestValue correct.
-	sv := signed.FindElement("./" + SignatureTag + "/" + SignatureValueTag)
+	sv := signed.FindElement("./" + signatureTag + "/" + signatureValueTag)
 	require.NotNil(t, sv)
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sv.Text()))
 	require.NoError(t, err)
@@ -1994,7 +1994,7 @@ func TestCrossRef_ForgedSignatureWithCorrectDigest(t *testing.T) {
 		"forged SignatureValue must not verify; got: %v", err)
 }
 
-// === Namespace Confusion Tests ===
+// === namespace Confusion Tests ===
 
 func TestNamespaceConfusion(t *testing.T) {
 
@@ -2094,7 +2094,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		v2 := &Verifier{TrustedCerts: []*x509.Certificate{cert2}}
 		_, err = v2.Verify(signed2)
 		// The verifier resolves ds → http://evil.example.com/not-dsig,
-		// which ≠ Namespace, so the Signature is not found.
+		// which ≠ namespace, so the Signature is not found.
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrMissingSignature),
 			"expected ErrMissingSignature when ds prefix is rebound to evil URI, got: %v", err)
@@ -2128,7 +2128,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		// = dsig namespace. But it is NOT a direct child of Response,
 		// so the verifier must not be confused.
 		fakeContainer := signed.CreateElement("FakeContainer")
-		fakeContainer.CreateAttr("xmlns", Namespace)
+		fakeContainer.CreateAttr("xmlns", namespace)
 		fakeSig := fakeContainer.CreateElement("Signature")
 		// Space is empty (default namespace).
 		fakeSig.Space = ""
@@ -2158,7 +2158,7 @@ func TestNamespaceConfusion(t *testing.T) {
 	t.Run("AlternativePrefixSignature", func(t *testing.T) {
 		// Verify that the library correctly handles non-standard prefixes.
 		// Sign with prefix "mysig" instead of "ds". The verifier must find
-		// the Signature by resolving "mysig" → Namespace URI, not by
+		// the Signature by resolving "mysig" → namespace URI, not by
 		// looking for prefix "ds".
 
 		signed, _, cert := signDocWithPrefix(t, "mysig", nil)
@@ -2220,7 +2220,7 @@ func TestNamespaceConfusion(t *testing.T) {
 	})
 
 	// ----------------------------------------------------------------
-	// 5. Namespace URI in attribute values (not declarations)
+	// 5. namespace URI in attribute values (not declarations)
 	// ----------------------------------------------------------------
 	t.Run("NamespaceInAttributeValues", func(t *testing.T) {
 		// A namespace URI appearing in an attribute *value* (not an xmlns
@@ -2235,7 +2235,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		el := &etree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_attrval")
 		// Put the dsig namespace URI in a plain attribute value.
-		el.CreateAttr("SchemaLocation", Namespace)
+		el.CreateAttr("SchemaLocation", namespace)
 		el.CreateElement("Data").SetText("with-ns-in-attr")
 
 		signed, err := signer.SignEnveloped(el)
@@ -2427,7 +2427,7 @@ func TestNamespaceConfusion_PrefixRebindOnSignedInfoChildren(t *testing.T) {
 	require.NotNil(t, sig)
 	var signedInfo *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignedInfoTag {
+		if c.Tag == signedInfoTag {
 			signedInfo = c
 			break
 		}
@@ -2510,7 +2510,7 @@ func TestNamespaceConfusion_MultipleDsigPrefixesOnSameElement(t *testing.T) {
 	el := &etree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_multi_dsig")
 	// Declare the dsig namespace under a second prefix on the root.
-	el.CreateAttr("xmlns:dsig2", Namespace)
+	el.CreateAttr("xmlns:dsig2", namespace)
 	el.CreateElement("Data").SetText("multi-dsig")
 
 	signed, err := signer.SignEnveloped(el)
@@ -2988,7 +2988,7 @@ func TestCertEdge_MalformedKeyInfoCert(t *testing.T) {
 	signed := signDoc(t, key, cert, "_malformed")
 
 	// Replace the X509Certificate text with garbage.
-	certEl := signed.FindElement("//" + X509CertificateTag)
+	certEl := signed.FindElement("//" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText(base64.StdEncoding.EncodeToString([]byte("this-is-not-a-certificate")))
 
@@ -3008,7 +3008,7 @@ func TestCertEdge_InvalidBase64KeyInfoCert(t *testing.T) {
 	signed := signDoc(t, key, cert, "_badbase64")
 
 	// Replace the X509Certificate text with invalid base64.
-	certEl := signed.FindElement("//" + X509CertificateTag)
+	certEl := signed.FindElement("//" + x509CertificateTag)
 	require.NotNil(t, certEl)
 	certEl.SetText("!!!not-base64!!!")
 

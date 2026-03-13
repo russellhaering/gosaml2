@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,7 +220,7 @@ func TestMapPathAndRemove(t *testing.T) {
 	err := doc.ReadFromString(`<X><Y/><Y><RemoveMe xmlns="x"/></Y></X>`)
 	require.NoError(t, err)
 
-	el, err := etreeutils.NSFindOne(doc.Root(), "x", "RemoveMe")
+	el, err := NSFindOne(doc.Root(), "x", "RemoveMe")
 	require.NoError(t, err)
 	require.NotNil(t, el)
 
@@ -229,7 +228,7 @@ func TestMapPathAndRemove(t *testing.T) {
 	removed := removeElementAtPath(doc.Root(), path)
 	require.True(t, removed)
 
-	el, err = etreeutils.NSFindOne(doc.Root(), "x", "RemoveMe")
+	el, err = NSFindOne(doc.Root(), "x", "RemoveMe")
 	require.NoError(t, err)
 	require.Nil(t, el)
 }

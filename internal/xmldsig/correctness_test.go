@@ -177,10 +177,10 @@ func allCanonicalizers() []canonEntry {
 func TestMalformed_MissingSignedInfo(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	si := findDescendantByTag(sig, SignedInfoTag)
+	si := findDescendantByTag(sig, signedInfoTag)
 	require.NotNil(t, si)
 	sig.RemoveChild(si)
 
@@ -191,10 +191,10 @@ func TestMalformed_MissingSignedInfo(t *testing.T) {
 func TestMalformed_MissingSignatureValue(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	sv := findDescendantByTag(sig, SignatureValueTag)
+	sv := findDescendantByTag(sig, signatureValueTag)
 	require.NotNil(t, sv)
 	sig.RemoveChild(sv)
 
@@ -205,10 +205,10 @@ func TestMalformed_MissingSignatureValue(t *testing.T) {
 func TestMalformed_DuplicateSignedInfo(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	si := findDescendantByTag(sig, SignedInfoTag)
+	si := findDescendantByTag(sig, signedInfoTag)
 	require.NotNil(t, si)
 
 	// Add a duplicate copy of SignedInfo
@@ -221,10 +221,10 @@ func TestMalformed_DuplicateSignedInfo(t *testing.T) {
 func TestMalformed_DuplicateKeyInfo(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	ki := findDescendantByTag(sig, KeyInfoTag)
+	ki := findDescendantByTag(sig, keyInfoTag)
 	require.NotNil(t, ki)
 
 	// Add a duplicate copy of KeyInfo
@@ -237,10 +237,10 @@ func TestMalformed_DuplicateKeyInfo(t *testing.T) {
 func TestMalformed_MissingCanonicalizationMethod(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	si := findDescendantByTag(signed, SignedInfoTag)
+	si := findDescendantByTag(signed, signedInfoTag)
 	require.NotNil(t, si)
 
-	c14n := findDescendantByTag(si, CanonicalizationMethodTag)
+	c14n := findDescendantByTag(si, canonicalizationMethodTag)
 	require.NotNil(t, c14n)
 	si.RemoveChild(c14n)
 
@@ -251,10 +251,10 @@ func TestMalformed_MissingCanonicalizationMethod(t *testing.T) {
 func TestMalformed_MissingSignatureMethod(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	si := findDescendantByTag(signed, SignedInfoTag)
+	si := findDescendantByTag(signed, signedInfoTag)
 	require.NotNil(t, si)
 
-	sm := findDescendantByTag(si, SignatureMethodTag)
+	sm := findDescendantByTag(si, signatureMethodTag)
 	require.NotNil(t, sm)
 	si.RemoveChild(sm)
 
@@ -265,10 +265,10 @@ func TestMalformed_MissingSignatureMethod(t *testing.T) {
 func TestMalformed_MissingReference(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	si := findDescendantByTag(signed, SignedInfoTag)
+	si := findDescendantByTag(signed, signedInfoTag)
 	require.NotNil(t, si)
 
-	ref := findDescendantByTag(si, ReferenceTag)
+	ref := findDescendantByTag(si, referenceTag)
 	require.NotNil(t, ref)
 	si.RemoveChild(ref)
 
@@ -279,10 +279,10 @@ func TestMalformed_MissingReference(t *testing.T) {
 func TestMalformed_MissingDigestMethod(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	ref := findDescendantByTag(signed, ReferenceTag)
+	ref := findDescendantByTag(signed, referenceTag)
 	require.NotNil(t, ref)
 
-	dm := findDescendantByTag(ref, DigestMethodTag)
+	dm := findDescendantByTag(ref, digestMethodTag)
 	require.NotNil(t, dm)
 	ref.RemoveChild(dm)
 
@@ -293,10 +293,10 @@ func TestMalformed_MissingDigestMethod(t *testing.T) {
 func TestMalformed_MissingDigestValue(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	ref := findDescendantByTag(signed, ReferenceTag)
+	ref := findDescendantByTag(signed, referenceTag)
 	require.NotNil(t, ref)
 
-	dv := findDescendantByTag(ref, DigestValueTag)
+	dv := findDescendantByTag(ref, digestValueTag)
 	require.NotNil(t, dv)
 	ref.RemoveChild(dv)
 
@@ -307,10 +307,10 @@ func TestMalformed_MissingDigestValue(t *testing.T) {
 func TestMalformed_InvalidBase64SignatureValue(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	sv := findDescendantByTag(sig, SignatureValueTag)
+	sv := findDescendantByTag(sig, signatureValueTag)
 	require.NotNil(t, sv)
 	sv.SetText("!!!not-base64!!!")
 
@@ -321,10 +321,10 @@ func TestMalformed_InvalidBase64SignatureValue(t *testing.T) {
 func TestMalformed_EmptySignatureValue(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	sv := findDescendantByTag(sig, SignatureValueTag)
+	sv := findDescendantByTag(sig, signatureValueTag)
 	require.NotNil(t, sv)
 	sv.SetText("")
 
@@ -335,10 +335,10 @@ func TestMalformed_EmptySignatureValue(t *testing.T) {
 func TestMalformed_WhitespaceInBase64(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 
-	sv := findDescendantByTag(sig, SignatureValueTag)
+	sv := findDescendantByTag(sig, signatureValueTag)
 	require.NotNil(t, sv)
 
 	// Insert whitespace/newlines into the existing base64 text
@@ -363,11 +363,11 @@ func TestMalformed_WhitespaceInBase64(t *testing.T) {
 func TestMalformed_InvalidCanonicalizationAlgorithm(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	c14n := findDescendantByTag(signed, CanonicalizationMethodTag)
+	c14n := findDescendantByTag(signed, canonicalizationMethodTag)
 	require.NotNil(t, c14n)
 
 	// Replace the Algorithm attribute with a bogus URI
-	algoAttr := c14n.SelectAttr(AlgorithmAttr)
+	algoAttr := c14n.SelectAttr(algorithmAttr)
 	require.NotNil(t, algoAttr)
 	algoAttr.Value = "http://example.com/fake"
 
@@ -378,7 +378,7 @@ func TestMalformed_InvalidCanonicalizationAlgorithm(t *testing.T) {
 func TestMalformed_MalformedCertificateBase64(t *testing.T) {
 	signed, _, verifier := signAndPrepare(t)
 
-	x509Cert := findDescendantByTag(signed, X509CertificateTag)
+	x509Cert := findDescendantByTag(signed, x509CertificateTag)
 	require.NotNil(t, x509Cert)
 	x509Cert.SetText("dGhpcyBpcyBub3QgYSBjZXJ0aWZpY2F0ZQ==") // valid base64, garbage DER
 
@@ -406,9 +406,9 @@ func TestEdge_NoIDAttribute(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that Reference URI is empty
-	ref := findDescendantByTag(signed, ReferenceTag)
+	ref := findDescendantByTag(signed, referenceTag)
 	require.NotNil(t, ref)
-	uriAttr := ref.SelectAttr(URIAttr)
+	uriAttr := ref.SelectAttr(uriAttr)
 	require.NotNil(t, uriAttr)
 	require.Equal(t, "", uriAttr.Value)
 
@@ -469,15 +469,15 @@ func TestEdge_CustomPrefixOnSigner(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that the Signature element and its children use the custom prefix
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
 	require.Equal(t, "mysig", sig.Space)
 
-	si := findDescendantByTag(sig, SignedInfoTag)
+	si := findDescendantByTag(sig, signedInfoTag)
 	require.NotNil(t, si)
 	require.Equal(t, "mysig", si.Space)
 
-	sv := findDescendantByTag(sig, SignatureValueTag)
+	sv := findDescendantByTag(sig, signatureValueTag)
 	require.NotNil(t, sv)
 	require.Equal(t, "mysig", sv.Space)
 
@@ -491,7 +491,7 @@ func TestEdge_CustomPrefixOnSigner(t *testing.T) {
 
 func TestEdge_EmptyPrefixOnSigner(t *testing.T) {
 	// Prefix defaults to "ds" when set to "". The prefix() method returns
-	// DefaultPrefix ("ds") when Prefix is empty.
+	// defaultSigPrefix ("ds") when Prefix is empty.
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{
@@ -505,9 +505,9 @@ func TestEdge_EmptyPrefixOnSigner(t *testing.T) {
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
 
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
-	require.Equal(t, DefaultPrefix, sig.Space, "empty Prefix should default to DefaultPrefix")
+	require.Equal(t, defaultSigPrefix, sig.Space, "empty Prefix should default to defaultSigPrefix")
 
 	verifier := &Verifier{
 		TrustedCerts: []*x509.Certificate{cert},
@@ -531,10 +531,10 @@ func TestEdge_MultipleCertsInKeyInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that X509Data contains 2 X509Certificate elements
-	x509Data := findDescendantByTag(signed, X509DataTag)
+	x509Data := findDescendantByTag(signed, x509DataTag)
 	require.NotNil(t, x509Data)
 
-	certElements := x509Data.SelectElements(X509CertificateTag)
+	certElements := x509Data.SelectElements(x509CertificateTag)
 	require.Len(t, certElements, 2, "should embed both certificates")
 
 	// Verify should work; the first cert is the signing cert
@@ -592,11 +592,11 @@ func TestEdge_DeeplyNestedDocument(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that the signed document has the Signature structure
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
-	require.NotNil(t, findDescendantByTag(sig, SignedInfoTag))
-	require.NotNil(t, findDescendantByTag(sig, SignatureValueTag))
-	require.NotNil(t, findDescendantByTag(sig, KeyInfoTag))
+	require.NotNil(t, findDescendantByTag(sig, signedInfoTag))
+	require.NotNil(t, findDescendantByTag(sig, signatureValueTag))
+	require.NotNil(t, findDescendantByTag(sig, keyInfoTag))
 
 	verifier := &Verifier{
 		TrustedCerts: []*x509.Certificate{cert},
@@ -736,10 +736,10 @@ func TestEdge_XMLComments(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify signature structure exists and is well-formed
-	sig := findDescendantByTag(signed, SignatureTag)
+	sig := findDescendantByTag(signed, signatureTag)
 	require.NotNil(t, sig)
-	require.NotNil(t, findDescendantByTag(sig, SignedInfoTag))
-	require.NotNil(t, findDescendantByTag(sig, SignatureValueTag))
+	require.NotNil(t, findDescendantByTag(sig, signedInfoTag))
+	require.NotNil(t, findDescendantByTag(sig, signatureValueTag))
 
 	verifier := &Verifier{
 		TrustedCerts: []*x509.Certificate{cert},
@@ -1436,10 +1436,10 @@ func TestPropertyC14NMethodMismatch(t *testing.T) {
 
 			// The CanonicalizationMethod in SignedInfo must match the
 			// algorithm that was requested.
-			cmEl := signed.FindElement("//" + CanonicalizationMethodTag)
+			cmEl := signed.FindElement("//" + canonicalizationMethodTag)
 			require.NotNil(t, cmEl)
 			assert.Equal(t, tc.C.Algorithm().String(),
-				cmEl.SelectAttrValue(AlgorithmAttr, ""),
+				cmEl.SelectAttrValue(algorithmAttr, ""),
 				"CanonicalizationMethod must record the signing algorithm")
 
 			// Tamper: swap the CanonicalizationMethod to every other valid
@@ -1451,9 +1451,9 @@ func TestPropertyC14NMethodMismatch(t *testing.T) {
 				}
 				t.Run("swapTo_"+other.Name, func(t *testing.T) {
 					copy := reparse(t, signed) // fresh copy
-					cm := copy.FindElement("//" + CanonicalizationMethodTag)
+					cm := copy.FindElement("//" + canonicalizationMethodTag)
 					require.NotNil(t, cm)
-					cm.CreateAttr(AlgorithmAttr, other.C.Algorithm().String())
+					cm.CreateAttr(algorithmAttr, other.C.Algorithm().String())
 					// Re-serialize so the verifier sees the tampered XML.
 					tampered := reparse(t, copy)
 					_, err := verifier.Verify(tampered)
@@ -1522,7 +1522,7 @@ func TestPropertyEnvelopedSignatureRemoval(t *testing.T) {
 			signed, _, cert := signReparse(t, el, tc.C)
 
 			// Signature child must exist in the signed tree.
-			require.NotNil(t, signed.FindElement("//"+SignatureTag),
+			require.NotNil(t, signed.FindElement("//"+signatureTag),
 				"signed element must contain a Signature")
 
 			verifier := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
@@ -1533,10 +1533,10 @@ func TestPropertyEnvelopedSignatureRemoval(t *testing.T) {
 
 			// Verified element must NOT contain any Signature.
 			for _, child := range result.Element.ChildElements() {
-				assert.NotEqual(t, SignatureTag, child.Tag,
+				assert.NotEqual(t, signatureTag, child.Tag,
 					"verified element must not contain Signature")
 			}
-			assert.Nil(t, result.Element.FindElement("//"+SignatureTag),
+			assert.Nil(t, result.Element.FindElement("//"+signatureTag),
 				"deep search must not find Signature in verified result")
 		})
 	}

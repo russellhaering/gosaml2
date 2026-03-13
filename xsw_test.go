@@ -685,7 +685,7 @@ func TestXSW10_MissingInResponseToWithTracker(t *testing.T) {
 // ---------- Test: XSW11 - Replace assertion content between signature verification and unmarshal ----------
 // This tests the critical question: is the signedResponseEl (from Verify) used directly?
 // In the signed-Response path, after validateElementSignature returns signedResponseEl,
-// the code uses THAT element (not the original). Since goxmldsig Verify reconstructs
+// the code uses THAT element (not the original). Since xmldsig Verify reconstructs
 // the element from canonical bytes, there's no window for tampering.
 // We verify this by ensuring the signed content is what gets unmarshaled.
 

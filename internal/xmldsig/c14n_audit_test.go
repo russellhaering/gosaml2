@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -308,11 +307,11 @@ func TestC14NAudit_NSDetachSkipsEmptyDefaultNS(t *testing.T) {
 	require.NotNil(t, inner)
 
 	// Build context for Inner
-	parentCtx, err := etreeutils.NSBuildParentContext(inner)
+	parentCtx, err := NSBuildParentContext(inner)
 	require.NoError(t, err)
 
 	// Detach Inner
-	detached, err := etreeutils.NSDetach(parentCtx, inner)
+	detached, err := NSDetach(parentCtx, inner)
 	require.NoError(t, err)
 
 	// Serialize the detached element
@@ -400,7 +399,7 @@ func TestC14NAudit_AttributeSortingResolvePrefixFallback(t *testing.T) {
 	}
 
 	// Sort using our sorter
-	sorted := make(etreeutils.SortedAttrs, len(el.Attr))
+	sorted := make(SortedAttrs, len(el.Attr))
 	copy(sorted, el.Attr)
 	// manually check Less
 	// Without namespace declarations, resolvePrefix returns the prefix itself.
@@ -599,12 +598,12 @@ func TestC14NAudit_VerifyResultIsFromCanonicalBytes(t *testing.T) {
 		"verified result should be from canonical bytes without the injected comment")
 
 	// The Signature element should also be absent (enveloped-signature transform)
-	assert.Nil(t, result.Element.FindElement("./"+SignatureTag),
+	assert.Nil(t, result.Element.FindElement("./"+signatureTag),
 		"verified result should not contain the Signature element")
 }
 
 // ---------------------------------------------------------------------------
-// 15. Namespace re-declaration attack: same prefix, different URI
+// 15. namespace re-declaration attack: same prefix, different URI
 //
 // An attacker adds a namespace re-declaration that changes the meaning
 // of elements for a consumer that processes the original tree, while
@@ -919,13 +918,13 @@ func TestC14NAudit_ChangingC14NTransformAfterSigning(t *testing.T) {
 	signed = reparse(t, signed)
 
 	// Tamper: change the C14N transform in Reference from C14N11 to exc-c14n
-	transforms := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + TransformsTag)
+	transforms := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + transformsTag)
 	require.NotNil(t, transforms)
 
 	for _, child := range transforms.ChildElements() {
-		if child.Tag == TransformTag {
+		if child.Tag == transformTag {
 			for i, attr := range child.Attr {
-				if attr.Key == AlgorithmAttr && attr.Value == CanonicalXML11AlgorithmId.String() {
+				if attr.Key == algorithmAttr && attr.Value == CanonicalXML11AlgorithmId.String() {
 					child.Attr[i].Value = CanonicalXML10ExclusiveAlgorithmId.String()
 				}
 			}
@@ -1119,12 +1118,12 @@ func TestC14NAudit_SignVerifyWithPrefixList(t *testing.T) {
 	signed = reparse(t, signed)
 
 	// Verify that the Transform element does NOT contain InclusiveNamespaces
-	transforms := signed.FindElement("./" + SignatureTag + "/" + SignedInfoTag + "/" + ReferenceTag + "/" + TransformsTag)
+	transforms := signed.FindElement("./" + signatureTag + "/" + signedInfoTag + "/" + referenceTag + "/" + transformsTag)
 	require.NotNil(t, transforms)
 	var foundInclusiveNS bool
 	for _, child := range transforms.ChildElements() {
 		for _, grandchild := range child.ChildElements() {
-			if grandchild.Tag == InclusiveNamespacesTag {
+			if grandchild.Tag == inclusiveNamespacesTag {
 				foundInclusiveNS = true
 			}
 		}

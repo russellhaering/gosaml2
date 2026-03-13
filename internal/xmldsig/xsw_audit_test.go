@@ -16,7 +16,7 @@ import (
 // ============================================================================
 // XSW Audit Test Suite
 //
-// These tests probe goxmldsig v2 for XML Signature Wrapping (XSW)
+// These tests probe the xmldsig implementation for XML Signature Wrapping (XSW)
 // vulnerabilities. Each test creates a legitimately signed document, then
 // modifies it to attempt an attack, and checks whether Verify correctly
 // rejects or accepts the result.
@@ -63,7 +63,7 @@ func xswSignDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id stri
 
 func xswFindSig(el *etree.Element) *etree.Element {
 	for _, c := range el.ChildElements() {
-		if c.Tag == SignatureTag {
+		if c.Tag == signatureTag {
 			return c
 		}
 	}
@@ -158,7 +158,7 @@ func TestXSW_Audit_EmptyURI_WrapInOuterElement(t *testing.T) {
 // signed one inside a <Response>. The signature on the Response is valid
 // but the SP reads the first (evil) assertion.
 //
-// In goxmldsig, Verify is called on the signed element directly. This tests
+// Here, Verify is called on the signed element directly. This tests
 // whether the library returns the *verified* content or the *original tree*.
 // ============================================================================
 
@@ -332,10 +332,10 @@ func TestXSW_Audit_TwoSignaturesDifferentRefs(t *testing.T) {
 	sig2 := sig.Copy()
 
 	// Change the URI in the cloned sig to empty.
-	ref := sig2.FindElement(".//" + ReferenceTag)
+	ref := sig2.FindElement(".//" + referenceTag)
 	if ref != nil {
 		for i, a := range ref.Attr {
-			if a.Key == URIAttr {
+			if a.Key == uriAttr {
 				ref.Attr[i].Value = ""
 				break
 			}
@@ -378,7 +378,7 @@ func TestXSW_Audit_ReturnedElementIsCanonical(t *testing.T) {
 
 	// The returned element should NOT have the Signature child
 	// (the enveloped sig transform removes it).
-	sigInResult := result.Element.FindElement(".//" + SignatureTag)
+	sigInResult := result.Element.FindElement(".//" + signatureTag)
 	assert.Nil(t, sigInResult, "returned element should not contain the Signature")
 }
 
@@ -693,7 +693,7 @@ func TestXSW_Audit_VerifyReturnsVerifiedContent(t *testing.T) {
 		"returned element must be reconstructed, not the input pointer")
 
 	// Verify the Signature element is stripped from the result.
-	assert.Nil(t, result.Element.FindElement(".//"+SignatureTag),
+	assert.Nil(t, result.Element.FindElement(".//"+signatureTag),
 		"Signature should be stripped from returned element")
 }
 
@@ -720,7 +720,7 @@ func TestXSW_Audit_SignedInfoCanonicalReparsing(t *testing.T) {
 	// caught at step 3 (signature verification fails).
 
 	// Tamper with the DigestValue in SignedInfo.
-	dv := signed.FindElement(".//" + SignedInfoTag + "//" + DigestValueTag)
+	dv := signed.FindElement(".//" + signedInfoTag + "//" + digestValueTag)
 	require.NotNil(t, dv)
 	dv.SetText(base64.StdEncoding.EncodeToString([]byte("fakedigest")))
 	signed = xswReparse(t, signed)
@@ -747,7 +747,7 @@ func TestXSW_Audit_ShapeValidation_NoSignedInfo(t *testing.T) {
 
 	// Remove SignedInfo.
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignedInfoTag {
+		if c.Tag == signedInfoTag {
 			sig.RemoveChild(c)
 			break
 		}
@@ -769,7 +769,7 @@ func TestXSW_Audit_ShapeValidation_DuplicateSignedInfo(t *testing.T) {
 	// Find SignedInfo and duplicate it.
 	var si *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == SignedInfoTag {
+		if c.Tag == signedInfoTag {
 			si = c
 			break
 		}
@@ -793,7 +793,7 @@ func TestXSW_Audit_ShapeValidation_DuplicateKeyInfo(t *testing.T) {
 	// Find KeyInfo and duplicate it.
 	var ki *etree.Element
 	for _, c := range sig.ChildElements() {
-		if c.Tag == KeyInfoTag {
+		if c.Tag == keyInfoTag {
 			ki = c
 			break
 		}
@@ -941,7 +941,7 @@ func TestXSW_Audit_CommentInjection_ReturnedElementIsClean(t *testing.T) {
 //
 // In SAML, the Response may be signed while individual Assertions are not.
 // gosaml2 issue #219 reports that "Assertion signature is not verified when
-// the response is signed". This library (goxmldsig) returns verified content,
+// the response is signed". This library returns verified content,
 // so the SP should use ONLY the returned element.
 //
 // This test verifies that the returned element from a signed Response contains
@@ -1101,13 +1101,13 @@ func TestXSW_Audit_ExcC14N_PrefixListTamper(t *testing.T) {
 
 	// Tamper: modify the PrefixList in the transform.
 	// Find the exc-c14n Transform and add a PrefixList.
-	transforms := signed.FindElements(".//" + TransformTag)
+	transforms := signed.FindElements(".//" + transformTag)
 	for _, tr := range transforms {
-		alg := tr.SelectAttrValue(AlgorithmAttr, "")
+		alg := tr.SelectAttrValue(algorithmAttr, "")
 		if alg == string(CanonicalXML10ExclusiveAlgorithmId) {
-			incNS := tr.CreateElement(InclusiveNamespacesTag)
+			incNS := tr.CreateElement(inclusiveNamespacesTag)
 			incNS.CreateAttr("xmlns", "http://www.w3.org/2001/10/xml-exc-c14n#")
-			incNS.CreateAttr(PrefixListAttr, "saml")
+			incNS.CreateAttr(prefixListAttr, "saml")
 			break
 		}
 	}
@@ -1167,7 +1167,7 @@ func TestXSW_Audit_Summary(t *testing.T) {
 	t.Log("  The SP MUST use result.Element from Verify, not the original XML tree.")
 	t.Log("  If the SP re-parses the original XML after verification, XSW is possible.")
 	t.Log("")
-	t.Log("OVERALL: goxmldsig v2 has strong XSW protections. No exploitable XSW")
+	t.Log("OVERALL: xmldsig has strong XSW protections. No exploitable XSW")
 	t.Log("vulnerabilities found. The key safety property is that Verify() returns")
 	t.Log("a reconstructed element from verified canonical bytes, preventing all")
 	t.Log("classic XSW attack variants. SPs MUST use result.Element.")

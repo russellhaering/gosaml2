@@ -36,7 +36,6 @@ import (
 	"github.com/beevik/etree"
 	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,7 +132,7 @@ func makeValidResponse(sp *ServiceProvider) string {
 }
 
 // signAssertionOnly signs just the assertion element(s) within a response,
-// leaving the response envelope unsigned. Uses etreeutils.NSDetach to ensure
+// leaving the response envelope unsigned. Uses dsig.NSDetach to ensure
 // the namespace context during signing matches what the verifier will see.
 func signAssertionOnly(t *testing.T, responseXML string, sp *ServiceProvider) string {
 	t.Helper()
@@ -156,12 +155,12 @@ func signAssertionOnly(t *testing.T, responseXML string, sp *ServiceProvider) st
 	// signing exactly matches what the verifier will produce during
 	// verification. This is critical because NSDetach inherits namespace
 	// declarations from ancestors that Copy() does not.
-	err = etreeutils.NSFindIterate(root, SAMLAssertionNamespace, AssertionTag, func(ctx etreeutils.NSContext, assertionEl *etree.Element) error {
+	err = dsig.NSFindIterate(root, SAMLAssertionNamespace, AssertionTag, func(ctx dsig.NSContext, assertionEl *etree.Element) error {
 		if assertionEl.Parent() != root {
 			return nil
 		}
 
-		detached, err := etreeutils.NSDetach(ctx, assertionEl)
+		detached, err := dsig.NSDetach(ctx, assertionEl)
 		if err != nil {
 			return err
 		}

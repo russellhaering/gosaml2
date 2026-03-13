@@ -1,4 +1,4 @@
-package etreeutils
+package xmldsig
 
 import "github.com/beevik/etree"
 
@@ -17,9 +17,9 @@ func (a SortedAttrs) Swap(i, j int) {
 // Less implements the canonical attribute ordering from the C14N spec:
 //
 //  1. Default namespace declaration (xmlns="...") comes first.
-//  2. Namespace prefix declarations (xmlns:prefix="..."), sorted by prefix.
+//  2. namespace prefix declarations (xmlns:prefix="..."), sorted by prefix.
 //  3. Unprefixed attributes, sorted by local name.
-//  4. Namespace-qualified attributes, sorted first by namespace URI then by
+//  4. namespace-qualified attributes, sorted first by namespace URI then by
 //     local name.
 //
 // The namespace URI for a prefixed attribute is resolved by scanning the same
@@ -40,7 +40,7 @@ func (a SortedAttrs) Less(i, j int) bool {
 		return true
 	}
 
-	// --- 2. Namespace prefix declarations (xmlns:prefix) sorted by prefix ---
+	// --- 2. namespace prefix declarations (xmlns:prefix) sorted by prefix ---
 
 	if a[i].Space == xmlnsPrefix {
 		if a[j].Space == xmlnsPrefix {
@@ -66,7 +66,7 @@ func (a SortedAttrs) Less(i, j int) bool {
 		return false
 	}
 
-	// --- 4. Namespace-qualified attributes, sorted by namespace URI then local name ---
+	// --- 4. namespace-qualified attributes, sorted by namespace URI then local name ---
 
 	// Resolve namespace URIs by scanning for matching xmlns:prefix declarations.
 	leftURI := a.resolvePrefix(a[i].Space)

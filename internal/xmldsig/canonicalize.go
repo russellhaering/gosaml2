@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/beevik/etree"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 )
 
 // Canonicalizer is an implementation of a canonicalization algorithm.
@@ -53,7 +52,7 @@ func MakeC14N10ExclusiveWithCommentsCanonicalizerWithPrefixList(prefixList strin
 
 // Canonicalize transforms the input Element into a serialized XML document in canonical form.
 func (c *c14N10ExclusiveCanonicalizer) Canonicalize(el *etree.Element) ([]byte, error) {
-	err := etreeutils.TransformExcC14n(el, c.prefixList, c.comments)
+	err := TransformExcC14n(el, c.prefixList, c.comments)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +168,7 @@ func canonicalPrepInner(el *etree.Element, seenSoFar map[string]string, strip bo
 	}
 
 	ne := el.Copy()
-	sort.Sort(etreeutils.SortedAttrs(ne.Attr))
+	sort.Sort(SortedAttrs(ne.Attr))
 	n := 0
 	for _, attr := range ne.Attr {
 		if attr.Space != nsSpace && !(attr.Space == "" && attr.Key == nsSpace) {

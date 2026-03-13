@@ -31,12 +31,23 @@ import (
 	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
-	"github.com/russellhaering/gosaml2/v2/internal/xmldsig/etreeutils"
 )
 
 const (
 	defaultMaxDecompressedResponseSize = 5 * 1024 * 1024
 )
+
+// isSignatureMissing returns true when err is dsig.ErrMissingSignature,
+// and returns (false, err) for any other non-nil error.
+func isSignatureMissing(err error) (bool, error) {
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, dsig.ErrMissingSignature) {
+		return true, nil
+	}
+	return false, err
+}
 
 func (sp *ServiceProvider) verifier() *dsig.Verifier {
 	v := &dsig.Verifier{
@@ -134,12 +145,12 @@ func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 	var decryptCert *tls.Certificate
 
-	decryptAssertion := func(ctx etreeutils.NSContext, encryptedElement *etree.Element) error {
+	decryptAssertion := func(ctx dsig.NSContext, encryptedElement *etree.Element) error {
 		if encryptedElement.Parent() != el {
 			return fmt.Errorf("found encrypted assertion with unexpected parent element: %s", encryptedElement.Parent().Tag)
 		}
 
-		detached, err := etreeutils.NSDetach(ctx, encryptedElement) // make a detached copy
+		detached, err := dsig.NSDetach(ctx, encryptedElement) // make a detached copy
 		if err != nil {
 			return fmt.Errorf("unable to detach encrypted assertion: %v", err)
 		}
@@ -176,7 +187,7 @@ func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 		return nil
 	}
 
-	if err := etreeutils.NSFindIterate(el, SAMLAssertionNamespace, EncryptedAssertionTag, decryptAssertion); err != nil {
+	if err := dsig.NSFindIterate(el, SAMLAssertionNamespace, EncryptedAssertionTag, decryptAssertion); err != nil {
 		return err
 	} else {
 		return nil
@@ -197,18 +208,18 @@ func (sp *ServiceProvider) validateElementSignature(el *etree.Element) (*etree.E
 // covers them). This prevents XML wrapping attacks where assertion content is
 // tampered with inside a signed envelope.
 func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.Element) error {
-	verifyAssertion := func(ctx etreeutils.NSContext, assertionEl *etree.Element) error {
+	verifyAssertion := func(ctx dsig.NSContext, assertionEl *etree.Element) error {
 		if assertionEl.Parent() != responseEl {
 			return nil
 		}
 
-		detached, err := etreeutils.NSDetach(ctx, assertionEl)
+		detached, err := dsig.NSDetach(ctx, assertionEl)
 		if err != nil {
 			return fmt.Errorf("unable to detach assertion for signature verification: %v", err)
 		}
 
 		result, err := sp.verifier().Verify(detached)
-		if errors.Is(err, dsig.ErrMissingSignature) {
+		if missing, err := isSignatureMissing(err); missing {
 			// No signature on this assertion — that's fine, the Response
 			// envelope signature covers it.
 			return nil
@@ -224,7 +235,7 @@ func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.
 		return nil
 	}
 
-	return etreeutils.NSFindIterate(responseEl, SAMLAssertionNamespace, AssertionTag, verifyAssertion)
+	return dsig.NSFindIterate(responseEl, SAMLAssertionNamespace, AssertionTag, verifyAssertion)
 }
 
 // ValidateEncodedResponse both decodes and validates, based on SP
@@ -268,7 +279,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 	signedResponseEl, err := sp.validateElementSignature(unverifiedResponse)
 
 	// continue for unsigned Response, maybe individual Assertions are still signed
-	if errors.Is(err, dsig.ErrMissingSignature) {
+	if missing, err := isSignatureMissing(err); missing {
 		// Unfortunately we just blew away our Response
 		unverifiedResponse = doc.Root()
 	} else if err != nil {
@@ -334,7 +345,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 	}
 
 	// iterate through each Assertion inside our etree unverifiedResponse
-	addSignedAssertion := func(ctx etreeutils.NSContext, unverifiedAssertion *etree.Element) error {
+	addSignedAssertion := func(ctx dsig.NSContext, unverifiedAssertion *etree.Element) error {
 		parent := unverifiedAssertion.Parent()
 		if parent == nil {
 			return fmt.Errorf("parent is nil")
@@ -343,7 +354,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 			return fmt.Errorf("found assertion with unexpected parent element: %s", unverifiedAssertion.Parent().Tag)
 		}
 
-		detached, err := etreeutils.NSDetach(ctx, unverifiedAssertion) // make a detached copy
+		detached, err := dsig.NSDetach(ctx, unverifiedAssertion) // make a detached copy
 		if err != nil {
 			return fmt.Errorf("unable to detach unverified assertion: %v", err)
 		}
@@ -373,7 +384,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 	// iterate through each Assertion through our unverified Response
 	// our decodedResponse contains a empty list of Assertions
 	// throughout iteration, we will add signed assertions to the decodedResponse
-	if err := etreeutils.NSFindIterate(unverifiedResponse, SAMLAssertionNamespace, AssertionTag, addSignedAssertion); err != nil {
+	if err := dsig.NSFindIterate(unverifiedResponse, SAMLAssertionNamespace, AssertionTag, addSignedAssertion); err != nil {
 		return nil, err
 	}
 
@@ -539,7 +550,7 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponsePOST(ctx context.Context
 	var responseSignatureValidated bool
 	if !sp.InsecureSkipSignatureValidation {
 		el, err = sp.validateElementSignature(el)
-		if errors.Is(err, dsig.ErrMissingSignature) {
+		if missing, err := isSignatureMissing(err); missing {
 			return nil, fmt.Errorf("logout response has no signature")
 		} else if err != nil {
 			return nil, err

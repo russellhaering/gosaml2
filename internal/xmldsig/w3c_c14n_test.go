@@ -108,7 +108,7 @@ func TestW3CC14NConformance(t *testing.T) {
 				if actual != expected {
 					t.Errorf("C14N output differs from xmllint reference\n"+
 						"--- expected (xmllint) ---\n%s\n"+
-						"--- got (goxmldsig) ---\n%s\n"+
+						"--- got (xmldsig) ---\n%s\n"+
 						"--- diff ---\n%s",
 						expected, actual, diffStrings(expected, actual))
 				}
