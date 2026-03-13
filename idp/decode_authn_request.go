@@ -30,6 +30,9 @@ import (
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
+// ValidateEncodedAuthnRequestPOST decodes and validates a base64-encoded
+// AuthnRequest received via the HTTP-POST binding. It resolves the SP from
+// the request's Issuer, validates attributes, and resolves the ACS URL.
 func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, encodedRequest string) (*AuthnRequestInfo, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedRequest)
 	if err != nil {
@@ -66,6 +69,10 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 	}, nil
 }
 
+// ValidateEncodedAuthnRequestRedirect decodes and validates an AuthnRequest
+// received via the HTTP-Redirect binding. The samlRequest, relayState, sigAlg,
+// and signature parameters come from the query string. It verifies the redirect
+// signature if the SP requires signed requests or a signature is present.
 func (idp *IdentityProvider) ValidateEncodedAuthnRequestRedirect(_ context.Context, samlRequest, relayState, sigAlg, signature string) (*AuthnRequestInfo, error) {
 	raw, err := idp.decodeRedirectRequest(samlRequest)
 	if err != nil {

@@ -476,6 +476,9 @@ func DecodeUnverifiedLogoutResponse(encodedResponse string) (*types.LogoutRespon
 	return response, nil
 }
 
+// ValidateEncodedLogoutResponsePOST decodes and validates a base64-encoded
+// LogoutResponse received via the HTTP-POST binding. It verifies the signature
+// (unless InsecureSkipSignatureValidation is set) and validates response attributes.
 func (sp *ServiceProvider) ValidateEncodedLogoutResponsePOST(ctx context.Context, encodedResponse string) (*types.LogoutResponse, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedResponse)
 	if err != nil {

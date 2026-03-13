@@ -44,6 +44,7 @@ type ValidationError struct {
 	Detail string // human-readable context
 }
 
+// Error returns the sentinel error message with optional detail context.
 func (e *ValidationError) Error() string {
 	if e.Detail == "" {
 		return e.Reason.Error()
@@ -51,6 +52,7 @@ func (e *ValidationError) Error() string {
 	return e.Reason.Error() + ": " + e.Detail
 }
 
+// Unwrap returns the underlying sentinel error for use with errors.Is.
 func (e *ValidationError) Unwrap() error {
 	return e.Reason
 }

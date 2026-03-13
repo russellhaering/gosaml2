@@ -36,6 +36,9 @@ type AssertionParams struct {
 	AudienceRestrictions []string
 }
 
+// BuildResponseDocument builds a SAML Response XML document for the given SP,
+// including a signed assertion with the provided parameters. It returns the
+// document, the resolved ACS URL, and any error.
 func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *AssertionParams) (*etree.Document, string, error) {
 	sp, err := idp.lookupSP(spEntityID)
 	if err != nil {
@@ -88,6 +91,9 @@ func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *As
 	return doc, acsURL, nil
 }
 
+// BuildResponseBodyPost builds a SAML Response and returns an HTML auto-submit
+// POST form targeting the SP's ACS URL. This is the typical way to deliver a
+// SAML response via the HTTP-POST binding.
 func (idp *IdentityProvider) BuildResponseBodyPost(spEntityID string, params *AssertionParams, relayState string) ([]byte, error) {
 	doc, acsURL, err := idp.BuildResponseDocument(spEntityID, params)
 	if err != nil {
@@ -102,6 +108,9 @@ func (idp *IdentityProvider) BuildResponseBodyPost(spEntityID string, params *As
 	return saml2.BuildPOSTForm(acsURL, "SAMLResponse", base64.StdEncoding.EncodeToString(docBytes), relayState)
 }
 
+// BuildErrorResponseDocument builds a SAML Response document with an error
+// status code (e.g. StatusCodeResponder). Use this to communicate authentication
+// failures back to the SP.
 func (idp *IdentityProvider) BuildErrorResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*etree.Document, error) {
 	if _, err := idp.lookupSP(spEntityID); err != nil {
 		return nil, err

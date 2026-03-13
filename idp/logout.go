@@ -42,6 +42,8 @@ type ReceivedLogoutRequest struct {
 	SessionIndex string `xml:"SessionIndex,omitempty"`
 }
 
+// ValidateEncodedLogoutRequestPOST decodes and validates a base64-encoded
+// LogoutRequest received via the HTTP-POST binding.
 func (idp *IdentityProvider) ValidateEncodedLogoutRequestPOST(_ context.Context, encoded string) (*ReceivedLogoutRequest, *SPConfig, error) {
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
@@ -54,6 +56,9 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestPOST(_ context.Context,
 	return idp.decodeAndValidateLogoutRequest(raw)
 }
 
+// ValidateEncodedLogoutRequestRedirect decodes and validates a LogoutRequest
+// received via the HTTP-Redirect binding. It verifies the redirect signature
+// if the SP requires signed requests or a signature is present.
 func (idp *IdentityProvider) ValidateEncodedLogoutRequestRedirect(_ context.Context, samlRequest, relayState, sigAlg, signature string) (*ReceivedLogoutRequest, *SPConfig, error) {
 	raw, err := idp.decodeRedirectRequest(samlRequest)
 	if err != nil {
@@ -132,6 +137,7 @@ func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*Receiv
 	return req, sp, nil
 }
 
+// BuildLogoutResponseDocument builds a signed LogoutResponse XML document.
 func (idp *IdentityProvider) BuildLogoutResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*etree.Document, error) {
 	if _, err := idp.lookupSP(spEntityID); err != nil {
 		return nil, err
@@ -152,6 +158,8 @@ func (idp *IdentityProvider) BuildLogoutResponseDocument(spEntityID, statusCode,
 	return doc, nil
 }
 
+// BuildLogoutResponseBodyPost builds a LogoutResponse and returns an HTML
+// auto-submit POST form for the HTTP-POST binding.
 func (idp *IdentityProvider) BuildLogoutResponseBodyPost(spEntityID, statusCode, inResponseTo, destination, relayState string) ([]byte, error) {
 	doc, err := idp.BuildLogoutResponseDocument(spEntityID, statusCode, inResponseTo, destination)
 	if err != nil {
@@ -166,6 +174,8 @@ func (idp *IdentityProvider) BuildLogoutResponseBodyPost(spEntityID, statusCode,
 	return saml2.BuildPOSTForm(destination, "SAMLResponse", base64.StdEncoding.EncodeToString(docBytes), relayState)
 }
 
+// BuildLogoutRequestDocument builds a signed LogoutRequest XML document to
+// initiate single logout with the given SP.
 func (idp *IdentityProvider) BuildLogoutRequestDocument(spEntityID, nameID, nameIDFormat, sessionIndex string) (*etree.Document, error) {
 	sp, err := idp.lookupSP(spEntityID)
 	if err != nil {

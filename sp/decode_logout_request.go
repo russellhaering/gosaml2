@@ -40,6 +40,9 @@ func (sp *ServiceProvider) validateLogoutRequestAttributes(request *saml2.Logout
 	return nil
 }
 
+// ValidateEncodedLogoutRequestPOST decodes and validates a base64-encoded
+// LogoutRequest received via the HTTP-POST binding. It verifies the signature
+// (unless InsecureSkipSignatureValidation is set) and validates request attributes.
 func (sp *ServiceProvider) ValidateEncodedLogoutRequestPOST(ctx context.Context, encodedRequest string) (*saml2.LogoutRequest, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedRequest)
 	if err != nil {

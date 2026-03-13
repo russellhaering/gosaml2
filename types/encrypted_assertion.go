@@ -23,6 +23,8 @@ import (
 	"fmt"
 )
 
+// EncryptedAssertion represents a saml:EncryptedAssertion element containing
+// the encrypted assertion data, encryption method, and encrypted symmetric key.
 type EncryptedAssertion struct {
 	XMLName          xml.Name         `xml:"urn:oasis:names:tc:SAML:2.0:assertion EncryptedAssertion"`
 	EncryptionMethod EncryptionMethod `xml:"EncryptedData>EncryptionMethod"`
@@ -31,6 +33,8 @@ type EncryptedAssertion struct {
 	CipherValue      string           `xml:"EncryptedData>CipherData>CipherValue"`
 }
 
+// DecryptBytes decrypts the encrypted assertion using the given TLS certificate's
+// private key and returns the raw XML bytes of the decrypted assertion.
 func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(ea.CipherValue)
 	if err != nil {

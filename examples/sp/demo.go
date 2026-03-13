@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// demo is a minimal SAML Service Provider example. It authenticates users
+// against an Okta IdP using the HTTP-Redirect binding and displays the
+// returned assertion attributes.
 package main
 
 import (
@@ -22,9 +25,11 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"math/big"
 	"net/http"
+	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	"github.com/russellhaering/gosaml2/v2/sp"
@@ -32,47 +37,48 @@ import (
 )
 
 func main() {
+	// Step 1: Fetch IdP metadata. In production, this XML would typically
+	// be loaded from a file or configuration store.
 	res, err := http.Get("http://idp.oktadev.com/metadata")
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error fetching IdP metadata: %v", err)
 	}
+	defer res.Body.Close()
 
-	rawMetadata, err := ioutil.ReadAll(res.Body)
+	rawMetadata, err := io.ReadAll(res.Body)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error reading IdP metadata: %v", err)
 	}
 
+	// Step 2: Parse IdP metadata to extract SSO URLs and signing certificates.
 	metadata := &types.EntityDescriptor{}
-	err = xml.Unmarshal(rawMetadata, metadata)
-	if err != nil {
-		panic(err)
+	if err := xml.Unmarshal(rawMetadata, metadata); err != nil {
+		log.Fatalf("Error parsing IdP metadata: %v", err)
 	}
 
 	var idpCerts []*x509.Certificate
-
 	for _, kd := range metadata.IDPSSODescriptor.KeyDescriptors {
 		for idx, xcert := range kd.KeyInfo.X509Data.X509Certificates {
 			if xcert.Data == "" {
-				panic(fmt.Errorf("metadata certificate(%d) must not be empty", idx))
+				log.Fatalf("Metadata certificate(%d) must not be empty", idx)
 			}
 			certData, err := base64.StdEncoding.DecodeString(xcert.Data)
 			if err != nil {
-				panic(err)
+				log.Fatalf("Error decoding certificate(%d): %v", idx, err)
 			}
-
 			idpCert, err := x509.ParseCertificate(certData)
 			if err != nil {
-				panic(err)
+				log.Fatalf("Error parsing certificate(%d): %v", idx, err)
 			}
-
 			idpCerts = append(idpCerts, idpCert)
 		}
 	}
 
-	// We sign the AuthnRequest with a random key because Okta doesn't seem
-	// to verify these.
+	// Step 3: Generate a random signing key for this demo. In production,
+	// use a persistent key pair loaded from a file or secret store.
 	randomKeyStore := randomKeyStoreForDemo()
 
+	// Step 4: Configure the Service Provider.
 	s := &sp.ServiceProvider{
 		IDPSSOURL:        metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
 		IDPEntityID:      metadata.EntityID,
@@ -82,51 +88,54 @@ func main() {
 		AudienceURIs:     []string{"http://example.com/saml/acs/example"},
 		IDPCertificates:  idpCerts,
 		SPKeyStore:       randomKeyStore,
+		// RequestTracker enables InResponseTo validation to prevent replay
+		// attacks. Entries expire after 5 minutes.
+		RequestTracker: sp.NewMemoryRequestTracker(5 * time.Minute),
+		// ClockSkew allows some tolerance for clock differences between the
+		// SP and IdP when validating assertion timestamps.
+		ClockSkew: 30 * time.Second,
 	}
 
+	// Step 5: Handle the SAML callback (ACS endpoint).
 	http.HandleFunc("/v1/_saml_callback", func(rw http.ResponseWriter, req *http.Request) {
-		err := req.ParseForm()
-		if err != nil {
+		if err := req.ParseForm(); err != nil {
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		assertionInfo, err := s.RetrieveAssertionInfo(context.Background(), req.FormValue("SAMLResponse"))
 		if err != nil {
+			log.Printf("SAML validation error: %v", err)
 			rw.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		fmt.Fprintf(rw, "NameID: %s\n", assertionInfo.NameID)
-
 		fmt.Fprintf(rw, "Assertions:\n")
-
 		for key, val := range assertionInfo.Values {
 			fmt.Fprintf(rw, "  %s: %+v\n", key, val)
 		}
 	})
 
-	println("Visit this URL To Authenticate:")
+	// Step 6: Build the SSO URL and start the server.
+	fmt.Println("Visit this URL to authenticate:")
 	authURL, err := s.BuildAuthURL("")
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error building auth URL: %v", err)
 	}
+	fmt.Println(authURL)
 
-	println(authURL)
-
-	println("Supply:")
 	fmt.Printf("  SP ACS URL      : %s\n", s.ACSURL)
 
-	err = http.ListenAndServe(":8080", nil)
-	if err != nil {
-		panic(err)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Error starting server: %v", err)
 	}
 }
 
 func randomKeyStoreForDemo() *saml2.KeyStore {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error generating RSA key: %v", err)
 	}
 
 	template := &x509.Certificate{
@@ -134,7 +143,7 @@ func randomKeyStoreForDemo() *saml2.KeyStore {
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error creating self-signed certificate: %v", err)
 	}
 
 	return &saml2.KeyStore{

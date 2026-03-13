@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+// EntityDescriptor represents a SAML 2.0 metadata EntityDescriptor element.
 type EntityDescriptor struct {
 	XMLName    xml.Name  `xml:"urn:oasis:names:tc:SAML:2.0:metadata EntityDescriptor"`
 	ValidUntil time.Time `xml:"validUntil,attr"`
@@ -29,18 +30,21 @@ type EntityDescriptor struct {
     Extensions       *Extensions       `xml:"Extensions,omitempty"`
 }
 
+// Endpoint represents a SAML metadata endpoint (e.g. SingleLogoutService).
 type Endpoint struct {
 	Binding          string `xml:"Binding,attr"`
 	Location         string `xml:"Location,attr"`
 	ResponseLocation string `xml:"ResponseLocation,attr,omitempty"`
 }
 
+// IndexedEndpoint represents an indexed SAML metadata endpoint (e.g. AssertionConsumerService).
 type IndexedEndpoint struct {
 	Binding  string `xml:"Binding,attr"`
 	Location string `xml:"Location,attr"`
 	Index    int    `xml:"index,attr"`
 }
 
+// SPSSODescriptor represents a SAML metadata SPSSODescriptor element.
 type SPSSODescriptor struct {
 	XMLName                    xml.Name          `xml:"urn:oasis:names:tc:SAML:2.0:metadata SPSSODescriptor"`
 	AuthnRequestsSigned        bool              `xml:"AuthnRequestsSigned,attr"`
@@ -53,6 +57,7 @@ type SPSSODescriptor struct {
     Extensions                 *Extensions       `xml:"Extensions,omitempty"`
 }
 
+// IDPSSODescriptor represents a SAML metadata IDPSSODescriptor element.
 type IDPSSODescriptor struct {
 	XMLName                    xml.Name              `xml:"urn:oasis:names:tc:SAML:2.0:metadata IDPSSODescriptor"`
 	ProtocolSupportEnumeration string                `xml:"protocolSupportEnumeration,attr"`
@@ -65,6 +70,7 @@ type IDPSSODescriptor struct {
     Extensions              *Extensions           `xml:"Extensions,omitempty"`
 }
 
+// KeyDescriptor represents a SAML metadata KeyDescriptor element.
 type KeyDescriptor struct {
 	XMLName           xml.Name           `xml:"urn:oasis:names:tc:SAML:2.0:metadata KeyDescriptor"`
 	Use               string             `xml:"use,attr"`
@@ -90,29 +96,34 @@ type X509Certificate struct {
 	Data    string   `xml:",chardata"`
 }
 
+// NameIDFormat represents a SAML metadata NameIDFormat element.
 type NameIDFormat struct {
 	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:metadata NameIDFormat"`
 	Value   string   `xml:",chardata"`
 }
 
+// SingleSignOnService represents a SAML metadata SingleSignOnService element.
 type SingleSignOnService struct {
 	XMLName  xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:metadata SingleSignOnService"`
 	Binding  string   `xml:"Binding,attr"`
 	Location string   `xml:"Location,attr"`
 }
 
+// SingleLogoutService represents a SAML metadata SingleLogoutService element.
 type SingleLogoutService struct {
 	XMLName  xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:metadata SingleLogoutService"`
 	Binding  string   `xml:"Binding,attr"`
 	Location string   `xml:"Location,attr"`
 }
 
+// SigningMethod represents a metadata Extensions SigningMethod element.
 type SigningMethod struct {
     Algorithm           string       `xml:",attr"`
     MinKeySize          string       `xml:"MinKeySize,attr,omitempty"`
     MaxKeySize          string       `xml:"MaxKeySize,attr,omitempty"`
 }
 
+// Extensions represents a SAML metadata Extensions element.
 type Extensions struct {
     DigestMethod        *DigestMethod   `xml:",omitempty"`
     SigningMethod       *SigningMethod  `xml:",omitempty"`

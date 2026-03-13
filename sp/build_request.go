@@ -89,10 +89,14 @@ func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, 
 	return doc, nil
 }
 
+// BuildAuthRequestDocument builds a signed AuthnRequest XML document.
 func (sp *ServiceProvider) BuildAuthRequestDocument() (*etree.Document, error) {
 	return sp.buildAuthnRequest(true)
 }
 
+// BuildAuthRequestDocumentNoSig builds an AuthnRequest XML document without
+// an embedded signature. Use this for the HTTP-Redirect binding, where
+// the signature is applied to the query string instead.
 func (sp *ServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, error) {
 	return sp.buildAuthnRequest(false)
 }
@@ -199,10 +203,15 @@ func (sp *ServiceProvider) buildAuthURLFromDocument(relayState, binding string, 
 	return parsedUrl.String(), nil
 }
 
+// BuildAuthURLFromDocument builds a redirect URL for the HTTP-POST binding
+// from a pre-built AuthnRequest document.
 func (sp *ServiceProvider) BuildAuthURLFromDocument(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, saml2.BindingHttpPost, doc)
 }
 
+// BuildAuthURLRedirect builds a redirect URL for the HTTP-Redirect binding
+// from a pre-built AuthnRequest document. If SignAuthnRequests is true, the
+// query string is signed per the SAML redirect binding specification.
 func (sp *ServiceProvider) BuildAuthURLRedirect(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, saml2.BindingHttpRedirect, doc)
 }
@@ -306,6 +315,8 @@ func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, se
 	return doc, nil
 }
 
+// SignLogoutRequest signs a LogoutRequest element, placing the Signature
+// element after the Issuer per the SAML schema.
 func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element, error) {
 	signer, err := sp.Signer()
 	if err != nil {
@@ -333,10 +344,13 @@ func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element,
 	return signed, nil
 }
 
+// BuildLogoutRequestDocumentNoSig builds a LogoutRequest XML document without
+// an embedded signature.
 func (sp *ServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*etree.Document, error) {
 	return sp.buildLogoutRequest(false, nameID, sessionIndex)
 }
 
+// BuildLogoutRequestDocument builds a signed LogoutRequest XML document.
 func (sp *ServiceProvider) BuildLogoutRequestDocument(nameID string, sessionIndex string) (*etree.Document, error) {
 	return sp.buildLogoutRequest(true, nameID, sessionIndex)
 }
@@ -355,6 +369,9 @@ func (sp *ServiceProvider) buildLogoutBodyPostFromDocument(relayState string, do
 	return saml2.BuildPOSTForm(sp.IDPSLOURL, "SAMLRequest", base64.StdEncoding.EncodeToString(reqBuf), relayState)
 }
 
+// BuildLogoutURLRedirect builds a redirect URL for the HTTP-Redirect binding
+// from a pre-built LogoutRequest document. If signing is configured, the
+// query string is signed.
 func (sp *ServiceProvider) BuildLogoutURLRedirect(relayState string, doc *etree.Document) (string, error) {
 	return sp.buildLogoutURLFromDocument(relayState, saml2.BindingHttpRedirect, doc)
 }

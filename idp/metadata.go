@@ -22,6 +22,9 @@ import (
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
+// Metadata generates an EntityDescriptor for this Identity Provider, suitable
+// for publishing at a metadata endpoint. It includes SSO and SLO endpoints,
+// signing key descriptors, and supported NameID formats.
 func (idp *IdentityProvider) Metadata() (*types.EntityDescriptor, error) {
 	var keyDescriptors []types.KeyDescriptor
 

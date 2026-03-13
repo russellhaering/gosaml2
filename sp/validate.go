@@ -244,6 +244,9 @@ func (sp *ServiceProvider) Validate(response *types.Response) error {
 	return nil
 }
 
+// ValidateDecodedLogoutResponse validates a previously decoded and
+// signature-verified LogoutResponse, checking issuer, status, destination,
+// and version.
 func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutResponse) error {
 	err := sp.validateLogoutResponseAttributes(response)
 	if err != nil {
@@ -282,6 +285,9 @@ func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutR
 	return nil
 }
 
+// ValidateDecodedLogoutRequest validates a previously decoded and
+// signature-verified LogoutRequest, checking issuer, destination, version,
+// and NotOnOrAfter expiry.
 func (sp *ServiceProvider) ValidateDecodedLogoutRequest(request *saml2.LogoutRequest) error {
 	err := sp.validateLogoutRequestAttributes(request)
 	if err != nil {

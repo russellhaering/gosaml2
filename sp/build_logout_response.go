@@ -64,14 +64,20 @@ func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID str
 	}
 	return doc, nil
 }
+// BuildLogoutResponseDocument builds a signed LogoutResponse XML document
+// with the given status code and InResponseTo value.
 func (sp *ServiceProvider) BuildLogoutResponseDocument(status string, reqID string) (*etree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, true)
 }
 
+// BuildLogoutResponseDocumentNoSig builds a LogoutResponse XML document
+// without an embedded signature.
 func (sp *ServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*etree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, false)
 }
 
+// SignLogoutResponse signs a LogoutResponse element, placing the Signature
+// element after the Issuer per the SAML schema.
 func (sp *ServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
 	signer, err := sp.Signer()
 	if err != nil {
@@ -107,6 +113,8 @@ func (sp *ServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState st
 	return saml2.BuildPOSTForm(sp.IDPSLOURL, "SAMLResponse", base64.StdEncoding.EncodeToString(respBuf), relayState)
 }
 
+// BuildLogoutResponseBodyPostFromDocument builds an HTML auto-submit POST form
+// containing the LogoutResponse for the HTTP-POST binding.
 func (sp *ServiceProvider) BuildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildLogoutResponseBodyPostFromDocument(relayState, doc)
 }

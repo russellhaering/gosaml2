@@ -26,6 +26,9 @@ import (
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
+// ServiceProvider represents a SAML 2.0 Service Provider. Configure its
+// fields and use its methods to build AuthnRequests, validate responses,
+// and generate SP metadata.
 type ServiceProvider struct {
 	// Service Provider identity
 	EntityID string
@@ -95,6 +98,9 @@ type AssertionInfo struct {
 	ProxyRestriction           *ProxyRestriction
 }
 
+// Metadata generates an EntityDescriptor for this Service Provider, suitable
+// for publishing at a metadata endpoint. It includes key descriptors for any
+// configured signing and encryption keys, and SLO endpoints if SLOURL is set.
 func (sp *ServiceProvider) Metadata() (*types.EntityDescriptor, error) {
 	keyDescriptors := make([]types.KeyDescriptor, 0, 2)
 	if sp.getSigningKeyStore() != nil {
@@ -193,6 +199,8 @@ func (sp *ServiceProvider) getSigningKeyStore() *saml2.KeyStore {
 	return sp.SPKeyStore
 }
 
+// GetEncryptionCertBytes returns the raw DER-encoded encryption certificate
+// from SPKeyStore.
 func (sp *ServiceProvider) GetEncryptionCertBytes() ([]byte, error) {
 	if sp.SPKeyStore == nil {
 		return nil, fmt.Errorf("empty SP encryption certificate")
@@ -203,6 +211,8 @@ func (sp *ServiceProvider) GetEncryptionCertBytes() ([]byte, error) {
 	return sp.SPKeyStore.Cert, nil
 }
 
+// GetSigningCertBytes returns the raw DER-encoded signing certificate. It uses
+// SPSigningKeyStore if set, otherwise falls back to SPKeyStore.
 func (sp *ServiceProvider) GetSigningCertBytes() ([]byte, error) {
 	ks := sp.getSigningKeyStore()
 	if ks == nil {

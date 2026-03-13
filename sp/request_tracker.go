@@ -58,6 +58,7 @@ func (m *MemoryRequestTracker) sweep() {
 	}
 }
 
+// StoreRequest persists a request ID so it can be verified later.
 func (m *MemoryRequestTracker) StoreRequest(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -66,6 +67,8 @@ func (m *MemoryRequestTracker) StoreRequest(_ context.Context, id string) error 
 	return nil
 }
 
+// ConsumeRequest verifies that a request ID was previously stored and removes
+// it. Returns a ValidationError wrapping ErrReplay if the ID is not recognized.
 func (m *MemoryRequestTracker) ConsumeRequest(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
