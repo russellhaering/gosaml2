@@ -20,7 +20,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
@@ -120,7 +120,7 @@ func testEncryptedAssertion(t *testing.T, validateEncryptionCert bool) {
 		Clock: dsig.NewFakeClockAt(time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)),
 	}
 
-	bs, err := ioutil.ReadFile("./testdata/saml.post")
+	bs, err := os.ReadFile("./testdata/saml.post")
 	require.NoError(t, err, "couldn't read post")
 
 	_, err = sp.RetrieveAssertionInfo(string(bs))
@@ -140,8 +140,70 @@ func TestEncryptedAssertionInvalidCert(t *testing.T) {
 	testEncryptedAssertion(t, true)
 }
 
+// Ensure decryption still works with the new SetSPKeyStore function meant to replace SPKeyStore
+func TestSetSPKeyStoreEncryption(t *testing.T) {
+	var err error
+	cert, err := tls.LoadX509KeyPair("./testdata/test.crt", "./testdata/test.key")
+	require.NoError(t, err, "could not load x509 key pair")
+
+	block, _ := pem.Decode([]byte(idpCert))
+
+	idpCert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err, "couldn't parse idp cert pem block")
+
+	ks := dsig.TLSCertKeyStore(cert)
+
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
+		ValidateEncryptionCert:      false,
+		IDPCertificateStore: &dsig.MemoryX509CertificateStore{
+			Roots: []*x509.Certificate{idpCert},
+		},
+		Clock: dsig.NewFakeClockAt(time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)),
+	}
+
+	privateKey, _cert, _ := ks.GetKeyPair()
+
+	sp.SetSPKeyStore(&KeyStore{
+		Cert:   _cert,
+		Signer: privateKey,
+	})
+
+	bs, err := os.ReadFile("./testdata/saml.post")
+	require.NoError(t, err, "couldn't read post")
+
+	_, err = sp.RetrieveAssertionInfo(string(bs))
+
+	require.NoError(t, err, "Assertion info should be retrieved with no error")
+}
+
+// Ensure decryption fails when certs are not configured
+func TestEncryptedAssertionMissingCerts(t *testing.T) {
+	block, _ := pem.Decode([]byte(idpCert))
+
+	idpCert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err, "couldn't parse idp cert pem block")
+
+	sp := SAMLServiceProvider{
+		AssertionConsumerServiceURL: "https://saml2.test.astuart.co/sso/saml2",
+		ValidateEncryptionCert:      false,
+		IDPCertificateStore: &dsig.MemoryX509CertificateStore{
+			Roots: []*x509.Certificate{idpCert},
+		},
+		Clock: dsig.NewFakeClockAt(time.Date(2016, 04, 28, 22, 00, 00, 00, time.UTC)),
+	}
+
+	bs, err := os.ReadFile("./testdata/saml.post")
+	require.NoError(t, err, "couldn't read post")
+
+	_, err = sp.RetrieveAssertionInfo(string(bs))
+
+	require.Error(t, err)
+	require.Equal(t, "error validating response: unable to get decryption certificate: no decryption certs available", err.Error())
+}
+
 func TestCompressedResponse(t *testing.T) {
-	bs, err := ioutil.ReadFile("./testdata/saml_compressed.post")
+	bs, err := os.ReadFile("./testdata/saml_compressed.post")
 	require.NoError(t, err, "couldn't read compressed post")
 
 	block, _ := pem.Decode([]byte(oktaCert))
@@ -206,7 +268,7 @@ func TestMalFormedInput(t *testing.T) {
 }
 
 func TestCompressionBombInput(t *testing.T) {
-	bs, err := ioutil.ReadFile("./testdata/saml_compressed.post")
+	bs, err := os.ReadFile("./testdata/saml_compressed.post")
 	require.NoError(t, err, "couldn't read compressed post")
 
 	block, _ := pem.Decode([]byte(oktaCert))
