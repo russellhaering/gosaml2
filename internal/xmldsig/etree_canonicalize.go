@@ -26,6 +26,10 @@ func TransformExcC14n(el *etree.Element, inclusiveNamespacesPrefixList string, c
 }
 
 func transformExcC14n(ctx, declared NSContext, el *etree.Element, inclusiveNamespaces map[string]struct{}, comments bool) error {
+	if err := ctx.CheckLimit(); err != nil {
+		return err
+	}
+
 	scope, err := ctx.SubContext(el)
 	if err != nil {
 		return err
