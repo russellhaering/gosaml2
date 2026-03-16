@@ -177,7 +177,7 @@ func TestSetSPKeyStoreEncryption(t *testing.T) {
 	require.NoError(t, err, "Assertion info should be retrieved with no error")
 }
 
-// Ensure decryption fails when certs are not configured
+// Ensure decryption fails when keystore is not configured
 func TestEncryptedAssertionMissingCerts(t *testing.T) {
 	block, _ := pem.Decode([]byte(idpCert))
 
