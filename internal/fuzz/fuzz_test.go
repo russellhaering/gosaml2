@@ -33,6 +33,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -206,6 +208,22 @@ func fuzzSP(km *fuzzKeyMaterial) *spkg.ServiceProvider {
 	}
 }
 
+// seedResponseFiles adds the contents of files matching glob as seed corpus entries.
+func seedResponseFiles(f *testing.F, glob string) {
+	f.Helper()
+	matches, err := filepath.Glob(glob)
+	if err != nil {
+		f.Fatal(err)
+	}
+	for _, path := range matches {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(data)
+	}
+}
+
 // deflateEncode DEFLATE-compresses and base64-encodes data for HTTP-Redirect binding.
 func deflateEncode(data []byte) string {
 	var buf bytes.Buffer
@@ -219,6 +237,9 @@ func FuzzDecodeResponse(f *testing.F) {
 	// Seed with valid SAML-like structures to help the fuzzer
 	f.Add([]byte(`<saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol" Version="2.0" ID="_1"><saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">test</saml2:Issuer></saml2p:Response>`))
 	f.Add([]byte(`<saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol" Version="2.0" ID="_1"><saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">test</saml2:Issuer><saml2p:Status><saml2p:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></saml2p:Status><saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" ID="_a1" Version="2.0"><saml2:Issuer>test</saml2:Issuer><saml2:Subject><saml2:NameID>user@test.com</saml2:NameID></saml2:Subject></saml2:Assertion></saml2p:Response>`))
+
+	// Seed with real-world SAML responses from various IdPs
+	seedResponseFiles(f, "../../testdata/*_response.xml")
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		encodedResponse := base64.StdEncoding.EncodeToString(data)
@@ -744,6 +765,9 @@ func FuzzResponseXMLMutation(f *testing.F) {
 	for _, seed := range seeds {
 		f.Add([]byte(seed))
 	}
+
+	// Seed with real-world SAML responses from various IdPs
+	seedResponseFiles(f, "../../testdata/*_response.xml")
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		encoded := base64.StdEncoding.EncodeToString(data)
