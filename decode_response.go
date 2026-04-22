@@ -104,29 +104,36 @@ func xmlUnmarshalElement(el *etree.Element, obj interface{}) error {
 }
 
 func (sp *SAMLServiceProvider) getDecryptCert() (*tls.Certificate, error) {
-	if sp.SPKeyStore == nil {
+	if sp.SPKeyStore == nil && sp.spKeyStoreOverride == nil {
 		return nil, fmt.Errorf("no decryption certs available")
 	}
 
 	//This is the tls.Certificate we'll use to decrypt any encrypted assertions
 	var decryptCert tls.Certificate
 
-	switch crt := sp.SPKeyStore.(type) {
-	case dsig.TLSCertKeyStore:
-		// Get the tls.Certificate directly if possible
-		decryptCert = tls.Certificate(crt)
+	if sp.SPKeyStore != nil {
+		switch crt := sp.SPKeyStore.(type) {
+		case dsig.TLSCertKeyStore:
+			// Get the tls.Certificate directly if possible
+			decryptCert = tls.Certificate(crt)
 
-	default:
+		default:
 
-		//Otherwise, construct one from the results of GetKeyPair
-		pk, cert, err := sp.SPKeyStore.GetKeyPair()
-		if err != nil {
-			return nil, fmt.Errorf("error getting keypair: %v", err)
+			//Otherwise, construct one from the results of GetKeyPair
+			pk, cert, err := sp.SPKeyStore.GetKeyPair()
+			if err != nil {
+				return nil, fmt.Errorf("error getting keypair: %v", err)
+			}
+
+			decryptCert = tls.Certificate{
+				Certificate: [][]byte{cert},
+				PrivateKey:  pk,
+			}
 		}
-
+	} else {
 		decryptCert = tls.Certificate{
-			Certificate: [][]byte{cert},
-			PrivateKey:  pk,
+			Certificate: [][]byte{sp.spKeyStoreOverride.Cert},
+			PrivateKey:  sp.spKeyStoreOverride.Signer,
 		}
 	}
 
