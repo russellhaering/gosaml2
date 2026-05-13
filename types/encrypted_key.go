@@ -78,6 +78,10 @@ const (
 	MethodSHA1   = "http://www.w3.org/2000/09/xmldsig#sha1"
 	MethodSHA256 = "http://www.w3.org/2000/09/xmldsig#sha256"
 	MethodSHA512 = "http://www.w3.org/2000/09/xmldsig#sha512"
+	// xmlenc namespace variants (same algorithms, different namespace per W3C RFC 9231)
+	// Note: xmlenc#sha1 is not defined in the xmlenc namespace per W3C RFC 9231
+	MethodSHA256Enc = "http://www.w3.org/2001/04/xmlenc#sha256"
+	MethodSHA512Enc = "http://www.w3.org/2001/04/xmlenc#sha512"
 )
 
 //SHA-1 is commonly used for certificate fingerprints (openssl -fingerprint and ADFS thumbprint).
@@ -136,9 +140,9 @@ func (ek *EncryptedKey) DecryptSymmetricKey(cert *tls.Certificate) (cipher.Block
 			switch ek.EncryptionMethod.DigestMethod.Algorithm {
 			case "", MethodSHA1:
 				h = sha1.New() // default
-			case MethodSHA256:
+			case MethodSHA256, MethodSHA256Enc:
 				h = sha256.New()
-			case MethodSHA512:
+			case MethodSHA512, MethodSHA512Enc:
 				h = sha512.New()
 			default:
 				return nil, fmt.Errorf("unsupported digest algorithm: %v",
