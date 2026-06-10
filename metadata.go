@@ -15,16 +15,22 @@
 package saml2
 
 import (
-	"encoding/xml"
 	"fmt"
 
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
-// ParseEntityDescriptor parses a SAML EntityDescriptor from raw XML bytes.
+// ParseEntityDescriptor parses a SAML EntityDescriptor from raw XML bytes
+// using the strict parser (ParseMetadata, which tolerates and drops the
+// comments that hand-edited federation metadata commonly carries).
 func ParseEntityDescriptor(data []byte) (*types.EntityDescriptor, error) {
-	ed := &types.EntityDescriptor{}
-	if err := xml.Unmarshal(data, ed); err != nil {
+	doc, err := xmltree.ParseMetadata(data)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing entity descriptor: %w", err)
+	}
+	ed, err := types.EntityDescriptorFromElement(doc.Root())
+	if err != nil {
 		return nil, fmt.Errorf("error parsing entity descriptor: %w", err)
 	}
 	return ed, nil
