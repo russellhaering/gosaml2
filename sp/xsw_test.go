@@ -18,17 +18,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
 // ---------- helpers ----------
 
 var (
-	xswFakeTime = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	xswNotBefore = "2024-12-31T23:00:00Z"
+	xswFakeTime     = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	xswNotBefore    = "2024-12-31T23:00:00Z"
 	xswNotOnOrAfter = "2125-01-01T01:00:00Z" // far future
 )
 
@@ -79,13 +79,13 @@ func xswServiceProvider(t *testing.T, ks *saml2.KeyStore) *ServiceProvider {
 	require.NoError(t, err)
 
 	return &ServiceProvider{
-		IDPEntityID:      "https://idp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		AudienceURIs:     []string{"https://sp.example.com"},
-		IDPCertificates:  []*x509.Certificate{idpCert, spCert},
-		SPKeyStore:       ks,
+		IDPEntityID:       "https://idp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		AudienceURIs:      []string{"https://sp.example.com"},
+		IDPCertificates:   []*x509.Certificate{idpCert, spCert},
+		SPKeyStore:        ks,
 		SignAuthnRequests: true,
-		Clock:            func() time.Time { return xswFakeTime },
+		Clock:             func() time.Time { return xswFakeTime },
 	}
 }
 
@@ -134,7 +134,7 @@ func buildLegitResponse(nameID string) string {
 // signing the Response envelope.
 func signResponseXML(t *testing.T, rawXML string, signer *dsig.Signer) string {
 	t.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(rawXML)
 	require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func signResponseXML(t *testing.T, rawXML string, signer *dsig.Signer) string {
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
 
-	outDoc := etree.NewDocument()
+	outDoc := xmltree.NewDocument()
 	outDoc.SetRoot(signed)
 	result, err := outDoc.WriteToString()
 	require.NoError(t, err)
@@ -196,7 +196,7 @@ func TestXSW1_InjectExtraAssertionIntoSignedResponse(t *testing.T) {
 	signed := signResponseXML(t, raw, signer)
 
 	// Parse the signed document and inject an extra assertion
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(signed)
 	require.NoError(t, err)
 
@@ -207,11 +207,11 @@ func TestXSW1_InjectExtraAssertionIntoSignedResponse(t *testing.T) {
 
 	// Insert it as the first child after Issuer, before the legitimate assertion
 	// This way xml.Unmarshal will pick it up as Assertions[0]
-	children := make([]etree.Token, 0, len(root.Child)+1)
+	children := make([]xmltree.Token, 0, len(root.Child)+1)
 	inserted := false
 	for _, child := range root.Child {
 		if !inserted {
-			if el, ok := child.(*etree.Element); ok && el.Tag == "Status" {
+			if el, ok := child.(*xmltree.Element); ok && el.Tag == "Status" {
 				children = append(children, child)
 				children = append(children, evilAssertion)
 				inserted = true
@@ -279,7 +279,7 @@ func TestXSW3_UnsignedResponseSignedAssertionIntegrity(t *testing.T) {
 		xswNotOnOrAfter, xswNotBefore, xswNotOnOrAfter)
 
 	// Parse and sign the assertion standalone
-	assertionDoc := etree.NewDocument()
+	assertionDoc := xmltree.NewDocument()
 	err := assertionDoc.ReadFromString(assertionXML)
 	require.NoError(t, err)
 
@@ -297,7 +297,7 @@ func TestXSW3_UnsignedResponseSignedAssertionIntegrity(t *testing.T) {
 		`<saml2p:Status><saml2p:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></saml2p:Status>` +
 		`</saml2p:Response>`
 
-	respDoc := etree.NewDocument()
+	respDoc := xmltree.NewDocument()
 	err = respDoc.ReadFromString(responseXML)
 	require.NoError(t, err)
 	respDoc.Root().AddChild(signedAssertion)
@@ -312,7 +312,7 @@ func TestXSW3_UnsignedResponseSignedAssertionIntegrity(t *testing.T) {
 	require.Equal(t, "legit@example.com", resp.Assertions[0].Subject.NameID.Value)
 
 	// Now tamper with the assertion AFTER signing - modify NameID
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	err = doc2.ReadFromString(legitXML)
 	require.NoError(t, err)
 
@@ -342,7 +342,7 @@ func TestXSW4_SignedResponseTamperedAssertion(t *testing.T) {
 	signed := signResponseXML(t, raw, signer)
 
 	// Parse and tamper
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(signed)
 	require.NoError(t, err)
 
@@ -469,14 +469,14 @@ func TestXSW7_UnsignedResponseMixedAssertions(t *testing.T) {
 
 	// Build a response with two assertions: one signed, one unsigned
 	raw := buildLegitResponse("legit@example.com")
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(raw)
 	require.NoError(t, err)
 
 	respEl := doc.Root()
 
 	// Find and sign the legitimate assertion
-	var assertionEl *etree.Element
+	var assertionEl *xmltree.Element
 	for _, child := range respEl.ChildElements() {
 		if child.Tag == "Assertion" {
 			assertionEl = child
@@ -494,10 +494,10 @@ func TestXSW7_UnsignedResponseMixedAssertions(t *testing.T) {
 	// Add an unsigned evil assertion
 	evilAssertion := buildAssertionElement("evil@attacker.com", "_evil_unsigned")
 	// Insert BEFORE the signed one so it would be picked up first by RetrieveAssertionInfo
-	children := make([]etree.Token, 0, len(respEl.Child)+1)
+	children := make([]xmltree.Token, 0, len(respEl.Child)+1)
 	for _, child := range respEl.Child {
 		children = append(children, child)
-		if el, ok := child.(*etree.Element); ok && el.Tag == "Status" {
+		if el, ok := child.(*xmltree.Element); ok && el.Tag == "Status" {
 			children = append(children, evilAssertion)
 		}
 	}
@@ -846,12 +846,12 @@ func TestXSW17_AssertionSignedByUntrustedKeyInUnsignedResponse(t *testing.T) {
 
 	// Build response with assertion signed by attacker
 	raw := buildLegitResponse("evil@attacker.com")
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(raw)
 	require.NoError(t, err)
 
 	respEl := doc.Root()
-	var assertionEl *etree.Element
+	var assertionEl *xmltree.Element
 	for _, child := range respEl.ChildElements() {
 		if child.Tag == "Assertion" {
 			assertionEl = child
@@ -876,7 +876,7 @@ func TestXSW17_AssertionSignedByUntrustedKeyInUnsignedResponse(t *testing.T) {
 
 // ---------- helpers for building assertion elements ----------
 
-func buildAssertionElement(nameID, id string) *etree.Element {
+func buildAssertionElement(nameID, id string) *xmltree.Element {
 	assertionXML := fmt.Sprintf(`<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion"
     ID="%s" IssueInstant="2025-01-01T00:00:00Z" Version="2.0">
   <saml2:Issuer>https://idp.example.com</saml2:Issuer>
@@ -898,7 +898,7 @@ func buildAssertionElement(nameID, id string) *etree.Element {
   </saml2:AuthnStatement>
 </saml2:Assertion>`, id, nameID, xswNotOnOrAfter, xswNotBefore, xswNotOnOrAfter)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	if err := doc.ReadFromString(assertionXML); err != nil {
 		panic(err)
 	}

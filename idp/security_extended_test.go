@@ -84,12 +84,12 @@ func TestSecurityIdP_WrongACSURLRejectedBySP(t *testing.T) {
 	// the Recipient field in the AssertionParams overrides the Destination
 	// on the Response as well. The SP checks Destination first.
 	idpInst := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
+		EntityID:        "https://idp.test/metadata",
+		SSOURL:          "https://idp.test/sso",
 		SigningKeyStore: idpKS,
-		SignResponses:  true,
-		SignAssertions: false,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   true,
+		SignAssertions:  false,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
 				EntityID:            "https://sp.test/metadata",
@@ -248,11 +248,11 @@ func TestSecurityIdP_EmptyIDPEntityIDSkipsIssuerCheck(t *testing.T) {
 
 	// An IdP that claims to be "https://evil-idp.test/metadata"
 	evilIdP := &IdentityProvider{
-		EntityID:       "https://evil-idp.test/metadata",
-		SSOURL:         "https://evil-idp.test/sso",
+		EntityID:        "https://evil-idp.test/metadata",
+		SSOURL:          "https://evil-idp.test/sso",
 		SigningKeyStore: idpKS,
-		SignResponses:  true,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   true,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
 				EntityID:            "https://sp.test/metadata",
@@ -611,10 +611,10 @@ func TestSecurityIdP_ExtremelyLongID(t *testing.T) {
 
 func TestSecurityIdP_EmptyServiceProvidersMap(t *testing.T) {
 	idp := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
-		SigningKeyStore: testIdPKeyStore(t),
-		Clock:          func() time.Time { return testTime },
+		EntityID:         "https://idp.test/metadata",
+		SSOURL:           "https://idp.test/sso",
+		SigningKeyStore:  testIdPKeyStore(t),
+		Clock:            func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{}, // empty map
 	}
 

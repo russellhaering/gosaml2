@@ -32,8 +32,8 @@ func (vals Values) Get(k string) string {
 	return ""
 }
 
-//GetSize returns the number of values for an attribute at a key.
-//Returns '0' in case of error or if key is not found.
+// GetSize returns the number of values for an attribute at a key.
+// Returns '0' in case of error or if key is not found.
 func (vals Values) GetSize(k string) int {
 	if vals == nil {
 		return 0
@@ -47,8 +47,8 @@ func (vals Values) GetSize(k string) int {
 	return 0
 }
 
-//GetAll returns all the values for an attribute at a key.
-//Returns an empty slice in case of error of if key is not found.
+// GetAll returns all the values for an attribute at a key.
+// Returns an empty slice in case of error of if key is not found.
 func (vals Values) GetAll(k string) []string {
 	var av []string
 

@@ -69,8 +69,7 @@ func (sp *ServiceProvider) ValidateEncodedLogoutRequestPOST(ctx context.Context,
 		}
 	}
 
-	decodedRequest := &saml2.LogoutRequest{}
-	err = xmlUnmarshalElement(el, decodedRequest)
+	decodedRequest, err := saml2.LogoutRequestFromElement(el)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal logout request: %v", err)
 	}

@@ -21,6 +21,8 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // EncryptedAssertion represents a saml:EncryptedAssertion element containing
@@ -148,9 +150,12 @@ func (ea *EncryptedAssertion) Decrypt(cert *tls.Certificate) (*Assertion, error)
 		return nil, fmt.Errorf("Error decrypting assertion: %v", err)
 	}
 
-	assertion := &Assertion{}
+	doc, err := xmltree.Parse(plaintext)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing decrypted assertion: %v", err)
+	}
 
-	err = xml.Unmarshal(plaintext, assertion)
+	assertion, err := AssertionFromElement(doc.Root())
 	if err != nil {
 		return nil, fmt.Errorf("Error unmarshaling assertion: %v", err)
 	}

@@ -179,17 +179,17 @@ func TestValidateEncodedAuthnRequestRedirect_SPBuildsAndIdPParses(t *testing.T) 
 		IDPSSOURL:         "https://idp.test/sso",
 		IDPEntityID:       "https://idp.test/metadata",
 		SignAuthnRequests: false,
-		IDPCertificates:  []*x509.Certificate{idpCert},
-		Clock:            func() time.Time { return testTime },
+		IDPCertificates:   []*x509.Certificate{idpCert},
+		Clock:             func() time.Time { return testTime },
 	}
 
 	idpInst := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
+		EntityID:        "https://idp.test/metadata",
+		SSOURL:          "https://idp.test/sso",
 		SigningKeyStore: idpKS,
-		SignResponses:  true,
-		SignAssertions: true,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   true,
+		SignAssertions:  true,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
 				EntityID:            "https://sp.test/metadata",

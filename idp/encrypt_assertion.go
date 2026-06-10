@@ -23,12 +23,12 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
-func (idp *IdentityProvider) encryptAssertion(assertionEl *etree.Element, sp *SPConfig) (*etree.Element, error) {
+func (idp *IdentityProvider) encryptAssertion(assertionEl *xmltree.Element, sp *SPConfig) (*xmltree.Element, error) {
 	if sp.EncryptionCertificate == nil {
 		return nil, &saml2.ValidationError{
 			Reason: saml2.ErrEncryptionFailed,
@@ -36,7 +36,7 @@ func (idp *IdentityProvider) encryptAssertion(assertionEl *etree.Element, sp *SP
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(assertionEl.Copy())
 	plaintext, err := doc.WriteToBytes()
 	if err != nil {
@@ -164,8 +164,8 @@ func encryptionKeySize(algorithm string) int {
 	}
 }
 
-func buildEncryptedDataElement(algorithm string, ciphertext, encryptedKey []byte) *etree.Element {
-	encAssertionEl := etree.NewElement("saml:EncryptedAssertion")
+func buildEncryptedDataElement(algorithm string, ciphertext, encryptedKey []byte) *xmltree.Element {
+	encAssertionEl := xmltree.NewElement("saml:EncryptedAssertion")
 	encAssertionEl.CreateAttr("xmlns:saml", saml2.SAMLAssertionNamespace)
 
 	encDataEl := encAssertionEl.CreateElement("xenc:EncryptedData")

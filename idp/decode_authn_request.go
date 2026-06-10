@@ -21,13 +21,12 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/xml"
 	"fmt"
 	"io"
 
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // ValidateEncodedAuthnRequestPOST decodes and validates a base64-encoded
@@ -156,15 +155,16 @@ func (idp *IdentityProvider) decodeRedirectRequest(samlRequest string) ([]byte, 
 }
 
 func (idp *IdentityProvider) decodeAuthnRequest(raw []byte) (*ReceivedAuthnRequest, error) {
-	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+	doc, err := xmltree.Parse(raw)
+	if err != nil {
 		return nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
-			Detail: fmt.Sprintf("XML roundtrip validation failed: %v", err),
+			Detail: fmt.Sprintf("XML validation failed: %v", err),
 		}
 	}
 
-	req := &ReceivedAuthnRequest{}
-	if err := xml.Unmarshal(raw, req); err != nil {
+	req, err := receivedAuthnRequestFromElement(doc.Root())
+	if err != nil {
 		return nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML unmarshal error: %v", err),

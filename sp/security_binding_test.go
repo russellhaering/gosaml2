@@ -861,9 +861,9 @@ func TestSecurityBinding_AuthnRequest_ACSURLInjection(t *testing.T) {
 	// that the SP correctly sets the AssertionConsumerServiceURL in the
 	// AuthnRequest to its configured ACSURL.
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		IDPSSOURL:        "https://idp.example.com/sso",
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		IDPSSOURL:         "https://idp.example.com/sso",
 		SignAuthnRequests: false,
 	}
 
@@ -883,9 +883,9 @@ func TestSecurityBinding_AuthnRequest_ACSURLInjection(t *testing.T) {
 // Test 26: AuthnRequest missing ID attribute
 func TestSecurityBinding_AuthnRequest_MissingID(t *testing.T) {
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		IDPSSOURL:        "https://idp.example.com/sso",
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		IDPSSOURL:         "https://idp.example.com/sso",
 		SignAuthnRequests: false,
 	}
 
@@ -902,10 +902,10 @@ func TestSecurityBinding_AuthnRequest_MissingID(t *testing.T) {
 // Test 27: ForceAuthn bypass (informational - depends on IdP enforcement)
 func TestSecurityBinding_AuthnRequest_ForceAuthnBypass(t *testing.T) {
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		IDPSSOURL:        "https://idp.example.com/sso",
-		ForceAuthn:       true,
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		IDPSSOURL:         "https://idp.example.com/sso",
+		ForceAuthn:        true,
 		SignAuthnRequests: false,
 	}
 
@@ -926,10 +926,10 @@ func TestSecurityBinding_AuthnRequest_ForceAuthnBypass(t *testing.T) {
 // Test 28: IsPassive probe (informational)
 func TestSecurityBinding_AuthnRequest_IsPassiveProbe(t *testing.T) {
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		IDPSSOURL:        "https://idp.example.com/sso",
-		IsPassive:        true,
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		IDPSSOURL:         "https://idp.example.com/sso",
+		IsPassive:         true,
 		SignAuthnRequests: false,
 	}
 
@@ -1440,7 +1440,7 @@ func TestSecurityBinding_URL_UnicodeInDestination(t *testing.T) {
 	// Use a Unicode-confusable character in the destination host
 	unicodeResp := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol"
-    Destination="https://sp.exampl` + "\u00e9" + `.com/acs" ID="_resp_1" Version="2.0" IssueInstant="%s">
+    Destination="https://sp.exampl`+"\u00e9"+`.com/acs" ID="_resp_1" Version="2.0" IssueInstant="%s">
   <saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">%s</saml2:Issuer>
   <saml2p:Status><saml2p:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></saml2p:Status>
   <saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" ID="_a1" Version="2.0" IssueInstant="%s">
@@ -1604,9 +1604,9 @@ func TestSecurityBinding_Logout_DestinationMismatch(t *testing.T) {
 // Test 46: Session fixation via SAML (UUID unpredictability - informational)
 func TestSecurityBinding_Session_UUIDUnpredictability(t *testing.T) {
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		IDPSSOURL:        "https://idp.example.com/sso",
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		IDPSSOURL:         "https://idp.example.com/sso",
 		SignAuthnRequests: false,
 	}
 

@@ -18,18 +18,18 @@ import "encoding/xml"
 
 // ReceivedAuthnRequest represents an AuthnRequest received by an IdP.
 type ReceivedAuthnRequest struct {
-	XMLName                        xml.Name     `xml:"urn:oasis:names:tc:SAML:2.0:protocol AuthnRequest"`
-	ID                             string       `xml:"ID,attr"`
-	Version                        string       `xml:"Version,attr"`
-	IssueInstant                   string       `xml:"IssueInstant,attr"`
-	Destination                    string       `xml:"Destination,attr,omitempty"`
-	AssertionConsumerServiceURL    string       `xml:"AssertionConsumerServiceURL,attr,omitempty"`
-	AssertionConsumerServiceIndex  string       `xml:"AssertionConsumerServiceIndex,attr,omitempty"`
-	ProtocolBinding                string       `xml:"ProtocolBinding,attr,omitempty"`
-	ForceAuthn                     string       `xml:"ForceAuthn,attr,omitempty"`
-	IsPassive                      string       `xml:"IsPassive,attr,omitempty"`
-	Issuer                         string       `xml:"Issuer"`
-	NameIDPolicy                   *NameIDPolicy `xml:"NameIDPolicy,omitempty"`
+	XMLName                       xml.Name      `xml:"urn:oasis:names:tc:SAML:2.0:protocol AuthnRequest"`
+	ID                            string        `xml:"ID,attr"`
+	Version                       string        `xml:"Version,attr"`
+	IssueInstant                  string        `xml:"IssueInstant,attr"`
+	Destination                   string        `xml:"Destination,attr,omitempty"`
+	AssertionConsumerServiceURL   string        `xml:"AssertionConsumerServiceURL,attr,omitempty"`
+	AssertionConsumerServiceIndex string        `xml:"AssertionConsumerServiceIndex,attr,omitempty"`
+	ProtocolBinding               string        `xml:"ProtocolBinding,attr,omitempty"`
+	ForceAuthn                    string        `xml:"ForceAuthn,attr,omitempty"`
+	IsPassive                     string        `xml:"IsPassive,attr,omitempty"`
+	Issuer                        string        `xml:"Issuer"`
+	NameIDPolicy                  *NameIDPolicy `xml:"NameIDPolicy,omitempty"`
 }
 
 // NameIDPolicy represents a NameIDPolicy element in an AuthnRequest.

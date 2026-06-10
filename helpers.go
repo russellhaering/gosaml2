@@ -26,8 +26,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
 // KeyStore holds a signing key and its associated certificate.

@@ -15,15 +15,13 @@
 package idp
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 
-	"github.com/beevik/etree"
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/uuid"
 )
 
@@ -86,15 +84,16 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestRedirect(_ context.Cont
 }
 
 func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*ReceivedLogoutRequest, *SPConfig, error) {
-	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+	doc, err := xmltree.Parse(raw)
+	if err != nil {
 		return nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
-			Detail: fmt.Sprintf("XML roundtrip validation failed: %v", err),
+			Detail: fmt.Sprintf("XML validation failed: %v", err),
 		}
 	}
 
-	req := &ReceivedLogoutRequest{}
-	if err := xml.Unmarshal(raw, req); err != nil {
+	req, err := receivedLogoutRequestFromElement(doc.Root())
+	if err != nil {
 		return nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML unmarshal error: %v", err),
@@ -138,7 +137,7 @@ func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*Receiv
 }
 
 // BuildLogoutResponseDocument builds a signed LogoutResponse XML document.
-func (idp *IdentityProvider) BuildLogoutResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*etree.Document, error) {
+func (idp *IdentityProvider) BuildLogoutResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*xmltree.Document, error) {
 	if _, err := idp.lookupSP(spEntityID); err != nil {
 		return nil, err
 	}
@@ -153,7 +152,7 @@ func (idp *IdentityProvider) BuildLogoutResponseDocument(spEntityID, statusCode,
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(responseEl)
 	return doc, nil
 }
@@ -176,7 +175,7 @@ func (idp *IdentityProvider) BuildLogoutResponseBodyPost(spEntityID, statusCode,
 
 // BuildLogoutRequestDocument builds a signed LogoutRequest XML document to
 // initiate single logout with the given SP.
-func (idp *IdentityProvider) BuildLogoutRequestDocument(spEntityID, nameID, nameIDFormat, sessionIndex string) (*etree.Document, error) {
+func (idp *IdentityProvider) BuildLogoutRequestDocument(spEntityID, nameID, nameIDFormat, sessionIndex string) (*xmltree.Document, error) {
 	sp, err := idp.lookupSP(spEntityID)
 	if err != nil {
 		return nil, err
@@ -190,7 +189,7 @@ func (idp *IdentityProvider) BuildLogoutRequestDocument(spEntityID, nameID, name
 	now := idp.now().UTC()
 	requestID := "_" + uuid.NewV4().String()
 
-	logoutRequestEl := etree.NewElement("samlp:LogoutRequest")
+	logoutRequestEl := xmltree.NewElement("samlp:LogoutRequest")
 	logoutRequestEl.CreateAttr("xmlns:samlp", saml2.SAMLProtocolNamespace)
 	logoutRequestEl.CreateAttr("xmlns:saml", saml2.SAMLAssertionNamespace)
 	logoutRequestEl.CreateAttr("ID", requestID)
@@ -219,16 +218,16 @@ func (idp *IdentityProvider) BuildLogoutRequestDocument(spEntityID, nameID, name
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(logoutRequestEl)
 	return doc, nil
 }
 
-func (idp *IdentityProvider) buildLogoutResponse(statusCode, inResponseTo, destination string) *etree.Element {
+func (idp *IdentityProvider) buildLogoutResponse(statusCode, inResponseTo, destination string) *xmltree.Element {
 	now := idp.now().UTC()
 	responseID := "_" + uuid.NewV4().String()
 
-	responseEl := etree.NewElement("samlp:LogoutResponse")
+	responseEl := xmltree.NewElement("samlp:LogoutResponse")
 	responseEl.CreateAttr("xmlns:samlp", saml2.SAMLProtocolNamespace)
 	responseEl.CreateAttr("xmlns:saml", saml2.SAMLAssertionNamespace)
 	responseEl.CreateAttr("ID", responseID)

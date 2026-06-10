@@ -101,11 +101,11 @@ func TestDOM_CanonicalWriter(t *testing.T) {
 	var buf bytes.Buffer
 	root.WriteCanonicalTo(&buf)
 	assert.Equal(t,
-		`<a x="v with&#xA;ws"><empty></empty>text&amp;</a>`,
+		`<a x="v with&#xA;ws"><empty></empty>text&amp;<!-- c --></a>`,
 		buf.String(),
-		"canonical form: explicit end tags, c14n escaping, comments omitted")
+		"canonical form: explicit end tags, c14n escaping; comment stripping is the canonicalizer's job")
 
-	// Non-canonical form keeps the comment and self-closes empties.
+	// Non-canonical form self-closes empties.
 	assert.Equal(t,
 		`<a x="v with&#xA;ws"><empty/>text&amp;<!-- c --></a>`,
 		string(root.WriteToBytes()))
@@ -114,7 +114,16 @@ func TestDOM_CanonicalWriter(t *testing.T) {
 func TestDOM_SelectElementPrefixed(t *testing.T) {
 	root := mustParse(t, `<a xmlns:p="urn:x"><p:b/><b/></a>`)
 	require.NotNil(t, root.SelectElement("p:b"))
-	require.NotNil(t, root.SelectElement("b"))
-	assert.NotSame(t, root.SelectElement("p:b"), root.SelectElement("b"))
+	// An unprefixed query matches any prefix (etree-compatible); the first
+	// match in document order here is p:b.
+	assert.Same(t, root.SelectElement("p:b"), root.SelectElement("b"))
+	assert.Len(t, root.SelectElements("b"), 2)
 	assert.Nil(t, root.SelectElement("q:b"))
+
+	// Attribute selection stays exact: a prefixed look-alike must not
+	// satisfy an unprefixed lookup.
+	el := mustParse(t, `<a xmlns:q="urn:x" q:URI="evil" URI="real"/>`)
+	assert.Equal(t, "real", el.SelectAttrValue("URI", ""))
+	el = mustParse(t, `<a xmlns:q="urn:x" q:URI="evil"/>`)
+	assert.Equal(t, "", el.SelectAttrValue("URI", ""))
 }

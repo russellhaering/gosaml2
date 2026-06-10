@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -184,7 +184,7 @@ func parseCertPEM(certPEM string) *x509.Certificate {
 	return cert
 }
 
-func testVerifyDoc(t *testing.T, doc *etree.Document, certPEM string) {
+func testVerifyDoc(t *testing.T, doc *xmltree.Document, certPEM string) {
 	cert := parseCertPEM(certPEM)
 
 	verifier := &Verifier{
@@ -200,7 +200,7 @@ func testVerifyDoc(t *testing.T, doc *etree.Document, certPEM string) {
 }
 
 func TestValidateWithEmptySignatureReference(t *testing.T) {
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(emptyReference))
 	require.NoError(t, err)
 
@@ -208,7 +208,7 @@ func TestValidateWithEmptySignatureReference(t *testing.T) {
 }
 
 func TestValidateWithValid(t *testing.T) {
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(validExample))
 	require.NoError(t, err)
 
@@ -216,7 +216,7 @@ func TestValidateWithValid(t *testing.T) {
 }
 
 func TestMapPathAndRemove(t *testing.T) {
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(`<X><Y/><Y><RemoveMe xmlns="x"/></Y></X>`)
 	require.NoError(t, err)
 
@@ -235,7 +235,7 @@ func TestMapPathAndRemove(t *testing.T) {
 
 func TestVerifyEmptyTrustedCerts(t *testing.T) {
 	verifier := &Verifier{}
-	_, err := verifier.Verify(&etree.Element{Tag: "Foo"})
+	_, err := verifier.Verify(&xmltree.Element{Tag: "Foo"})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrMissingSignature))
 }
@@ -245,10 +245,11 @@ func TestRSARoundTrip(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", "_test-id-123")
 
 	signed, err := signer.SignEnveloped(el)
@@ -274,10 +275,11 @@ func TestECDSARoundTrip(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", "_ecdsa-test-id")
 
 	signed, err := signer.SignEnveloped(el)
@@ -302,7 +304,7 @@ func TestSHA1Rejection(t *testing.T) {
 		Hash:  crypto.SHA1,
 	}
 
-	el := &etree.Element{Tag: "Foo"}
+	el := &xmltree.Element{Tag: "Foo"}
 	el.CreateAttr("ID", "_sha1-test")
 
 	signed, err := signer.SignEnveloped(el)

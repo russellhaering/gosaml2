@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +68,7 @@ func TestCertCrypto_CertMatchingDEREquality(t *testing.T) {
 
 	// Sign with cert1/key, try to verify with cert2 as trusted
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert1}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_same-key-diff-cert")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestCertCrypto_SingleTrustedCertNoKeyInfo(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_no-keyinfo")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestCertCrypto_SingleTrustedCertNoKeyInfoWrongKey(t *testing.T) {
 	key1, cert1 := randomTestKeyAndCert()
 	signer := &Signer{Key: key1, Certs: []*x509.Certificate{cert1}}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_wrong-key-noinfo")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestCertCrypto_MultipleTrustedCertsNoKeyInfo(t *testing.T) {
 	_, cert2 := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key1, Certs: []*x509.Certificate{cert1}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_multi-no-keyinfo")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -177,10 +177,11 @@ func TestCertCrypto_MultipleTrustedCertsNoKeyInfo(t *testing.T) {
 // will fail because only attacker-cert is matched against TrustedCerts.
 //
 // FINDING: The code takes sig.keyInfoCerts[0] only. This means:
-// - If an attacker places their cert first and a trusted cert second, rejection.
-// - If an attacker places a trusted cert first and their cert second,
-//   verification succeeds (correct: trusted cert matches, and signature is
-//   verified against the trusted cert's key, so attacker can't forge).
+//   - If an attacker places their cert first and a trusted cert second, rejection.
+//   - If an attacker places a trusted cert first and their cert second,
+//     verification succeeds (correct: trusted cert matches, and signature is
+//     verified against the trusted cert's key, so attacker can't forge).
+//
 // This is SECURE behavior.
 func TestCertCrypto_KeyInfoOnlyFirstCertUsed(t *testing.T) {
 	key1, cert1 := randomTestKeyAndCert() // trusted
@@ -188,7 +189,7 @@ func TestCertCrypto_KeyInfoOnlyFirstCertUsed(t *testing.T) {
 
 	// Sign with key1/cert1 legitimately
 	signer := &Signer{Key: key1, Certs: []*x509.Certificate{cert1}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_multi-keyinfo")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -199,7 +200,7 @@ func TestCertCrypto_KeyInfoOnlyFirstCertUsed(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Find existing KeyInfo and add attacker cert at position 0
-	var keyInfo *etree.Element
+	var keyInfo *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == keyInfoTag {
 			keyInfo = c
@@ -212,12 +213,12 @@ func TestCertCrypto_KeyInfoOnlyFirstCertUsed(t *testing.T) {
 	require.NotNil(t, x509Data)
 
 	// Prepend attacker cert
-	attackerCertEl := etree.NewElement(x509CertificateTag)
+	attackerCertEl := xmltree.NewElement(x509CertificateTag)
 	attackerCertEl.Space = x509Data.ChildElements()[0].Space
 	attackerCertEl.SetText(base64.StdEncoding.EncodeToString(cert2.Raw))
 
 	// Insert attacker cert before the real cert
-	newChildren := []etree.Token{attackerCertEl}
+	newChildren := []xmltree.Token{attackerCertEl}
 	for _, child := range x509Data.Child {
 		newChildren = append(newChildren, child)
 	}
@@ -239,7 +240,7 @@ func TestCertCrypto_KeyInfoSecondCertIgnored(t *testing.T) {
 	key1, cert1 := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key1, Certs: []*x509.Certificate{cert1}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_extra-certs")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -248,7 +249,7 @@ func TestCertCrypto_KeyInfoSecondCertIgnored(t *testing.T) {
 	// Add garbage cert data as second X509Certificate
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var keyInfo *etree.Element
+	var keyInfo *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == keyInfoTag {
 			keyInfo = c
@@ -261,7 +262,7 @@ func TestCertCrypto_KeyInfoSecondCertIgnored(t *testing.T) {
 	require.NotNil(t, x509Data)
 
 	// Append garbage cert
-	garbageCertEl := etree.NewElement(x509CertificateTag)
+	garbageCertEl := xmltree.NewElement(x509CertificateTag)
 	garbageCertEl.Space = x509Data.ChildElements()[0].Space
 	garbageCertEl.SetText("THIS_IS_NOT_VALID_BASE64_CERT_DATA!!!!")
 	x509Data.AddChild(garbageCertEl)
@@ -299,7 +300,7 @@ func TestCertCrypto_ECDSASignatureMalleability(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_ecdsa-malleable")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -308,7 +309,7 @@ func TestCertCrypto_ECDSASignatureMalleability(t *testing.T) {
 	// Extract the signature value
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -385,7 +386,7 @@ func TestCertCrypto_AlgorithmConfusionRSAMethodECDSACert(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_algo-confusion")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -426,7 +427,7 @@ func TestCertCrypto_AlgorithmConfusionECDSAMethodRSACert(t *testing.T) {
 
 	signer := &Signer{Key: rsaKey, Certs: []*x509.Certificate{rsaCert}}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_algo-confusion2")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -457,7 +458,7 @@ func TestCertCrypto_UnknownAlgorithmURI(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_unknown-algo")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -489,7 +490,7 @@ func TestCertCrypto_UnknownDigestAlgorithmURI(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_unknown-digest")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -542,7 +543,7 @@ func TestCertCrypto_ExpiredCertRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_expired")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -575,7 +576,7 @@ func TestCertCrypto_NotYetValidCertRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_not-yet-valid")
 
 	// We need the clock during signing to be within cert validity for SignEnveloped
@@ -615,7 +616,7 @@ func TestCertCrypto_ClockManipulationBypassExpiry(t *testing.T) {
 	require.NoError(t, err)
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_clock-bypass")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -643,7 +644,7 @@ func TestCertCrypto_RSATruncatedSignature(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_truncated-sig")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -652,7 +653,7 @@ func TestCertCrypto_RSATruncatedSignature(t *testing.T) {
 	// Tamper: truncate signature value
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -683,7 +684,7 @@ func TestCertCrypto_RSAPaddedSignature(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_padded-sig")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -691,7 +692,7 @@ func TestCertCrypto_RSAPaddedSignature(t *testing.T) {
 
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -727,7 +728,7 @@ func TestCertCrypto_ECDSAWrongLengthSignature(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_ec-wrong-len")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -735,7 +736,7 @@ func TestCertCrypto_ECDSAWrongLengthSignature(t *testing.T) {
 
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -767,7 +768,7 @@ func TestCertCrypto_Base64WhitespaceInSignatureValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_b64-ws")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -776,7 +777,7 @@ func TestCertCrypto_Base64WhitespaceInSignatureValue(t *testing.T) {
 	// Add whitespace to signature value
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -806,7 +807,7 @@ func TestCertCrypto_InvalidBase64SignatureValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_bad-b64-sig")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -814,7 +815,7 @@ func TestCertCrypto_InvalidBase64SignatureValue(t *testing.T) {
 
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -839,7 +840,7 @@ func TestCertCrypto_EmptySignatureValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_empty-sig")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -847,7 +848,7 @@ func TestCertCrypto_EmptySignatureValue(t *testing.T) {
 
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -871,7 +872,7 @@ func TestCertCrypto_InvalidBase64InKeyInfoCert(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_bad-b64-cert")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -899,7 +900,7 @@ func TestCertCrypto_MalformedDERInKeyInfoCert(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_bad-der-cert")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -976,7 +977,7 @@ func TestCertCrypto_NoCertChainValidation(t *testing.T) {
 
 	// Sign with child key/cert
 	signer := &Signer{Key: childKey, Certs: []*x509.Certificate{childCert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_chain-test")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -1084,7 +1085,7 @@ func TestCertCrypto_AttackerCertInKeyInfoRejected(t *testing.T) {
 
 	// Attacker signs with their own key and embeds their cert in KeyInfo
 	signer := &Signer{Key: attackerKey, Certs: []*x509.Certificate{attackerCert}}
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_attacker")
 	el.CreateElement("Assertion").SetText("admin=true")
 	signed, err := signer.SignEnveloped(el)
@@ -1105,7 +1106,7 @@ func TestCertCrypto_AttackerCertInKeyInfoRejected(t *testing.T) {
 
 func TestCertCrypto_EmptyTrustedCerts(t *testing.T) {
 	verifier := &Verifier{TrustedCerts: nil}
-	_, err := verifier.Verify(&etree.Element{Tag: "Foo"})
+	_, err := verifier.Verify(&xmltree.Element{Tag: "Foo"})
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrMissingSignature),
 		"expected ErrMissingSignature for empty TrustedCerts, got: %v", err)
@@ -1133,7 +1134,7 @@ func TestCertCrypto_SignatureReplacementAttack(t *testing.T) {
 	// Attacker signs the same content with their own key
 	attackerKey, attackerCert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_replacement")
 	el.CreateElement("Data").SetText("sensitive")
 
@@ -1165,7 +1166,7 @@ func TestCertCrypto_SHA1DefaultRejected(t *testing.T) {
 		Hash:  crypto.SHA1,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_sha1-reject")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -1221,7 +1222,7 @@ func TestCertCrypto_ContentTamperingDetected(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_tamper")
 	data := el.CreateElement("Data")
 	data.SetText("original")
@@ -1255,7 +1256,7 @@ func TestCertCrypto_DigestValueTampering(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_digest-tamper")
 	el.CreateElement("Data").SetText("good")
 
@@ -1325,7 +1326,7 @@ func TestCertCrypto_ECDSACurves(t *testing.T) {
 				Hash:  tc.hash,
 			}
 
-			el := &etree.Element{Tag: "Root"}
+			el := &xmltree.Element{Tag: "Root"}
 			el.CreateAttr("ID", fmt.Sprintf("_ecdsa-%s", tc.name))
 			el.CreateElement("Data").SetText("test")
 
@@ -1380,9 +1381,9 @@ func TestCertCrypto_ConcurrentVerification(t *testing.T) {
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
 	// Sign multiple different documents
-	var docs []*etree.Element
+	var docs []*xmltree.Element
 	for i := 0; i < 10; i++ {
-		el := &etree.Element{Tag: "Root"}
+		el := &xmltree.Element{Tag: "Root"}
 		el.CreateAttr("ID", fmt.Sprintf("_concurrent-%d", i))
 		el.CreateElement("Data").SetText(fmt.Sprintf("data-%d", i))
 		signed, err := signer.SignEnveloped(el)
@@ -1395,7 +1396,7 @@ func TestCertCrypto_ConcurrentVerification(t *testing.T) {
 
 	errCh := make(chan error, len(docs))
 	for _, doc := range docs {
-		go func(d *etree.Element) {
+		go func(d *xmltree.Element) {
 			_, err := verifier.Verify(d)
 			errCh <- err
 		}(doc)
@@ -1417,7 +1418,7 @@ func TestCertCrypto_ReferenceURIMismatch(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_original-id")
 
 	signed, err := signer.SignEnveloped(el)
@@ -1445,7 +1446,7 @@ func TestCertCrypto_MultipleSignaturesRejected(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_multi-sig")
 
 	signed, err := signer.SignEnveloped(el)
@@ -1487,7 +1488,7 @@ func TestCertCrypto_MissingSignedInfo(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_missing-signedinfo")
 
 	signed, err := signer.SignEnveloped(el)
@@ -1518,7 +1519,7 @@ func TestCertCrypto_MissingSignatureValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_missing-sigvalue")
 
 	signed, err := signer.SignEnveloped(el)
@@ -1559,7 +1560,7 @@ func TestCertCrypto_VerifyResultElementIsCanonicalized(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_canonical-result")
 	data := el.CreateElement("Data")
 	data.SetText("genuine")
@@ -1600,7 +1601,7 @@ func TestCertCrypto_ECDSAZeroSignatureRejected(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_ec-zero")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -1609,7 +1610,7 @@ func TestCertCrypto_ECDSAZeroSignatureRejected(t *testing.T) {
 	// Replace signature with zeros
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signatureValueTag {
 			sigValueEl = c
@@ -1657,7 +1658,7 @@ func TestCertCrypto_RSASmallKeyStillAccepted(t *testing.T) {
 	require.NoError(t, err)
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_small-key")
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)

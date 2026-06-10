@@ -2,12 +2,12 @@ package xmldsig
 
 import (
 	"crypto"
-	"crypto/subtle"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
 	_ "crypto/sha1"
 	_ "crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
@@ -16,7 +16,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 var uriRegexp = regexp.MustCompile("^#[a-zA-Z_][\\w.-]*$")
@@ -26,7 +26,7 @@ var whiteSpace = regexp.MustCompile("\\s+")
 type VerifyResult struct {
 	// Element is the verified XML element, reconstructed from the canonical
 	// bytes that were actually signed.
-	Element *etree.Element
+	Element *xmltree.Element
 
 	// Certificate is the trusted certificate that verified the signature.
 	Certificate *x509.Certificate
@@ -64,18 +64,18 @@ func (v *Verifier) now() time.Time {
 	return time.Now()
 }
 
-// parsedSignature holds the etree-extracted fields from a ds:Signature element.
+// parsedSignature holds the extracted fields from a ds:Signature element.
 type parsedSignature struct {
-	el           *etree.Element // the ds:Signature element itself
-	signedInfoEl *etree.Element // detached ds:SignedInfo
-	sigMethod    string         // SignatureMethod Algorithm
-	c14nMethod   string         // CanonicalizationMethod Algorithm
-	refURI       string         // Reference URI
-	digestMethod string         // DigestMethod Algorithm
-	digestValue  string         // DigestValue text (base64)
+	el           *xmltree.Element  // the ds:Signature element itself
+	signedInfoEl *xmltree.Element  // detached ds:SignedInfo
+	sigMethod    string            // SignatureMethod Algorithm
+	c14nMethod   string            // CanonicalizationMethod Algorithm
+	refURI       string            // Reference URI
+	digestMethod string            // DigestMethod Algorithm
+	digestValue  string            // DigestValue text (base64)
 	transforms   []parsedTransform // Transform Algorithm URIs
-	sigValue     string         // SignatureValue text (base64)
-	keyInfoCerts []string       // X509Certificate text values (base64 DER)
+	sigValue     string            // SignatureValue text (base64)
+	keyInfoCerts []string          // X509Certificate text values (base64 DER)
 }
 
 type parsedTransform struct {
@@ -106,7 +106,7 @@ func (v *Verifier) checkDigestAlgorithm(method string) error {
 }
 
 // Verify validates an enveloped XML signature on el.
-func (v *Verifier) Verify(el *etree.Element) (*VerifyResult, error) {
+func (v *Verifier) Verify(el *xmltree.Element) (*VerifyResult, error) {
 	if len(v.TrustedCerts) == 0 {
 		return nil, fmt.Errorf("%w: TrustedCerts is empty", ErrMissingSignature)
 	}
@@ -167,7 +167,7 @@ func (v *Verifier) Verify(el *etree.Element) (*VerifyResult, error) {
 	}
 
 	// Now use only the verified SignedInfo to extract reference data.
-	// Re-parse the canonical SignedInfo bytes with etree to extract reference info.
+	// Re-parse the canonical SignedInfo bytes to extract reference info.
 	verifiedSig, err := v.parseVerifiedSignedInfo(canonicalSignedInfo)
 	if err != nil {
 		return nil, err
@@ -186,10 +186,10 @@ func (v *Verifier) Verify(el *etree.Element) (*VerifyResult, error) {
 }
 
 // parseVerifiedSignedInfo re-parses canonical SignedInfo bytes to extract
-// Reference URI, DigestMethod, DigestValue, and Transforms using only etree.
+// Reference URI, DigestMethod, DigestValue, and Transforms.
 func (v *Verifier) parseVerifiedSignedInfo(canonicalBytes []byte) (*parsedSignature, error) {
-	doc := etree.NewDocument()
-	if err := doc.ReadFromBytes(canonicalBytes); err != nil {
+	doc, err := xmltree.Parse(canonicalBytes)
+	if err != nil {
 		return nil, fmt.Errorf("%w: could not parse canonical SignedInfo", ErrMalformedSignature)
 	}
 
@@ -245,7 +245,7 @@ func (v *Verifier) parseVerifiedSignedInfo(canonicalBytes []byte) (*parsedSignat
 }
 
 // findChildByTag finds a direct child element by tag name, ignoring namespace prefix.
-func findChildByTag(el *etree.Element, tag string) *etree.Element {
+func findChildByTag(el *xmltree.Element, tag string) *xmltree.Element {
 	for _, child := range el.ChildElements() {
 		if child.Tag == tag {
 			return child
@@ -255,7 +255,7 @@ func findChildByTag(el *etree.Element, tag string) *etree.Element {
 }
 
 // findSignature searches only direct children of el for a ds:Signature.
-func (v *Verifier) findSignature(el *etree.Element) (*parsedSignature, error) {
+func (v *Verifier) findSignature(el *xmltree.Element) (*parsedSignature, error) {
 	idAttr := el.SelectAttrValue(v.idAttribute(), "")
 
 	var found *parsedSignature
@@ -288,7 +288,7 @@ func (v *Verifier) findSignature(el *etree.Element) (*parsedSignature, error) {
 			return nil, err
 		}
 
-		// Parse the signature element using etree only
+		// Parse the signature element
 		sig, err := v.parseSignatureElement(elCtx, child)
 		if err != nil {
 			return nil, err
@@ -310,7 +310,7 @@ func (v *Verifier) findSignature(el *etree.Element) (*parsedSignature, error) {
 	return found, nil
 }
 
-func validateShape(signatureEl *etree.Element) error {
+func validateShape(signatureEl *xmltree.Element) error {
 	children := signatureEl.ChildElements()
 
 	childCounts := map[string]int{}
@@ -324,8 +324,8 @@ func validateShape(signatureEl *etree.Element) error {
 	return nil
 }
 
-// parseSignatureElement extracts all fields from a ds:Signature using etree only.
-func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *etree.Element) (*parsedSignature, error) {
+// parseSignatureElement extracts all fields from a ds:Signature.
+func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *xmltree.Element) (*parsedSignature, error) {
 	sig := &parsedSignature{
 		el: sigEl,
 	}
@@ -336,7 +336,7 @@ func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *etree.Eleme
 	}
 
 	// Find SignedInfo
-	var signedInfoEl *etree.Element
+	var signedInfoEl *xmltree.Element
 	for _, child := range sigEl.ChildElements() {
 		ctx, err := sigCtx.SubContext(child)
 		if err != nil {
@@ -438,7 +438,7 @@ func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *etree.Eleme
 	}
 
 	// SignatureValue
-	var sigValueEl *etree.Element
+	var sigValueEl *xmltree.Element
 	for _, child := range sigEl.ChildElements() {
 		if child.Tag == signatureValueTag {
 			sigValueEl = child
@@ -556,7 +556,7 @@ func decodeXMLDSigECDSA(sig []byte, curve elliptic.Curve) (*big.Int, *big.Int, e
 	return r, s, nil
 }
 
-func mapPathToElement(tree, el *etree.Element) []int {
+func mapPathToElement(tree, el *xmltree.Element) []int {
 	for i, child := range tree.Child {
 		if child == el {
 			return []int{i}
@@ -564,7 +564,7 @@ func mapPathToElement(tree, el *etree.Element) []int {
 	}
 
 	for i, child := range tree.Child {
-		if childElement, ok := child.(*etree.Element); ok {
+		if childElement, ok := child.(*xmltree.Element); ok {
 			childPath := mapPathToElement(childElement, el)
 			if childPath != nil {
 				return append([]int{i}, childPath...)
@@ -575,7 +575,7 @@ func mapPathToElement(tree, el *etree.Element) []int {
 	return nil
 }
 
-func removeElementAtPath(el *etree.Element, path []int) bool {
+func removeElementAtPath(el *xmltree.Element, path []int) bool {
 	if len(path) == 0 {
 		return false
 	}
@@ -584,7 +584,7 @@ func removeElementAtPath(el *etree.Element, path []int) bool {
 		return false
 	}
 
-	childElement, ok := el.Child[path[0]].(*etree.Element)
+	childElement, ok := el.Child[path[0]].(*xmltree.Element)
 	if !ok {
 		return false
 	}
@@ -599,7 +599,7 @@ func removeElementAtPath(el *etree.Element, path []int) bool {
 
 // transform applies the transforms from a verified SignedInfo to produce the
 // canonical element and the canonicalizer to use for digest computation.
-func (v *Verifier) transform(el *etree.Element, origSig *parsedSignature, verifiedSig *parsedSignature) (*etree.Element, Canonicalizer, error) {
+func (v *Verifier) transform(el *xmltree.Element, origSig *parsedSignature, verifiedSig *parsedSignature) (*xmltree.Element, Canonicalizer, error) {
 	// Map the path to the original signature element for removal
 	signaturePath := mapPathToElement(el, origSig.el)
 
@@ -645,7 +645,7 @@ func (v *Verifier) transform(el *etree.Element, origSig *parsedSignature, verifi
 	return el, canonicalizer, nil
 }
 
-func (v *Verifier) verifyDigest(el *etree.Element, origSig *parsedSignature, verifiedSig *parsedSignature) (*etree.Element, error) {
+func (v *Verifier) verifyDigest(el *xmltree.Element, origSig *parsedSignature, verifiedSig *parsedSignature) (*xmltree.Element, error) {
 	idAttr := el.SelectAttrValue(v.idAttribute(), "")
 
 	// Verify the reference URI matches
@@ -692,8 +692,7 @@ func (v *Verifier) verifyDigest(el *etree.Element, origSig *parsedSignature, ver
 	}
 
 	// Reconstruct element from verified canonical bytes
-	doc := etree.NewDocument()
-	err = doc.ReadFromBytes(referencedBytes)
+	doc, err := xmltree.Parse(referencedBytes)
 	if err != nil {
 		return nil, err
 	}

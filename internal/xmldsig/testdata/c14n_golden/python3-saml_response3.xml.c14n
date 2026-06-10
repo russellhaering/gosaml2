@@ -1,0 +1,50 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Consent="urn:oasis:names:tc:SAML:2.0:consent:unspecified" Destination="https://example.com/access/saml" ID="_6b85d0dd-bfa8-4def-82c2-8621e0452477" InResponseTo="_fb8418d0-571e-012e-eee0-0050569200d0" IssueInstant="2011-05-02T19:43:54.692Z" Version="2.0">
+  <Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">http://example.com/services/trust</Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"></samlp:StatusCode>
+  </samlp:Status>
+  <Assertion xmlns="urn:oasis:names:tc:SAML:2.0:assertion" ID="_dbe6a365-9582-460f-b4b1-1f79bf70f76b" IssueInstant="2011-05-02T19:43:54.645Z" Version="2.0">
+    <Issuer>http://example.com/services/trust</Issuer>
+    <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+      <ds:SignedInfo>
+        <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"></ds:CanonicalizationMethod>
+        <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></ds:SignatureMethod>
+        <ds:Reference URI="#_dbe6a365-9582-460f-b4b1-1f79bf70f76b">
+          <ds:Transforms>
+            <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform>
+            <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"></ds:Transform>
+          </ds:Transforms>
+          <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>
+          <ds:DigestValue>Digest</ds:DigestValue>
+        </ds:Reference>
+      </ds:SignedInfo>
+      <ds:SignatureValue>Signature</ds:SignatureValue>
+      <KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
+        <ds:X509Data>
+          <ds:X509Certificate>Stuff</ds:X509Certificate>
+        </ds:X509Data>
+      </KeyInfo>
+    </ds:Signature>
+    <Subject>
+      <NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">someone@example.com</NameID>
+      <SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <SubjectConfirmationData InResponseTo="_fb8418d0-571e-012e-eee0-0050569200d0" NotOnOrAfter="2011-05-02T19:48:54.707Z" Recipient="https://example.com/access/saml"></SubjectConfirmationData>
+      </SubjectConfirmation>
+    </Subject>
+    <Conditions NotBefore="2011-05-02T19:43:54.645Z" NotOnOrAfter="2011-05-02T20:43:54.645Z">
+      <AudienceRestriction>
+        <Audience>consumer.example.com</Audience>
+      </AudienceRestriction>
+    </Conditions>
+    <AttributeStatement>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress">
+        <AttributeValue>someone@example.com</AttributeValue>
+      </Attribute>
+    </AttributeStatement>
+    <AuthnStatement AuthnInstant="2011-05-02T19:43:54.285Z" SessionIndex="_dbe6a365-9582-460f-b4b1-1f79bf70f76b">
+      <AuthnContext>
+        <AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</AuthnContextClassRef>
+      </AuthnContext>
+    </AuthnStatement>
+  </Assertion>
+</samlp:Response>

@@ -1,14 +1,15 @@
 package xmldsig
 
 import (
+	"bytes"
 	"sort"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // Canonicalizer is an implementation of a canonicalization algorithm.
 type Canonicalizer interface {
-	Canonicalize(el *etree.Element) ([]byte, error)
+	Canonicalize(el *xmltree.Element) ([]byte, error)
 	Algorithm() AlgorithmID
 }
 
@@ -23,7 +24,7 @@ func (c *NullCanonicalizer) Algorithm() AlgorithmID {
 	return AlgorithmID("NULL")
 }
 
-func (c *NullCanonicalizer) Canonicalize(el *etree.Element) ([]byte, error) {
+func (c *NullCanonicalizer) Canonicalize(el *xmltree.Element) ([]byte, error) {
 	return canonicalSerialize(canonicalPrep(el, false, true))
 }
 
@@ -51,7 +52,7 @@ func MakeC14N10ExclusiveWithCommentsCanonicalizerWithPrefixList(prefixList strin
 }
 
 // Canonicalize transforms the input Element into a serialized XML document in canonical form.
-func (c *c14N10ExclusiveCanonicalizer) Canonicalize(el *etree.Element) ([]byte, error) {
+func (c *c14N10ExclusiveCanonicalizer) Canonicalize(el *xmltree.Element) ([]byte, error) {
 	err := TransformExcC14n(el, c.prefixList, c.comments)
 	if err != nil {
 		return nil, err
@@ -86,7 +87,7 @@ func MakeC14N11WithCommentsCanonicalizer() Canonicalizer {
 }
 
 // Canonicalize transforms the input Element into a serialized XML document in canonical form.
-func (c *c14N11Canonicalizer) Canonicalize(el *etree.Element) ([]byte, error) {
+func (c *c14N11Canonicalizer) Canonicalize(el *xmltree.Element) ([]byte, error) {
 	return canonicalSerialize(canonicalPrep(el, true, c.comments))
 }
 
@@ -116,7 +117,7 @@ func MakeC14N10WithCommentsCanonicalizer() Canonicalizer {
 }
 
 // Canonicalize transforms the input Element into a serialized XML document in canonical form.
-func (c *c14N10RecCanonicalizer) Canonicalize(inputXML *etree.Element) ([]byte, error) {
+func (c *c14N10RecCanonicalizer) Canonicalize(inputXML *xmltree.Element) ([]byte, error) {
 	parentNamespaceAttributes, parentXmlAttributes := getParentNamespaceAndXmlAttributes(inputXML)
 	inputXMLCopy := inputXML.Copy()
 	enhanceNamespaceAttributes(inputXMLCopy, parentNamespaceAttributes, parentXmlAttributes)
@@ -140,13 +141,13 @@ func composeAttr(space, key string) string {
 }
 
 type c14nSpace struct {
-	a    etree.Attr
+	a    xmltree.Attr
 	used bool
 }
 
 const nsSpace = "xmlns"
 
-// canonicalPrep accepts an *etree.Element and transforms it into one which is ready
+// canonicalPrep accepts an *xmltree.Element and transforms it into one which is ready
 // for serialization into inclusive canonical form. Specifically this
 // entails:
 //
@@ -157,11 +158,11 @@ const nsSpace = "xmlns"
 //
 // TODO(russell_h): This is very similar to excCanonicalPrep - perhaps they should
 // be unified into one parameterized function?
-func canonicalPrep(el *etree.Element, strip bool, comments bool) *etree.Element {
+func canonicalPrep(el *xmltree.Element, strip bool, comments bool) *xmltree.Element {
 	return canonicalPrepInner(el, make(map[string]string), strip, comments)
 }
 
-func canonicalPrepInner(el *etree.Element, seenSoFar map[string]string, strip bool, comments bool) *etree.Element {
+func canonicalPrepInner(el *xmltree.Element, seenSoFar map[string]string, strip bool, comments bool) *xmltree.Element {
 	_seenSoFar := make(map[string]string)
 	for k, v := range seenSoFar {
 		_seenSoFar[k] = v
@@ -197,7 +198,7 @@ func canonicalPrepInner(el *etree.Element, seenSoFar map[string]string, strip bo
 	if !comments {
 		c := 0
 		for c < len(ne.Child) {
-			if _, ok := ne.Child[c].(*etree.Comment); ok {
+			if _, ok := ne.Child[c].(*xmltree.Comment); ok {
 				ne.RemoveChildAt(c)
 			} else {
 				c++
@@ -206,7 +207,7 @@ func canonicalPrepInner(el *etree.Element, seenSoFar map[string]string, strip bo
 	}
 
 	for i, token := range ne.Child {
-		childElement, ok := token.(*etree.Element)
+		childElement, ok := token.(*xmltree.Element)
 		if ok {
 			ne.Child[i] = canonicalPrepInner(childElement, _seenSoFar, strip, comments)
 		}
@@ -215,23 +216,16 @@ func canonicalPrepInner(el *etree.Element, seenSoFar map[string]string, strip bo
 	return ne
 }
 
-func canonicalSerialize(el *etree.Element) ([]byte, error) {
-	doc := etree.NewDocument()
-	doc.SetRoot(el.Copy())
-
-	doc.WriteSettings = etree.WriteSettings{
-		CanonicalAttrVal: true,
-		CanonicalEndTags: true,
-		CanonicalText:    true,
-	}
-
-	return doc.WriteToBytes()
+func canonicalSerialize(el *xmltree.Element) ([]byte, error) {
+	var buf bytes.Buffer
+	el.WriteCanonicalTo(&buf)
+	return buf.Bytes(), nil
 }
 
-func getParentNamespaceAndXmlAttributes(el *etree.Element) (map[string]string, map[string]string) {
+func getParentNamespaceAndXmlAttributes(el *xmltree.Element) (map[string]string, map[string]string) {
 	namespaceMap := make(map[string]string, 23)
 	xmlMap := make(map[string]string, 5)
-	parents := make([]*etree.Element, 0, 23)
+	parents := make([]*xmltree.Element, 0, 23)
 	n1 := el.Parent()
 	if n1 == nil {
 		return namespaceMap, xmlMap
@@ -256,7 +250,7 @@ func getParentNamespaceAndXmlAttributes(el *etree.Element) (map[string]string, m
 	return namespaceMap, xmlMap
 }
 
-func enhanceNamespaceAttributes(el *etree.Element, parentNamespaces map[string]string, parentXmlAttributes map[string]string) {
+func enhanceNamespaceAttributes(el *xmltree.Element, parentNamespaces map[string]string, parentXmlAttributes map[string]string) {
 	for prefix, uri := range parentNamespaces {
 		// Skip empty namespace URIs - they are undeclarations and should
 		// not be injected onto subset root elements.

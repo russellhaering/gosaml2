@@ -1,0 +1,35 @@
+<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" ID="_c0c84b03960d4845b3931e7e429fe7fa" IssueInstant="2016-04-28T22:41:49.655Z" Version="2.0"><saml2:Issuer>https://idp.astuart.co/idp/shibboleth</saml2:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"></ds:CanonicalizationMethod>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"></ds:SignatureMethod>
+<ds:Reference URI="#_c0c84b03960d4845b3931e7e429fe7fa">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"><ec:InclusiveNamespaces xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#" PrefixList="xsd"></ec:InclusiveNamespaces></ds:Transform>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"></ds:DigestMethod>
+<ds:DigestValue>njFuiDnD41G6xI2DUPqLG24GWBYuzrYurVWNH6CXHlA=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>
+TUg7S7GdqWUYm7EkdBkH/k3CnqUm78c4IQxyB1MPMpcMAswjHQnUOY4f3P4EssYZRkTvk5Xazi2O
+r7DcN3f9U7FXtWAVD0HzBkbVKNM+jPCSKxd66zRUUFINJbYi/WJePiIveuSaUiK/8JJgFXr5z9GR
+EQtCuJTBAIf4JNUv0lhLWTACwrEYirtsrKrJMT0qd3Ff1iNuw9ufcMXuUJCiWGa3x3hTbV6XFmGY
+aMDv43aKAI64ytRd4URtJtKR1L6zt85ncF3FVwMdE9XVTzzKhaqDKafa4H8obZsIUwUDsY/k4qlc
+wt2/lVq6JE8I2v2oXPY817b2v0aP/Z8SyImgCQ==
+</ds:SignatureValue>
+<ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIIDODCCAiCgAwIBAgIUQH54kyyeacU69J2iwz9bzeLmMaswDQYJKoZIhvcNAQELBQAwHTEbMBkG
+A1UEAwwSY29sbGVnZS5jY2N0Y2EuZWR1MB4XDTE1MDYwNDIyMTAzMVoXDTM1MDYwNDIyMTAzMVow
+HTEbMBkGA1UEAwwSY29sbGVnZS5jY2N0Y2EuZWR1MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+CgKCAQEAlJhN20ng2VN/cTrWtqUINaUsrHCkYXbm2y1PTN4b6fJI5hbvcv+LWCuLkLi3+iPGlBpc
+HHfrdJcyhmBHRHQ9Sos3RIH5Lsn1IgjWe3hxQQmVeEi5xVxnw2YZGHaeX4YnI1TEBJwhtJmyitk7
+4LHybPGEqOJdApUnLz54L7I+252G/cOfEqUHMbxxtmHSc/9chF8bBxQ8OzIbJsByHnqiawQHwtst
+tre7n328gVqmf1VHE27cfAYiSjuK5pCsx/1kuJMBN+kg/3Gg9oi6aR50WX1VUF3IBcnTDeiAXRz3
+PgsT8FlVZou6Ik9NT/Y5IHOZVGk64SRDaG8FuGxLexXrswIDAQABo3AwbjAdBgNVHQ4EFgQUjQwa
+AoY3u/iToIE3ADeNEW+Uu34wTQYDVR0RBEYwRIISY29sbGVnZS5jY2N0Y2EuZWR1hi5odHRwczov
+L2NvbGxlZ2UuY2NjdGNhLmVkdTo4NDQzL2lkcC9zaGliYm9sZXRoMA0GCSqGSIb3DQEBCwUAA4IB
+AQB26rdxphN1YKad3yDhLg6Y1ZwbmAjc+l4QB1KSL+cLqhDn5iMy4VdWh8HpSKRqCwofLtlw3qOw
+ospj+mJaguXRMpjYODRQaKRkTrCGxJhuNrQxDXL/b6FOEIJnUYenbPevuNgRJc1VnREhWUUXT44K
+N5YUz9FEiG0BsBK8ecCPKBzTQ/hwaczhpqw6uqVMqxJaTGcnlCUHJAhVHiA8lWJ7vaNPsJ86xBFs
+/F76EwyFXIKQaruvcvChU7GNNSYdNJBa6HO99QWdGbr5aNQ4diunnBQdrdjgbQIwyhKTfbFWa2l5
+vbqEKDc0dwuPa6c25l8ruqxqCQ1CF8ZDDJ0XV6Ab</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature><saml2:Subject><saml2:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient" NameQualifier="https://idp.astuart.co/idp/shibboleth" SPNameQualifier="https://saml2.test.astuart.co/sso/saml2">AAdzZWNyZXQxAVyT8pMdokSCQIwZcewBdiLGv/UGZX4UNVpUI5QqkXPxy/s2H7BHxnT9AnVoDdLcKVhMcZrqHsnx6rB7YHOCQFymgctznZPosV/kNb85pM6ptKly1SqxBOw9iicrUwVrBOlbqZpRJufAGG8/dT0Q</saml2:NameID><saml2:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml2:SubjectConfirmationData Address="10.255.63.0" NotOnOrAfter="2016-04-28T22:46:49.719Z" Recipient="https://saml2.test.astuart.co/sso/saml2"></saml2:SubjectConfirmationData></saml2:SubjectConfirmation></saml2:Subject><saml2:Conditions NotBefore="2016-04-28T22:41:49.655Z" NotOnOrAfter="2016-04-28T22:46:49.655Z"><saml2:AudienceRestriction><saml2:Audience>https://saml2.test.astuart.co/sso/saml2</saml2:Audience></saml2:AudienceRestriction></saml2:Conditions><saml2:AuthnStatement AuthnInstant="2016-04-28T22:41:49.530Z" SessionIndex="_9bc060c924a6e97b1a8a828ea36d0c28"><saml2:SubjectLocality Address="10.255.63.0"></saml2:SubjectLocality><saml2:AuthnContext><saml2:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml2:AuthnContextClassRef></saml2:AuthnContext></saml2:AuthnStatement><saml2:AttributeStatement><saml2:Attribute FriendlyName="uid" Name="urn:oid:0.9.2342.19200300.100.1.1" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">pcollegeadmin</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="eduPersonPrimaryAffiliation" Name="urn:oid:1.3.6.1.4.1.5923.1.1.1.5" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">portalCollegeAdmin</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="cccMisCode" Name="urn:oid:1.3.6.1.4.1.9924.1.1.1.2" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">000</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="eduPersonAffiliation" Name="urn:oid:1.3.6.1.4.1.5923.1.1.1.1" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">portalCollegeAdmin</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="sn" Name="urn:oid:2.5.4.4" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">Collegeadmin</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="displayName" Name="urn:oid:2.16.840.1.113730.3.1.241" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">Peter Collegeadmin</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="givenName" Name="urn:oid:2.5.4.42" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">Peter</saml2:AttributeValue></saml2:Attribute><saml2:Attribute FriendlyName="eduPersonPrincipalName" Name="urn:oid:1.3.6.1.4.1.5923.1.1.1.6" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">pcollegeadmin@democollege.edu</saml2:AttributeValue></saml2:Attribute></saml2:AttributeStatement></saml2:Assertion>

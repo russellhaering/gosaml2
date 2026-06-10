@@ -34,8 +34,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
@@ -89,8 +89,16 @@ func TestDecode(t *testing.T) {
 		t.Fatalf("could not read expected output")
 	}
 
-	expected := &types.Assertion{}
-	err = xml.Unmarshal(f2, expected)
+	expectedDoc, err := xmltree.Parse(f2)
+	require.NoError(t, err)
+	expected, err := types.AssertionFromElement(expectedDoc.Root())
+	require.NoError(t, err)
+
+	// The extractor populates xsi:type, which encoding/xml never matched
+	// (stdlib prefix-form attribute tags don't match namespace-resolved
+	// attributes) — assert the improvement explicitly.
+	require.Equal(t, "xsd:string",
+		assertion.AttributeStatements[0].Attributes[0].Values[0].Type)
 
 	require.EqualValues(t, expected, assertion, "decrypted assertion did not match expectation")
 }
@@ -117,7 +125,7 @@ func testKeyStore(t *testing.T, validAt time.Time) *saml2.KeyStore {
 }
 
 func signResponse(t *testing.T, resp string, sp *ServiceProvider) string {
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(resp))
 	require.NoError(t, err)
 
@@ -135,17 +143,9 @@ func signResponse(t *testing.T, resp string, sp *ServiceProvider) string {
 	el, err = signer.SignEnveloped(el)
 	require.NoError(t, err)
 
-	doc0 := etree.NewDocument()
-	doc0.SetRoot(el)
-	doc0.WriteSettings = etree.WriteSettings{
-		CanonicalAttrVal: true,
-		CanonicalEndTags: true,
-		CanonicalText:    true,
-	}
-
-	str, err := doc0.WriteToString()
-	require.NoError(t, err)
-	return str
+	var buf bytes.Buffer
+	el.WriteCanonicalTo(&buf)
+	return buf.String()
 }
 
 // getServiceProvider returns a ServiceProvider that needs to either
@@ -166,15 +166,15 @@ func getServiceProvider(t *testing.T, _cert []byte) *ServiceProvider {
 	fakeTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	return &ServiceProvider{
-		IDPSSOURL:        "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
-		IDPEntityID:      "http://www.okta.com/exk5zt0r12Edi4rD20h7",
-		ACSURL:           "http://localhost:8080/v1/_saml_callback",
+		IDPSSOURL:         "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
+		IDPEntityID:       "http://www.okta.com/exk5zt0r12Edi4rD20h7",
+		ACSURL:            "http://localhost:8080/v1/_saml_callback",
 		SignAuthnRequests: true,
-		AudienceURIs:     []string{"123"},
-		IDPCertificates:  []*x509.Certificate{cert, cert0},
-		NameIDFormat:     saml2.NameIdFormatPersistent,
-		EntityID:         "http://localhost:8080",
-		Clock:            func() time.Time { return fakeTime },
+		AudienceURIs:      []string{"123"},
+		IDPCertificates:   []*x509.Certificate{cert, cert0},
+		NameIDFormat:      saml2.NameIdFormatPersistent,
+		EntityID:          "http://localhost:8080",
+		Clock:             func() time.Time { return fakeTime },
 	}
 }
 
@@ -331,7 +331,7 @@ func TestInvalidResponseBadCompression(t *testing.T) {
 	b64Response := base64.StdEncoding.EncodeToString(rawResponse)
 
 	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
-	require.EqualError(t, err, "XML syntax error on line 1: illegal character code U+0018")
+	require.EqualError(t, err, "xmltree: line 1 (offset 0): text outside the root element")
 	require.Nil(t, response)
 }
 
@@ -349,7 +349,7 @@ func TestInvalidResponseBadXML(t *testing.T) {
 	b64Response := base64.StdEncoding.EncodeToString(compressed.Bytes())
 
 	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
-	require.EqualError(t, err, "XML syntax error on line 1: invalid character entity &Invalid (no semicolon)")
+	require.EqualError(t, err, "xmltree: line 1 (offset 0): text outside the root element")
 	require.Nil(t, response)
 }
 
@@ -359,15 +359,13 @@ func TestInvalidResponseNoElement(t *testing.T) {
 	b64Response := base64.StdEncoding.EncodeToString([]byte("no-element-here"))
 
 	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
-	require.EqualError(t, err, "unable to parse response")
+	require.EqualError(t, err, "xmltree: line 1 (offset 0): text outside the root element")
 	require.Nil(t, response)
 }
 func TestSAMLCommentInjection(t *testing.T) {
-	// To show that we are not vulnerable, we want to prove that we get the canonicalized value using our parser
-	_, el, err := parseResponse([]byte(commentInjectionAttackResponse), 0)
-	require.NoError(t, err)
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-	require.Equal(t, "phoebe.simon@scaleft.com.evil.com", decodedResponse.Assertions[0].Subject.NameID.Value, "The full, canonacalized NameID should be returned.")
+	// The strict parser rejects comment-bearing documents outright, so a
+	// comment-splitting NameID injection can no longer even be ingested.
+	_, _, err := parseResponse([]byte(commentInjectionAttackResponse), 0)
+	require.Error(t, err, "comment injection must be rejected at parse time")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }

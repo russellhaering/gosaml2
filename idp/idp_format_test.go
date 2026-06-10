@@ -15,6 +15,7 @@
 package idp
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -22,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,7 @@ type idpFormatTestCase struct {
 // the SP's key, and returns the signed XML string.
 func signResponse(t *testing.T, resp string, spInst *sp.ServiceProvider) string {
 	t.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(resp))
 	require.NoError(t, err)
 
@@ -58,17 +59,9 @@ func signResponse(t *testing.T, resp string, spInst *sp.ServiceProvider) string 
 	el, err = signer.SignEnveloped(el)
 	require.NoError(t, err)
 
-	doc0 := etree.NewDocument()
-	doc0.SetRoot(el)
-	doc0.WriteSettings = etree.WriteSettings{
-		CanonicalAttrVal: true,
-		CanonicalEndTags: true,
-		CanonicalText:    true,
-	}
-
-	str, err := doc0.WriteToString()
-	require.NoError(t, err)
-	return str
+	var buf bytes.Buffer
+	el.WriteCanonicalTo(&buf)
+	return buf.String()
 }
 
 // loadAndSign reads an XML response fixture, signs it with the SP's key, and
@@ -342,52 +335,52 @@ func TestIdPResponseFormats(t *testing.T) {
 // parsing path used for IdP discovery / routing.
 func TestDecodeUnverifiedBaseResponse_IdPFormats(t *testing.T) {
 	tests := []struct {
-		name        string
-		xmlFile     string
-		wantIssuer  string
-		wantDest    string
+		name         string
+		xmlFile      string
+		wantIssuer   string
+		wantDest     string
 		wantAudience string
 	}{
 		{
-			name:        "AzureAD",
-			xmlFile:     "../testdata/azure_ad_response.xml",
-			wantIssuer:  "https://sts.windows.net/aaaabbbb-0000-cccc-1111-dddd2222eeee/",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "AzureAD",
+			xmlFile:      "../testdata/azure_ad_response.xml",
+			wantIssuer:   "https://sts.windows.net/aaaabbbb-0000-cccc-1111-dddd2222eeee/",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 		{
-			name:        "Keycloak",
-			xmlFile:     "../testdata/keycloak_response.xml",
-			wantIssuer:  "https://keycloak.example.com/realms/test",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "Keycloak",
+			xmlFile:      "../testdata/keycloak_response.xml",
+			wantIssuer:   "https://keycloak.example.com/realms/test",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 		{
-			name:        "Shibboleth",
-			xmlFile:     "../testdata/shibboleth_response.xml",
-			wantIssuer:  "https://idp.example.edu/idp/shibboleth",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "Shibboleth",
+			xmlFile:      "../testdata/shibboleth_response.xml",
+			wantIssuer:   "https://idp.example.edu/idp/shibboleth",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 		{
-			name:        "GoogleWorkspace",
-			xmlFile:     "../testdata/google_response.xml",
-			wantIssuer:  "https://accounts.google.com/o/saml2?idpid=C01abc123",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "GoogleWorkspace",
+			xmlFile:      "../testdata/google_response.xml",
+			wantIssuer:   "https://accounts.google.com/o/saml2?idpid=C01abc123",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 		{
-			name:        "ADFSFormat",
-			xmlFile:     "../testdata/adfs_format_response.xml",
-			wantIssuer:  "http://adfs.example.com/adfs/services/trust",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "ADFSFormat",
+			xmlFile:      "../testdata/adfs_format_response.xml",
+			wantIssuer:   "http://adfs.example.com/adfs/services/trust",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 		{
-			name:        "OneLoginFormat",
-			xmlFile:     "../testdata/onelogin_format_response.xml",
-			wantIssuer:  "https://app.onelogin.com/saml/metadata/123456",
-			wantDest:    "http://localhost:8080/v1/_saml_callback",
+			name:         "OneLoginFormat",
+			xmlFile:      "../testdata/onelogin_format_response.xml",
+			wantIssuer:   "https://app.onelogin.com/saml/metadata/123456",
+			wantDest:     "http://localhost:8080/v1/_saml_callback",
 			wantAudience: "https://sp.example.com",
 		},
 	}

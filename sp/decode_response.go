@@ -24,13 +24,10 @@ import (
 	"fmt"
 	"io"
 
-	"encoding/xml"
-
-	"github.com/beevik/etree"
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
-	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
 const (
@@ -88,21 +85,6 @@ func (sp *ServiceProvider) validateLogoutResponseAttributes(response *types.Logo
 	return nil
 }
 
-func xmlUnmarshalElement(el *etree.Element, obj interface{}) error {
-	doc := etree.NewDocument()
-	doc.SetRoot(el)
-	data, err := doc.WriteToBytes()
-	if err != nil {
-		return err
-	}
-
-	err = xml.Unmarshal(data, obj)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	if sp.SPKeyStore == nil {
 		return nil, fmt.Errorf("no decryption certs available")
@@ -132,19 +114,19 @@ func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 
 // hasEncryptedAssertion reports whether el contains any saml:EncryptedAssertion
 // element anywhere in its subtree.
-func hasEncryptedAssertion(el *etree.Element) bool {
+func hasEncryptedAssertion(el *xmltree.Element) bool {
 	found := false
-	_ = dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, func(_ dsig.NSContext, _ *etree.Element) error {
+	_ = dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, func(_ dsig.NSContext, _ *xmltree.Element) error {
 		found = true
 		return dsig.ErrTraversalHalted
 	})
 	return found
 }
 
-func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
+func (sp *ServiceProvider) decryptAssertions(el *xmltree.Element) error {
 	var decryptCert *tls.Certificate
 
-	decryptAssertion := func(ctx dsig.NSContext, encryptedElement *etree.Element) error {
+	decryptAssertion := func(ctx dsig.NSContext, encryptedElement *xmltree.Element) error {
 		if parent := encryptedElement.Parent(); parent != el {
 			parentTag := "<none>"
 			if parent != nil {
@@ -158,8 +140,7 @@ func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 			return fmt.Errorf("unable to detach encrypted assertion: %v", err)
 		}
 
-		encryptedAssertion := &types.EncryptedAssertion{}
-		err = xmlUnmarshalElement(detached, encryptedAssertion)
+		encryptedAssertion, err := types.EncryptedAssertionFromElement(detached)
 		if err != nil {
 			return fmt.Errorf("unable to unmarshal encrypted assertion: %v", err)
 		}
@@ -182,7 +163,7 @@ func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 		}
 
 		// Replace the original encrypted assertion with the decrypted one.
-		if el.RemoveChild(encryptedElement) == nil {
+		if !el.RemoveChild(encryptedElement) {
 			return fmt.Errorf("unable to remove encrypted assertion element")
 		}
 
@@ -190,14 +171,10 @@ func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 		return nil
 	}
 
-	if err := dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, decryptAssertion); err != nil {
-		return err
-	} else {
-		return nil
-	}
+	return dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, decryptAssertion)
 }
 
-func (sp *ServiceProvider) validateElementSignature(el *etree.Element) (*etree.Element, error) {
+func (sp *ServiceProvider) validateElementSignature(el *xmltree.Element) (*xmltree.Element, error) {
 	result, err := sp.verifier().Verify(el)
 	if err != nil {
 		return nil, err
@@ -207,8 +184,8 @@ func (sp *ServiceProvider) validateElementSignature(el *etree.Element) (*etree.E
 
 // verifyAssertionSignaturesIfPresent iterates through assertions within a
 // signed Response and verifies any that carry their own signatures.
-func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.Element) error {
-	verifyAssertion := func(ctx dsig.NSContext, assertionEl *etree.Element) error {
+func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *xmltree.Element) error {
+	verifyAssertion := func(ctx dsig.NSContext, assertionEl *xmltree.Element) error {
 		if assertionEl.Parent() != responseEl {
 			return nil
 		}
@@ -225,7 +202,7 @@ func (sp *ServiceProvider) verifyAssertionSignaturesIfPresent(responseEl *etree.
 			return fmt.Errorf("assertion signature verification failed: %v", err)
 		}
 
-		if responseEl.RemoveChild(assertionEl) == nil {
+		if !responseEl.RemoveChild(assertionEl) {
 			return fmt.Errorf("unable to remove unverified assertion element")
 		}
 		responseEl.AddChild(result.Element)
@@ -248,11 +225,8 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 		return nil, err
 	}
 
-	var responseSignatureValidated bool
-	decodedResponse := &types.Response{}
-
 	if sp.InsecureSkipSignatureValidation {
-		err = xmlUnmarshalElement(unverifiedResponse, decodedResponse)
+		decodedResponse, err := types.ResponseFromElement(unverifiedResponse)
 		if err != nil {
 			return nil, fmt.Errorf("unable to unmarshal response: %v", err)
 		}
@@ -286,13 +260,11 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 			return nil, err
 		}
 
-		responseSignatureValidated = true
-
-		err = xmlUnmarshalElement(signedResponseEl, decodedResponse)
+		decodedResponse, err := types.ResponseFromElement(signedResponseEl)
 		if err != nil {
 			return nil, fmt.Errorf("unable to unmarshal response: %v", err)
 		}
-		decodedResponse.SignatureValidated = responseSignatureValidated
+		decodedResponse.SignatureValidated = true
 
 		if err := sp.Validate(decodedResponse); err != nil {
 			return nil, err
@@ -303,7 +275,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 		return decodedResponse, nil
 	}
 
-	err = xmlUnmarshalElement(unverifiedResponse, decodedResponse)
+	decodedResponse, err := types.ResponseFromElement(unverifiedResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +295,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 		return nil, &saml2.ValidationError{Reason: saml2.ErrUnsignedEncryptedAssertion}
 	}
 
-	addSignedAssertion := func(ctx dsig.NSContext, unverifiedAssertion *etree.Element) error {
+	addSignedAssertion := func(ctx dsig.NSContext, unverifiedAssertion *xmltree.Element) error {
 		parent := unverifiedAssertion.Parent()
 		if parent == nil {
 			return fmt.Errorf("parent is nil")
@@ -343,9 +315,7 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 			return err
 		}
 
-		decodedAssertion := &types.Assertion{}
-
-		err = xmlUnmarshalElement(result.Element, decodedAssertion)
+		decodedAssertion, err := types.AssertionFromElement(result.Element)
 		if err != nil {
 			return fmt.Errorf("unable to unmarshal assertion: %v", err)
 		}
@@ -380,51 +350,20 @@ func DecodeUnverifiedBaseResponse(encodedResponse string) (*types.UnverifiedBase
 	}
 
 	var response *types.UnverifiedBaseResponse
-	var rawXML []byte
 
 	err = maybeDeflate(raw, defaultMaxDecompressedResponseSize, func(maybeXML []byte) error {
-		response = &types.UnverifiedBaseResponse{}
-		rawXML = maybeXML
-		return xml.Unmarshal(maybeXML, response)
+		doc, err := xmltree.Parse(maybeXML)
+		if err != nil {
+			return err
+		}
+		response, err = types.UnverifiedBaseResponseFromElement(doc.Root())
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	response.Audiences = extractAudiences(rawXML)
-
 	return response, nil
-}
-
-type unverifiedAudiences struct {
-	Assertions []struct {
-		Conditions struct {
-			AudienceRestrictions []struct {
-				Audiences []struct {
-					Value string `xml:",chardata"`
-				} `xml:"Audience"`
-			} `xml:"AudienceRestriction"`
-		} `xml:"Conditions"`
-	} `xml:"Assertion"`
-}
-
-func extractAudiences(rawXML []byte) []string {
-	var ua unverifiedAudiences
-	_ = xml.Unmarshal(rawXML, &ua)
-
-	seen := make(map[string]bool)
-	var audiences []string
-	for _, a := range ua.Assertions {
-		for _, ar := range a.Conditions.AudienceRestrictions {
-			for _, aud := range ar.Audiences {
-				if aud.Value != "" && !seen[aud.Value] {
-					seen[aud.Value] = true
-					audiences = append(audiences, aud.Value)
-				}
-			}
-		}
-	}
-	return audiences
 }
 
 func maybeDeflate(data []byte, maxSize int64, decoder func([]byte) error) error {
@@ -456,14 +395,16 @@ func maybeDeflate(data []byte, maxSize int64, decoder func([]byte) error) error 
 	return decoder(deflated)
 }
 
-func parseResponse(xml []byte, maxSize int64) (*etree.Document, *etree.Element, error) {
-	var doc *etree.Document
-	var rawXML []byte
+func parseResponse(raw []byte, maxSize int64) (*xmltree.Document, *xmltree.Element, error) {
+	var doc *xmltree.Document
 
-	err := maybeDeflate(xml, maxSize, func(xml []byte) error {
-		doc = etree.NewDocument()
-		rawXML = xml
-		return doc.ReadFromBytes(xml)
+	err := maybeDeflate(raw, maxSize, func(data []byte) error {
+		parsed, err := xmltree.Parse(data)
+		if err != nil {
+			return err
+		}
+		doc = parsed
+		return nil
 	})
 	if err != nil {
 		return nil, nil, err
@@ -472,11 +413,6 @@ func parseResponse(xml []byte, maxSize int64) (*etree.Document, *etree.Element, 
 	el := doc.Root()
 	if el == nil {
 		return nil, nil, fmt.Errorf("unable to parse response")
-	}
-
-	err = rtvalidator.Validate(bytes.NewReader(rawXML))
-	if err != nil {
-		return nil, nil, err
 	}
 
 	return doc, el, nil
@@ -492,8 +428,12 @@ func DecodeUnverifiedLogoutResponse(encodedResponse string) (*types.LogoutRespon
 	var response *types.LogoutResponse
 
 	err = maybeDeflate(raw, defaultMaxDecompressedResponseSize, func(maybeXML []byte) error {
-		response = &types.LogoutResponse{}
-		return xml.Unmarshal(maybeXML, response)
+		doc, err := xmltree.Parse(maybeXML)
+		if err != nil {
+			return err
+		}
+		response, err = types.LogoutResponseFromElement(doc.Root())
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -530,8 +470,7 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponsePOST(ctx context.Context
 		}
 	}
 
-	decodedResponse := &types.LogoutResponse{}
-	err = xmlUnmarshalElement(el, decodedResponse)
+	decodedResponse, err := types.LogoutResponseFromElement(el)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal logout response: %v", err)
 	}

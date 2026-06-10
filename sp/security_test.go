@@ -15,6 +15,7 @@
 package sp
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -33,9 +34,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
@@ -57,17 +58,17 @@ func securityTestSP(t *testing.T) (*ServiceProvider, *saml2.KeyStore) {
 	require.NoError(t, err)
 
 	sp := &ServiceProvider{
-		EntityID:         "https://sp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		SLOURL:           "https://sp.example.com/slo",
-		IDPEntityID:      "http://www.okta.com/exk5zt0r12Edi4rD20h7",
-		IDPSSOURL:        "https://idp.example.com/sso",
-		IDPCertificates:  []*x509.Certificate{idpCert, spCert},
-		SPKeyStore:       ks,
+		EntityID:          "https://sp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		SLOURL:            "https://sp.example.com/slo",
+		IDPEntityID:       "http://www.okta.com/exk5zt0r12Edi4rD20h7",
+		IDPSSOURL:         "https://idp.example.com/sso",
+		IDPCertificates:   []*x509.Certificate{idpCert, spCert},
+		SPKeyStore:        ks,
 		SignAuthnRequests: true,
-		AudienceURIs:     []string{"https://sp.example.com"},
-		Clock:            func() time.Time { return fakeTime },
-		ClockSkew:        60 * time.Second,
+		AudienceURIs:      []string{"https://sp.example.com"},
+		Clock:             func() time.Time { return fakeTime },
+		ClockSkew:         60 * time.Second,
 	}
 
 	return sp, ks
@@ -138,7 +139,7 @@ func makeValidResponse(sp *ServiceProvider) string {
 func signAssertionOnly(t *testing.T, responseXML string, sp *ServiceProvider) string {
 	t.Helper()
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(responseXML))
 	require.NoError(t, err)
 
@@ -156,7 +157,7 @@ func signAssertionOnly(t *testing.T, responseXML string, sp *ServiceProvider) st
 	// signing exactly matches what the verifier will produce during
 	// verification. This is critical because NSDetach inherits namespace
 	// declarations from ancestors that Copy() does not.
-	err = dsig.NSFindIterate(root, saml2.SAMLAssertionNamespace, saml2.AssertionTag, func(ctx dsig.NSContext, assertionEl *etree.Element) error {
+	err = dsig.NSFindIterate(root, saml2.SAMLAssertionNamespace, saml2.AssertionTag, func(ctx dsig.NSContext, assertionEl *xmltree.Element) error {
 		if assertionEl.Parent() != root {
 			return nil
 		}
@@ -177,17 +178,10 @@ func signAssertionOnly(t *testing.T, responseXML string, sp *ServiceProvider) st
 	})
 	require.NoError(t, err)
 
-	doc.WriteSettings = etree.WriteSettings{
-		CanonicalAttrVal: true,
-		CanonicalEndTags: true,
-		CanonicalText:    true,
-	}
-
-	str, err := doc.WriteToString()
-	require.NoError(t, err)
-	return str
+	var buf bytes.Buffer
+	doc.Root().WriteCanonicalTo(&buf)
+	return buf.String()
 }
-
 
 // ============================================================================
 // Attack Class 1: XML Signature Wrapping (XSW) — see xsw_test.go
@@ -260,18 +254,10 @@ func TestCommentInjection_InNameID(t *testing.T) {
 		sp.AudienceURIs[0],
 	)
 
-	// Parse and verify that comment-injected NameID returns the full canonical value
-	_, el, err := parseResponse([]byte(responseWithComment), 0)
-	require.NoError(t, err)
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-
-	// The NameID should be the FULL concatenated text including the part after the comment
-	nameID := decodedResponse.Assertions[0].Subject.NameID.Value
-	require.Equal(t, "admin@example.com.evil.com", nameID,
-		"Comment injection should not truncate NameID; full canonicalized value must be returned")
+	// The strict parser rejects the comment outright.
+	_, _, err := parseResponse([]byte(responseWithComment), 0)
+	require.Error(t, err, "comment injection must be rejected at parse time")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }
 
 func TestCommentInjection_InAttributeValue(t *testing.T) {
@@ -308,16 +294,10 @@ func TestCommentInjection_InAttributeValue(t *testing.T) {
 		sp.AudienceURIs[0],
 	)
 
-	_, el, err := parseResponse([]byte(responseWithComment), 0)
-	require.NoError(t, err)
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-
-	attrValue := decodedResponse.Assertions[0].AttributeStatements[0].Attributes[0].Values[0].Value
-	require.Equal(t, "useradmin", attrValue,
-		"Comment in attribute value should not truncate; full concatenated value must be returned")
+	// The strict parser rejects the comment outright.
+	_, _, err := parseResponse([]byte(responseWithComment), 0)
+	require.Error(t, err, "comment in attribute value must be rejected at parse time")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }
 
 // ============================================================================
@@ -374,7 +354,7 @@ func TestMultipleAssertionInjection_OnlyOneAssertionSigned(t *testing.T) {
 	)
 
 	// Sign only the first assertion
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromBytes([]byte(multiAssertionResp)))
 
 	root := doc.Root()
@@ -413,7 +393,7 @@ func TestSignatureBypass_RemovedSignature(t *testing.T) {
 	signed := signResponse(t, validResp, sp)
 
 	// Remove the signature
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromBytes([]byte(signed)))
 
 	sigs := doc.Root().FindElements("//Signature")

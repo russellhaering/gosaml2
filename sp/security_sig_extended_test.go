@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +37,7 @@ func TestSignatureExclusion_StripResponseSignature(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Remove all Signature elements
@@ -82,11 +82,11 @@ func TestSignatureExclusion_StripAssertionSigValueInSignedResponse(t *testing.T)
 
 	// Build response and sign the assertion first
 	raw := buildLegitResponse("legit@example.com")
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(raw))
 
 	respEl := doc.Root()
-	var assertionEl *etree.Element
+	var assertionEl *xmltree.Element
 	for _, child := range respEl.ChildElements() {
 		if child.Tag == "Assertion" {
 			assertionEl = child
@@ -105,7 +105,7 @@ func TestSignatureExclusion_StripAssertionSigValueInSignedResponse(t *testing.T)
 	signedRespEl, err := signer.SignEnveloped(respEl)
 	require.NoError(t, err)
 
-	outDoc := etree.NewDocument()
+	outDoc := xmltree.NewDocument()
 	outDoc.SetRoot(signedRespEl)
 	signed, err := outDoc.WriteToString()
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestSignatureExclusion_StripAssertionSigValueInSignedResponse(t *testing.T)
 	require.NoError(t, err, "baseline: doubly-signed response should validate")
 
 	// Now strip SignatureValue from the assertion's inner signature
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(signed))
 
 	for _, a := range doc2.Root().FindElements("//Assertion") {
@@ -153,12 +153,12 @@ func TestMalformedSignatureValues(t *testing.T) {
 	signed := signResponseXML(t, raw, signer)
 
 	tests := []struct {
-		name    string
-		modify  func(doc *etree.Document)
+		name   string
+		modify func(doc *xmltree.Document)
 	}{
 		{
 			name: "EmptySignatureValue",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sv := range doc.Root().FindElements("//SignatureValue") {
 					sv.SetText("")
 				}
@@ -166,7 +166,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "WhitespaceOnlySignatureValue",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sv := range doc.Root().FindElements("//SignatureValue") {
 					sv.SetText("   \n\t  ")
 				}
@@ -174,7 +174,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "TruncatedBase64SignatureValue",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sv := range doc.Root().FindElements("//SignatureValue") {
 					original := sv.Text()
 					if len(original) > 10 {
@@ -185,7 +185,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "InvalidBase64CharsInSignatureValue",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sv := range doc.Root().FindElements("//SignatureValue") {
 					sv.SetText("!!!" + sv.Text()[3:])
 				}
@@ -193,7 +193,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "MissingSignedInfoElement",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, si := range doc.Root().FindElements("//SignedInfo") {
 					if p := si.Parent(); p != nil {
 						p.RemoveChild(si)
@@ -203,7 +203,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "DuplicateSignedInfoElements",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sig := range doc.Root().FindElements("//Signature") {
 					for _, si := range sig.ChildElements() {
 						if si.Tag == "SignedInfo" {
@@ -216,7 +216,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 		},
 		{
 			name: "DuplicateSignatureValueElements",
-			modify: func(doc *etree.Document) {
+			modify: func(doc *xmltree.Document) {
 				for _, sig := range doc.Root().FindElements("//Signature") {
 					for _, sv := range sig.ChildElements() {
 						if sv.Tag == "SignatureValue" {
@@ -231,7 +231,7 @@ func TestMalformedSignatureValues(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := etree.NewDocument()
+			doc := xmltree.NewDocument()
 			require.NoError(t, doc.ReadFromString(signed))
 
 			tc.modify(doc)
@@ -274,7 +274,7 @@ func TestCertConfusion_EmbedAttackerCertInKeyInfo(t *testing.T) {
 	_ = attackerKey // suppress unused
 
 	// Replace X509Certificate with attacker cert
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, certEl := range doc.Root().FindElements("//X509Certificate") {
@@ -305,7 +305,7 @@ func TestCertConfusion_OmitKeyInfoMultipleTrustedCerts(t *testing.T) {
 	signed := signResponseXML(t, raw, signer)
 
 	// Remove KeyInfo entirely
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, ki := range doc.Root().FindElements("//KeyInfo") {
@@ -361,7 +361,7 @@ func TestCertConfusion_CertRotationNoKeyInfo(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 	for _, ki := range doc.Root().FindElements("//KeyInfo") {
 		if p := ki.Parent(); p != nil {
@@ -387,20 +387,20 @@ func TestCertConfusion_OmitKeyInfoSingleTrustedCert(t *testing.T) {
 
 	// SP with only ONE trusted cert
 	sp := &ServiceProvider{
-		IDPEntityID:      "https://idp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		AudienceURIs:     []string{"https://sp.example.com"},
-		IDPCertificates:  []*x509.Certificate{spCert},
-		SPKeyStore:       ks,
+		IDPEntityID:       "https://idp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		AudienceURIs:      []string{"https://sp.example.com"},
+		IDPCertificates:   []*x509.Certificate{spCert},
+		SPKeyStore:        ks,
 		SignAuthnRequests: true,
-		Clock:            func() time.Time { return xswFakeTime },
+		Clock:             func() time.Time { return xswFakeTime },
 	}
 
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
 	// Remove KeyInfo entirely
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, ki := range doc.Root().FindElements("//KeyInfo") {
@@ -451,13 +451,13 @@ func TestCertConfusion_ExpiredCertificateInKeyInfo(t *testing.T) {
 
 	// Trust the expired cert in the SP
 	sp := &ServiceProvider{
-		IDPEntityID:      "https://idp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		AudienceURIs:     []string{"https://sp.example.com"},
-		IDPCertificates:  []*x509.Certificate{expiredCert},
-		SPKeyStore:       ks,
+		IDPEntityID:       "https://idp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		AudienceURIs:      []string{"https://sp.example.com"},
+		IDPCertificates:   []*x509.Certificate{expiredCert},
+		SPKeyStore:        ks,
 		SignAuthnRequests: true,
-		Clock:            func() time.Time { return xswFakeTime },
+		Clock:             func() time.Time { return xswFakeTime },
 	}
 
 	raw := buildLegitResponse("legit@example.com")
@@ -494,13 +494,13 @@ func TestCertConfusion_NotYetValidCertificateInKeyInfo(t *testing.T) {
 	}
 
 	sp := &ServiceProvider{
-		IDPEntityID:      "https://idp.example.com",
-		ACSURL:           "https://sp.example.com/acs",
-		AudienceURIs:     []string{"https://sp.example.com"},
-		IDPCertificates:  []*x509.Certificate{futureCert},
-		SPKeyStore:       ks,
+		IDPEntityID:       "https://idp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		AudienceURIs:      []string{"https://sp.example.com"},
+		IDPCertificates:   []*x509.Certificate{futureCert},
+		SPKeyStore:        ks,
 		SignAuthnRequests: true,
-		Clock:            func() time.Time { return xswFakeTime },
+		Clock:             func() time.Time { return xswFakeTime },
 	}
 
 	raw := buildLegitResponse("legit@example.com")
@@ -525,7 +525,7 @@ func TestDigestManipulation_ReplaceDigestValueAfterSigning(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, dv := range doc.Root().FindElements("//DigestValue") {
@@ -552,7 +552,7 @@ func TestDigestManipulation_ModifyDigestValueLeaveSignatureIntact(t *testing.T) 
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Modify the DigestValue in the XML tree (but not the signature bytes)
@@ -579,7 +579,7 @@ func TestDigestManipulation_EmptyDigestValue(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, dv := range doc.Root().FindElements("//DigestValue") {
@@ -634,7 +634,7 @@ func TestReferenceURIManipulation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := etree.NewDocument()
+			doc := xmltree.NewDocument()
 			require.NoError(t, doc.ReadFromString(signed))
 
 			// Find and modify the Reference URI
@@ -670,7 +670,7 @@ func TestTransformManipulation_RemoveEnvelopedSignatureTransform(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Remove the enveloped-signature transform
@@ -701,12 +701,12 @@ func TestTransformManipulation_AddExtraXSLTTransform(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Add an XSLT transform
 	for _, transforms := range doc.Root().FindElements("//Transforms") {
-		xsltTransform := etree.NewElement("Transform")
+		xsltTransform := xmltree.NewElement("Transform")
 		xsltTransform.Space = "ds"
 		xsltTransform.CreateAttr("Algorithm", "http://www.w3.org/TR/1999/REC-xslt-19991116")
 		transforms.AddChild(xsltTransform)
@@ -730,7 +730,7 @@ func TestTransformManipulation_DuplicateEnvelopedSignatureTransform(t *testing.T
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Duplicate the enveloped-signature transform
@@ -765,7 +765,7 @@ func TestC14N_UnrecognizedCanonicalizationMethod(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, cm := range doc.Root().FindElements("//CanonicalizationMethod") {
@@ -850,7 +850,7 @@ func TestC14N_TransformAlgorithmManipulationAfterSigning(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Find Transform elements within SignedInfo and change the C14N algorithm
@@ -893,11 +893,11 @@ func TestWrongElement_SignAssertionClaimResponseSig(t *testing.T) {
 	signer := xswSigner(t, ks)
 
 	raw := buildLegitResponse("legit@example.com")
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(raw))
 
 	// Sign the assertion only
-	var assertionEl *etree.Element
+	var assertionEl *xmltree.Element
 	for _, child := range doc.Root().ChildElements() {
 		if child.Tag == "Assertion" {
 			assertionEl = child
@@ -935,7 +935,7 @@ func TestWrongElement_SignResponseAddUnsignedAssertion(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Add a second unsigned assertion
@@ -966,7 +966,7 @@ func TestDuplicateIDs_TwoAssertionsSameID(t *testing.T) {
 	signed := signResponseXML(t, raw, signer)
 
 	// Now inject a second assertion with the same ID as the original
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	evilAssertion := buildAssertionElement("evil@attacker.com", "_assertion_1")
@@ -1053,11 +1053,11 @@ func TestDetached_SignatureAsSiblingOfResponse(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Extract the signature from the response
-	var sigEl *etree.Element
+	var sigEl *xmltree.Element
 	for _, child := range doc.Root().ChildElements() {
 		if child.Tag == "Signature" {
 			sigEl = child.Copy()
@@ -1071,13 +1071,14 @@ func TestDetached_SignatureAsSiblingOfResponse(t *testing.T) {
 	}
 
 	// Create a wrapper with signature as sibling
-	wrapper := etree.NewDocument()
-	root := wrapper.CreateElement("Wrapper")
+	wrapper := xmltree.NewDocument()
+	root := xmltree.NewElement("Wrapper")
+	wrapper.SetRoot(root)
 	responseXML, err := doc.WriteToString()
 	require.NoError(t, err)
 
 	// Parse the sig-stripped response
-	innerDoc := etree.NewDocument()
+	innerDoc := xmltree.NewDocument()
 	require.NoError(t, innerDoc.ReadFromString(responseXML))
 	root.AddChild(innerDoc.Root().Copy())
 	root.AddChild(sigEl)
@@ -1153,7 +1154,7 @@ func TestSignedInfoScope_ModifyDigestMethodAfterSigning(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, dm := range doc.Root().FindElements("//DigestMethod") {
@@ -1179,7 +1180,7 @@ func TestSignedInfoScope_ModifySignatureMethodAfterSigning(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, sm := range doc.Root().FindElements("//SignatureMethod") {
@@ -1221,11 +1222,11 @@ func TestSignedInfoScope_MissingResponseSigOnlyAssertionSigned(t *testing.T) {
 	signer := xswSigner(t, ks)
 
 	raw := buildLegitResponse("legit@example.com")
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(raw))
 
 	// Sign only the assertion
-	var assertionEl *etree.Element
+	var assertionEl *xmltree.Element
 	for _, child := range doc.Root().ChildElements() {
 		if child.Tag == "Assertion" {
 			assertionEl = child
@@ -1284,7 +1285,7 @@ func TestAlgorithm_HMACSHA256SignatureMethod(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Change SignatureMethod to HMAC-SHA256
@@ -1312,7 +1313,7 @@ func TestAlgorithm_SHA1DigestWhenNotAllowed(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Change DigestMethod to SHA-1
@@ -1341,7 +1342,7 @@ func TestAlgorithm_UnknownSignatureAlgorithmURI(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, sm := range doc.Root().FindElements("//SignatureMethod") {
@@ -1367,7 +1368,7 @@ func TestAlgorithm_NullBytesInSignatureValue(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, sv := range doc.Root().FindElements("//SignatureValue") {
@@ -1396,7 +1397,7 @@ func TestAlgorithm_HalfLengthRSASignature(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	for _, sv := range doc.Root().FindElements("//SignatureValue") {

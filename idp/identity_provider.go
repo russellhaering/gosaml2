@@ -21,30 +21,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
-	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
 // IdentityProvider represents a SAML 2.0 Identity Provider.
 type IdentityProvider struct {
-	EntityID               string
-	SSOURL                 string
-	SLOURL                 string
-	SigningKeyStore         *saml2.KeyStore
-	SignResponses          bool
-	SignAssertions         bool
-	SignatureAlgorithm     string
-	SignatureCanonicalizer dsig.Canonicalizer
-	ServiceProviders       map[string]*SPConfig
-	ClockSkew              time.Duration
-	AllowSHA1              bool
-	AssertionLifetime      time.Duration
-	SessionLifetime        time.Duration
-	NameIDFormats          []string
-	Clock                  func() time.Time
-	MetadataValidDuration  time.Duration
+	EntityID                    string
+	SSOURL                      string
+	SLOURL                      string
+	SigningKeyStore             *saml2.KeyStore
+	SignResponses               bool
+	SignAssertions              bool
+	SignatureAlgorithm          string
+	SignatureCanonicalizer      dsig.Canonicalizer
+	ServiceProviders            map[string]*SPConfig
+	ClockSkew                   time.Duration
+	AllowSHA1                   bool
+	AssertionLifetime           time.Duration
+	SessionLifetime             time.Duration
+	NameIDFormats               []string
+	Clock                       func() time.Time
+	MetadataValidDuration       time.Duration
 	MaximumDecompressedBodySize int64
 
 	signerMu sync.RWMutex
@@ -53,14 +53,14 @@ type IdentityProvider struct {
 
 // SPConfig holds the configuration for a known Service Provider.
 type SPConfig struct {
-	EntityID                    string
-	ACSURLs                     []string
-	SLOURLs                     []string
-	SigningCertificates         []*x509.Certificate
-	EncryptionCertificate       *x509.Certificate
-	EncryptAssertions           bool
-	EncryptionAlgorithm         string
-	RequireSignedAuthnRequests  bool
+	EntityID                   string
+	ACSURLs                    []string
+	SLOURLs                    []string
+	SigningCertificates        []*x509.Certificate
+	EncryptionCertificate      *x509.Certificate
+	EncryptAssertions          bool
+	EncryptionAlgorithm        string
+	RequireSignedAuthnRequests bool
 }
 
 // AuthnRequestInfo contains the parsed and validated AuthnRequest data.
@@ -138,7 +138,7 @@ func (idp *IdentityProvider) Signer() (*dsig.Signer, error) {
 	return idp.signer, nil
 }
 
-func (idp *IdentityProvider) signElement(el *etree.Element) (*etree.Element, error) {
+func (idp *IdentityProvider) signElement(el *xmltree.Element) (*xmltree.Element, error) {
 	signer, err := idp.Signer()
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (idp *IdentityProvider) signElement(el *etree.Element) (*etree.Element, err
 	n := len(signed.Child)
 	if n >= 2 {
 		sigToken := signed.Child[n-1]
-		newChildren := make([]etree.Token, 0, n)
+		newChildren := make([]xmltree.Token, 0, n)
 		newChildren = append(newChildren, signed.Child[0])
 		newChildren = append(newChildren, sigToken)
 		newChildren = append(newChildren, signed.Child[1:n-1]...)

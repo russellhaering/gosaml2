@@ -67,12 +67,12 @@ func redirectTestSP(t *testing.T) (*ServiceProvider, *rsa.PrivateKey) {
 	require.NoError(t, err)
 
 	sp := &ServiceProvider{
-		EntityID:    "https://sp.example.com",
-		ACSURL:      "https://sp.example.com/acs",
-		SLOURL:      "https://sp.example.com/slo",
-		IDPEntityID: "https://idp.example.com",
-		IDPSSOURL:   "https://idp.example.com/sso",
-		IDPSLOURL:   "https://idp.example.com/slo",
+		EntityID:        "https://sp.example.com",
+		ACSURL:          "https://sp.example.com/acs",
+		SLOURL:          "https://sp.example.com/slo",
+		IDPEntityID:     "https://idp.example.com",
+		IDPSSOURL:       "https://idp.example.com/sso",
+		IDPSLOURL:       "https://idp.example.com/slo",
 		IDPCertificates: []*x509.Certificate{parsedCert},
 		SPKeyStore: &saml2.KeyStore{
 			Signer: key,
@@ -82,7 +82,7 @@ func redirectTestSP(t *testing.T) (*ServiceProvider, *rsa.PrivateKey) {
 			Signer: key,
 			Cert:   certDER,
 		},
-		Clock:            func() time.Time { return now },
+		Clock:             func() time.Time { return now },
 		SignAuthnRequests: true,
 	}
 

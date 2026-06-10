@@ -629,20 +629,11 @@ func TestSecurityXML_CommentSplittingNameID(t *testing.T) {
 
 	resp := samlResponseTemplate(sp, "admin<!--injected-->@evil.com")
 
-	_, el, err := parseResponse([]byte(resp), 0)
-	require.NoError(t, err)
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-
-	if len(decodedResponse.Assertions) > 0 {
-		nameID := decodedResponse.Assertions[0].Subject.NameID.Value
-		// The canonical value must be the full concatenated text
-		require.Equal(t, "admin@evil.com", nameID,
-			"Comment injection should not truncate NameID; full text must be returned")
-		t.Logf("Comment-injected NameID correctly canonicalized: %q", nameID)
-	}
+	// The strict parser rejects the comment outright — strictly stronger than
+	// relying on text-node concatenation.
+	_, _, err := parseResponse([]byte(resp), 0)
+	require.Error(t, err, "comment injection must be rejected at parse time")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }
 
 func TestSecurityXML_CommentBetweenElementTags(t *testing.T) {
@@ -676,13 +667,11 @@ func TestSecurityXML_CommentBetweenElementTags(t *testing.T) {
 		now.Add(-5*time.Minute).Format(time.RFC3339), now.Add(5*time.Minute).Format(time.RFC3339),
 		sp.AudienceURIs[0])
 
-	_, el, err := parseResponse([]byte(maliciousXML), 0)
-	require.NoError(t, err, "Comments between elements are valid XML and should parse")
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err, "Comments should not prevent unmarshaling")
-	t.Logf("Comments between elements handled correctly")
+	// The strict profile rejects comments anywhere in a protocol message,
+	// including between elements.
+	_, _, err := parseResponse([]byte(maliciousXML), 0)
+	require.Error(t, err, "comments in a protocol message must be rejected")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }
 
 func TestSecurityXML_CommentDoubleHyphen(t *testing.T) {
@@ -1294,8 +1283,8 @@ func TestSecurityXML_UnicodeNormalization_IssuerNFCvsNFD(t *testing.T) {
 
 	// Craft issuer with NFD form of e-acute (e + combining accent)
 	nfdIssuer := "http://www.okta.com/exk5zt0r12Edi4rD20h7" // normal ASCII
-	nfcChar := "\u00e9"                                       // e-acute NFC
-	nfdChar := "e\u0301"                                      // e + combining accent NFD
+	nfcChar := "\u00e9"                                     // e-acute NFC
+	nfdChar := "e\u0301"                                    // e + combining accent NFD
 
 	require.True(t, utf8.ValidString(nfcChar))
 	require.True(t, utf8.ValidString(nfdChar))

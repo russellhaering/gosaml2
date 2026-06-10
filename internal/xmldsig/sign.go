@@ -9,14 +9,14 @@ import (
 	"crypto/rsa"
 	_ "crypto/sha1"
 	_ "crypto/sha256"
-	"encoding/asn1"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // Signer creates enveloped XML digital signatures.
@@ -110,13 +110,13 @@ func (s *Signer) getDigestAlgorithmIdentifier() string {
 	return ""
 }
 
-func (s *Signer) createNamespacedElement(el *etree.Element, tag string) *etree.Element {
+func (s *Signer) createNamespacedElement(el *xmltree.Element, tag string) *xmltree.Element {
 	child := el.CreateElement(tag)
 	child.Space = s.prefix()
 	return child
 }
 
-func (s *Signer) digest(el *etree.Element) ([]byte, error) {
+func (s *Signer) digest(el *xmltree.Element) ([]byte, error) {
 	canonical, err := s.canonicalizer().Canonicalize(el)
 	if err != nil {
 		return nil, err
@@ -176,7 +176,7 @@ func convertECDSAASN1ToRawRS(derSig []byte, curve elliptic.Curve) ([]byte, error
 	return rawSig, nil
 }
 
-func (s *Signer) constructSignedInfo(el *etree.Element, enveloped bool) (*etree.Element, error) {
+func (s *Signer) constructSignedInfo(el *xmltree.Element, enveloped bool) (*xmltree.Element, error) {
 	digestAlgorithmIdentifier := s.getDigestAlgorithmIdentifier()
 	if digestAlgorithmIdentifier == "" {
 		return nil, errors.New("unsupported hash mechanism")
@@ -192,7 +192,7 @@ func (s *Signer) constructSignedInfo(el *etree.Element, enveloped bool) (*etree.
 		return nil, err
 	}
 
-	signedInfo := &etree.Element{
+	signedInfo := &xmltree.Element{
 		Tag:   signedInfoTag,
 		Space: s.prefix(),
 	}
@@ -235,13 +235,13 @@ func (s *Signer) constructSignedInfo(el *etree.Element, enveloped bool) (*etree.
 	return signedInfo, nil
 }
 
-func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.Element, error) {
+func (s *Signer) constructSignature(el *xmltree.Element, enveloped bool) (*xmltree.Element, error) {
 	signedInfo, err := s.constructSignedInfo(el, enveloped)
 	if err != nil {
 		return nil, err
 	}
 
-	sig := &etree.Element{
+	sig := &xmltree.Element{
 		Tag:   signatureTag,
 		Space: s.prefix(),
 	}
@@ -300,7 +300,7 @@ func (s *Signer) constructSignature(el *etree.Element, enveloped bool) (*etree.E
 
 // SignEnveloped creates an enveloped signature on el and returns a deep copy
 // of el with the signature appended as the last child.
-func (s *Signer) SignEnveloped(el *etree.Element) (*etree.Element, error) {
+func (s *Signer) SignEnveloped(el *xmltree.Element) (*xmltree.Element, error) {
 	if err := s.validate(); err != nil {
 		return nil, err
 	}

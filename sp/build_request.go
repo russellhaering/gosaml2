@@ -22,17 +22,17 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/uuid"
 )
 
-func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, error) {
+func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*xmltree.Document, error) {
 	if sp.EntityID == "" {
 		return nil, fmt.Errorf("EntityID must not be empty")
 	}
 
-	authnRequest := &etree.Element{
+	authnRequest := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
@@ -73,7 +73,7 @@ func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, 
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 
 	// Only POST binding includes <Signature> in <AuthnRequest> (includeSig)
 	if sp.SignAuthnRequests && includeSig {
@@ -90,14 +90,14 @@ func (sp *ServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Document, 
 }
 
 // BuildAuthRequestDocument builds a signed AuthnRequest XML document.
-func (sp *ServiceProvider) BuildAuthRequestDocument() (*etree.Document, error) {
+func (sp *ServiceProvider) BuildAuthRequestDocument() (*xmltree.Document, error) {
 	return sp.buildAuthnRequest(true)
 }
 
 // BuildAuthRequestDocumentNoSig builds an AuthnRequest XML document without
 // an embedded signature. Use this for the HTTP-Redirect binding, where
 // the signature is applied to the query string instead.
-func (sp *ServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, error) {
+func (sp *ServiceProvider) BuildAuthRequestDocumentNoSig() (*xmltree.Document, error) {
 	return sp.buildAuthnRequest(false)
 }
 
@@ -106,7 +106,7 @@ func (sp *ServiceProvider) BuildAuthRequestDocumentNoSig() (*etree.Document, err
 // signature is right after the Issuer [1] then all other children.
 //
 // [1] https://docs.oasis-open.org/security/saml/v2.0/saml-schema-protocol-2.0.xsd
-func (sp *ServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Element, error) {
+func (sp *ServiceProvider) SignAuthnRequest(el *xmltree.Element) (*xmltree.Element, error) {
 	signer, err := sp.Signer()
 	if err != nil {
 		return nil, err
@@ -126,9 +126,9 @@ func (sp *ServiceProvider) SignAuthnRequest(el *etree.Element) (*etree.Element, 
 		signed.RemoveChild(sigEl)
 
 		// Rebuild: issuer first, then sig, then rest
-		var newChildren []etree.Token
-		newChildren = append(newChildren, signed.Child[0]) // issuer
-		newChildren = append(newChildren, sigEl)           // signature
+		var newChildren []xmltree.Token
+		newChildren = append(newChildren, signed.Child[0])     // issuer
+		newChildren = append(newChildren, sigEl)               // signature
 		newChildren = append(newChildren, signed.Child[1:]...) // rest
 		signed.Child = newChildren
 	}
@@ -145,7 +145,7 @@ func (sp *ServiceProvider) BuildAuthRequest() (string, error) {
 	return doc.WriteToString()
 }
 
-func (sp *ServiceProvider) buildAuthURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) buildAuthURLFromDocument(relayState, binding string, doc *xmltree.Document) (string, error) {
 	parsedUrl, err := url.Parse(sp.IDPSSOURL)
 	if err != nil {
 		return "", err
@@ -205,18 +205,18 @@ func (sp *ServiceProvider) buildAuthURLFromDocument(relayState, binding string, 
 
 // BuildAuthURLFromDocument builds a redirect URL for the HTTP-POST binding
 // from a pre-built AuthnRequest document.
-func (sp *ServiceProvider) BuildAuthURLFromDocument(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildAuthURLFromDocument(relayState string, doc *xmltree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, saml2.BindingHttpPost, doc)
 }
 
 // BuildAuthURLRedirect builds a redirect URL for the HTTP-Redirect binding
 // from a pre-built AuthnRequest document. If SignAuthnRequests is true, the
 // query string is signed per the SAML redirect binding specification.
-func (sp *ServiceProvider) BuildAuthURLRedirect(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildAuthURLRedirect(relayState string, doc *xmltree.Document) (string, error) {
 	return sp.buildAuthURLFromDocument(relayState, saml2.BindingHttpRedirect, doc)
 }
 
-func (sp *ServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	reqBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
@@ -224,9 +224,9 @@ func (sp *ServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc 
 	return saml2.BuildPOSTForm(sp.IDPSSOURL, "SAMLRequest", base64.StdEncoding.EncodeToString(reqBuf), relayState)
 }
 
-//BuildAuthBodyPost builds the POST body to be sent to IDP.
+// BuildAuthBodyPost builds the POST body to be sent to IDP.
 func (sp *ServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, error) {
-	var doc *etree.Document
+	var doc *xmltree.Document
 	var err error
 
 	if sp.SignAuthnRequests {
@@ -242,9 +242,9 @@ func (sp *ServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, error) 
 	return sp.buildAuthBodyPostFromDocument(relayState, doc)
 }
 
-//BuildAuthBodyPostFromDocument builds the POST body to be sent to IDP.
-//It takes the AuthnRequest xml as input.
-func (sp *ServiceProvider) BuildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+// BuildAuthBodyPostFromDocument builds the POST body to be sent to IDP.
+// It takes the AuthnRequest xml as input.
+func (sp *ServiceProvider) BuildAuthBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	return sp.buildAuthBodyPostFromDocument(relayState, doc)
 }
 
@@ -270,12 +270,12 @@ func (sp *ServiceProvider) AuthRedirect(w http.ResponseWriter, r *http.Request, 
 	return nil
 }
 
-func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, sessionIndex string) (*xmltree.Document, error) {
 	if sp.EntityID == "" {
 		return nil, fmt.Errorf("EntityID must not be empty")
 	}
 
-	logoutRequest := &etree.Element{
+	logoutRequest := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "LogoutRequest",
 	}
@@ -299,7 +299,7 @@ func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, se
 	nameIdEl = logoutRequest.CreateElement("samlp:SessionIndex")
 	nameIdEl.SetText(sessionIndex)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 
 	if includeSig {
 		signed, err := sp.SignLogoutRequest(logoutRequest)
@@ -317,7 +317,7 @@ func (sp *ServiceProvider) buildLogoutRequest(includeSig bool, nameID string, se
 
 // SignLogoutRequest signs a LogoutRequest element, placing the Signature
 // element after the Issuer per the SAML schema.
-func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element, error) {
+func (sp *ServiceProvider) SignLogoutRequest(el *xmltree.Element) (*xmltree.Element, error) {
 	signer, err := sp.Signer()
 	if err != nil {
 		return nil, err
@@ -334,7 +334,7 @@ func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element,
 		sigEl := children[len(children)-1]
 		signed.RemoveChild(sigEl)
 
-		var newChildren []etree.Token
+		var newChildren []xmltree.Token
 		newChildren = append(newChildren, signed.Child[0])
 		newChildren = append(newChildren, sigEl)
 		newChildren = append(newChildren, signed.Child[1:]...)
@@ -346,22 +346,22 @@ func (sp *ServiceProvider) SignLogoutRequest(el *etree.Element) (*etree.Element,
 
 // BuildLogoutRequestDocumentNoSig builds a LogoutRequest XML document without
 // an embedded signature.
-func (sp *ServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutRequestDocumentNoSig(nameID string, sessionIndex string) (*xmltree.Document, error) {
 	return sp.buildLogoutRequest(false, nameID, sessionIndex)
 }
 
 // BuildLogoutRequestDocument builds a signed LogoutRequest XML document.
-func (sp *ServiceProvider) BuildLogoutRequestDocument(nameID string, sessionIndex string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutRequestDocument(nameID string, sessionIndex string) (*xmltree.Document, error) {
 	return sp.buildLogoutRequest(true, nameID, sessionIndex)
 }
 
-//BuildLogoutBodyPostFromDocument builds the POST body to be sent to IDP.
-//It takes the LogoutRequest xml as input.
-func (sp *ServiceProvider) BuildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+// BuildLogoutBodyPostFromDocument builds the POST body to be sent to IDP.
+// It takes the LogoutRequest xml as input.
+func (sp *ServiceProvider) BuildLogoutBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	return sp.buildLogoutBodyPostFromDocument(relayState, doc)
 }
 
-func (sp *ServiceProvider) buildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildLogoutBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	reqBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
@@ -372,11 +372,11 @@ func (sp *ServiceProvider) buildLogoutBodyPostFromDocument(relayState string, do
 // BuildLogoutURLRedirect builds a redirect URL for the HTTP-Redirect binding
 // from a pre-built LogoutRequest document. If signing is configured, the
 // query string is signed.
-func (sp *ServiceProvider) BuildLogoutURLRedirect(relayState string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) BuildLogoutURLRedirect(relayState string, doc *xmltree.Document) (string, error) {
 	return sp.buildLogoutURLFromDocument(relayState, saml2.BindingHttpRedirect, doc)
 }
 
-func (sp *ServiceProvider) buildLogoutURLFromDocument(relayState, binding string, doc *etree.Document) (string, error) {
+func (sp *ServiceProvider) buildLogoutURLFromDocument(relayState, binding string, doc *xmltree.Document) (string, error) {
 	parsedUrl, err := url.Parse(sp.IDPSLOURL)
 	if err != nil {
 		return "", err

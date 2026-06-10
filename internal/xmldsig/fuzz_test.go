@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // ===========================================================================
@@ -27,7 +27,7 @@ func FuzzValidateXML(f *testing.F) {
 	f.Add([]byte(`<x></x>`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -70,7 +70,7 @@ func FuzzCanonicalize(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -93,7 +93,7 @@ func FuzzSignRoundTrip(f *testing.F) {
 	f.Add([]byte(`<doc xmlns:a="http://a.example" xmlns:b="http://b.example"><a:el b:attr="v">data</a:el></doc>`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -151,7 +151,7 @@ func FuzzValidateWithCert(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -238,8 +238,12 @@ func FuzzECDSASignRoundTrip(f *testing.F) {
 			return
 		}
 
-		// Ensure tag and space are valid XML NCNames.
+		// Ensure tag and space are valid XML NCNames; the reserved prefixes
+		// cannot be (re)declared.
 		if !isSimpleXMLName(tag) || (space != "" && !isSimpleXMLName(space)) {
+			return
+		}
+		if space == "xml" || space == "xmlns" {
 			return
 		}
 
@@ -249,9 +253,15 @@ func FuzzECDSASignRoundTrip(f *testing.F) {
 		}
 		xmlID := "_" + id
 
-		el := &etree.Element{
+		el := &xmltree.Element{
 			Space: space,
 			Tag:   tag,
+		}
+		if space != "" {
+			// Declare the prefix: the verifier reconstructs the element from
+			// canonical bytes via the strict parser, which requires
+			// namespace-well-formed documents.
+			el.CreateAttr("xmlns:"+space, "urn:fuzz:"+space)
 		}
 		el.CreateAttr("ID", xmlID)
 
@@ -388,7 +398,7 @@ func FuzzVerifyMalformedSignatures(f *testing.F) {
 			return
 		}
 
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		if err := doc.ReadFromBytes(data); err != nil {
 			return
 		}
@@ -422,7 +432,7 @@ func FuzzCanonicalizeDeterministic(f *testing.F) {
 			return
 		}
 
-		doc1 := etree.NewDocument()
+		doc1 := xmltree.NewDocument()
 		if err := doc1.ReadFromBytes(data); err != nil {
 			return
 		}
@@ -432,7 +442,7 @@ func FuzzCanonicalizeDeterministic(f *testing.F) {
 			return
 		}
 
-		doc2 := etree.NewDocument()
+		doc2 := xmltree.NewDocument()
 		if err := doc2.ReadFromBytes(data); err != nil {
 			return
 		}
@@ -467,7 +477,7 @@ func FuzzCanonicalizeDeterministic(f *testing.F) {
 
 type mutation struct {
 	name string
-	fn   func(el *etree.Element, data []byte) *etree.Element
+	fn   func(el *xmltree.Element, data []byte) *xmltree.Element
 }
 
 var mutationMenu = []mutation{
@@ -485,7 +495,7 @@ var mutationMenu = []mutation{
 	{"ReplaceSignatureMethodAlgo", mutReplaceSignatureMethodAlgo},
 }
 
-func mutSwapDigestValue(el *etree.Element, data []byte) *etree.Element {
+func mutSwapDigestValue(el *xmltree.Element, data []byte) *xmltree.Element {
 	el = el.Copy()
 	dv := el.FindElement("//" + digestValueTag)
 	if dv == nil {
@@ -499,7 +509,7 @@ func mutSwapDigestValue(el *etree.Element, data []byte) *etree.Element {
 	return el
 }
 
-func mutTruncateSignatureValue(el *etree.Element, data []byte) *etree.Element {
+func mutTruncateSignatureValue(el *xmltree.Element, data []byte) *xmltree.Element {
 	el = el.Copy()
 	sv := el.FindElement("//" + signatureValueTag)
 	if sv == nil {
@@ -517,7 +527,7 @@ func mutTruncateSignatureValue(el *etree.Element, data []byte) *etree.Element {
 	return el
 }
 
-func mutExtendDigestValue(el *etree.Element, data []byte) *etree.Element {
+func mutExtendDigestValue(el *xmltree.Element, data []byte) *xmltree.Element {
 	el = el.Copy()
 	dv := el.FindElement("//" + digestValueTag)
 	if dv == nil {
@@ -535,7 +545,7 @@ func mutExtendDigestValue(el *etree.Element, data []byte) *etree.Element {
 	return el
 }
 
-func mutEmptyCanonicalizationAlgo(el *etree.Element, _ []byte) *etree.Element {
+func mutEmptyCanonicalizationAlgo(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	cm := el.FindElement("//" + canonicalizationMethodTag)
 	if cm == nil {
@@ -545,7 +555,7 @@ func mutEmptyCanonicalizationAlgo(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutEmptySignatureMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
+func mutEmptySignatureMethodAlgo(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	sm := el.FindElement("//" + signatureMethodTag)
 	if sm == nil {
@@ -555,7 +565,7 @@ func mutEmptySignatureMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutDuplicateSignedInfo(el *etree.Element, _ []byte) *etree.Element {
+func mutDuplicateSignedInfo(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	sig := el.FindElement("//" + signatureTag)
 	if sig == nil {
@@ -569,7 +579,7 @@ func mutDuplicateSignedInfo(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutReorderSigChildren(el *etree.Element, _ []byte) *etree.Element {
+func mutReorderSigChildren(el *xmltree.Element, _ []byte) *xmltree.Element {
 	// Move the SignatureValue element to before SignedInfo AND
 	// inject a bogus text node inside SignedInfo so that the
 	// canonical SignedInfo actually changes.
@@ -583,13 +593,13 @@ func mutReorderSigChildren(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutInjectNestedSignature(el *etree.Element, _ []byte) *etree.Element {
+func mutInjectNestedSignature(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	si := el.FindElement("//" + signedInfoTag)
 	if si == nil {
 		return nil
 	}
-	nested := etree.NewElement(signatureTag)
+	nested := xmltree.NewElement(signatureTag)
 	nested.Space = defaultSigPrefix
 	nested.CreateAttr("xmlns:"+defaultSigPrefix, namespace)
 	nsi := nested.CreateElement(signedInfoTag)
@@ -603,13 +613,13 @@ func mutInjectNestedSignature(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutInjectExtraReference(el *etree.Element, _ []byte) *etree.Element {
+func mutInjectExtraReference(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	si := el.FindElement("//" + signedInfoTag)
 	if si == nil {
 		return nil
 	}
-	ref := etree.NewElement(referenceTag)
+	ref := xmltree.NewElement(referenceTag)
 	ref.Space = si.Space
 	ref.CreateAttr(uriAttr, "#evil")
 	dm := ref.CreateElement(digestMethodTag)
@@ -622,7 +632,7 @@ func mutInjectExtraReference(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutRemoveAllTransforms(el *etree.Element, _ []byte) *etree.Element {
+func mutRemoveAllTransforms(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	ref := el.FindElement("//" + referenceTag)
 	if ref == nil {
@@ -636,7 +646,7 @@ func mutRemoveAllTransforms(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutReplaceDigestMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
+func mutReplaceDigestMethodAlgo(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	dm := el.FindElement("//" + digestMethodTag)
 	if dm == nil {
@@ -646,7 +656,7 @@ func mutReplaceDigestMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
 	return el
 }
 
-func mutReplaceSignatureMethodAlgo(el *etree.Element, _ []byte) *etree.Element {
+func mutReplaceSignatureMethodAlgo(el *xmltree.Element, _ []byte) *xmltree.Element {
 	el = el.Copy()
 	sm := el.FindElement("//" + signatureMethodTag)
 	if sm == nil {
@@ -666,13 +676,13 @@ func FuzzStructuredSignature(f *testing.F) {
 	}
 
 	// Build a seed: sign, serialize, re-parse, serialize to bytes.
-	seedDoc := etree.NewDocument()
+	seedDoc := xmltree.NewDocument()
 	seedDoc.ReadFromString(`<Root xmlns="urn:test" ID="_seed"><Child>data</Child></Root>`)
 	signed, err := signer.SignEnveloped(seedDoc.Root())
 	if err != nil {
 		f.Fatal(err)
 	}
-	serDoc := etree.NewDocument()
+	serDoc := xmltree.NewDocument()
 	serDoc.SetRoot(signed)
 	seedBytes, err := serDoc.WriteToBytes()
 	if err != nil {
@@ -697,20 +707,20 @@ func FuzzStructuredSignature(f *testing.F) {
 		extra := data[1:]
 
 		// Fresh sign each iteration with the same key.
-		freshDoc := etree.NewDocument()
+		freshDoc := xmltree.NewDocument()
 		freshDoc.ReadFromString(`<Root xmlns="urn:test" ID="_fuzz"><Child>data</Child></Root>`)
 		freshSigned, err := signer.SignEnveloped(freshDoc.Root())
 		if err != nil {
 			t.Skip()
 		}
 		// Reparse for clean tree.
-		tmpDoc := etree.NewDocument()
+		tmpDoc := xmltree.NewDocument()
 		tmpDoc.SetRoot(freshSigned)
 		rawBytes, err := tmpDoc.WriteToBytes()
 		if err != nil {
 			t.Skip()
 		}
-		cleanDoc := etree.NewDocument()
+		cleanDoc := xmltree.NewDocument()
 		if err := cleanDoc.ReadFromBytes(rawBytes); err != nil {
 			t.Skip()
 		}
@@ -721,7 +731,7 @@ func FuzzStructuredSignature(f *testing.F) {
 		}
 
 		// Serialize the mutated tree so we can check it actually changed.
-		mutDoc := etree.NewDocument()
+		mutDoc := xmltree.NewDocument()
 		mutDoc.SetRoot(mutated)
 		mutBytes, _ := mutDoc.WriteToBytes()
 
@@ -751,7 +761,7 @@ func FuzzNSTraverse(f *testing.F) {
 	f.Add([]byte(`<e xml:lang="en"><e xml:space="preserve"><e/></e></e>`))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -765,12 +775,12 @@ func FuzzNSTraverse(f *testing.F) {
 		ctx := NewDefaultNSContext()
 
 		// Exercise tree traversal — looking for panics and hangs.
-		NSTraverse(ctx, root, func(_ NSContext, _ *etree.Element) error {
+		NSTraverse(ctx, root, func(_ NSContext, _ *xmltree.Element) error {
 			return nil
 		})
 
 		// Exercise find iterate with a common namespace.
-		NSFindIterate(root, "http://www.w3.org/2000/09/xmldsig#", "Signature", func(_ NSContext, _ *etree.Element) error {
+		NSFindIterate(root, "http://www.w3.org/2000/09/xmldsig#", "Signature", func(_ NSContext, _ *xmltree.Element) error {
 			return ErrTraversalHalted
 		})
 
@@ -785,7 +795,7 @@ func FuzzTransformExcC14n(f *testing.F) {
 	f.Add([]byte(`<e xmlns:ns1="http://ns1"><ns1:a><!-- comment --></ns1:a></e>`), "ns1")
 
 	f.Fuzz(func(t *testing.T, data []byte, prefixList string) {
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		err := doc.ReadFromBytes(data)
 		if err != nil {
 			return
@@ -805,4 +815,3 @@ func FuzzTransformExcC14n(f *testing.F) {
 		TransformExcC14n(el, prefixList, true)
 	})
 }
-

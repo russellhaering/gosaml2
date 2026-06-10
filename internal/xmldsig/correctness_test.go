@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +26,7 @@ import (
 
 // findDescendantByTag performs a depth-first search for a descendant element
 // with the given tag name.
-func findDescendantByTag(el *etree.Element, tag string) *etree.Element {
+func findDescendantByTag(el *xmltree.Element, tag string) *xmltree.Element {
 	for _, child := range el.ChildElements() {
 		if child.Tag == tag {
 			return child
@@ -39,18 +39,19 @@ func findDescendantByTag(el *etree.Element, tag string) *etree.Element {
 }
 
 // makeTestElement creates a simple element suitable for signing round-trips.
-func makeTestElement(id string) *etree.Element {
-	el := &etree.Element{
+func makeTestElement(id string) *xmltree.Element {
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", id)
 	return el
 }
 
 // signAndPrepare creates a basic signed document and returns the signed
 // element, signer, and verifier for use in malformed-structure tests.
-func signAndPrepare(t *testing.T) (*etree.Element, *Signer, *Verifier) {
+func signAndPrepare(t *testing.T) (*xmltree.Element, *Signer, *Verifier) {
 	t.Helper()
 	key, cert := randomTestKeyAndCert()
 
@@ -76,11 +77,12 @@ func signAndPrepare(t *testing.T) (*etree.Element, *Signer, *Verifier) {
 }
 
 // makeSimpleDoc creates a simple XML element suitable for signing.
-func makeSimpleDoc() *etree.Element {
-	el := &etree.Element{
+func makeSimpleDoc() *xmltree.Element {
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", "_test-algo-roundtrip")
 	return el
 }
@@ -139,7 +141,7 @@ func expiredTestKeyAndCert() (crypto.Signer, *x509.Certificate) {
 }
 
 // signReparse signs el with the given canonicalizer, serializes, and reparses.
-func signReparse(t *testing.T, el *etree.Element, c Canonicalizer) (*etree.Element, crypto.Signer, *x509.Certificate) {
+func signReparse(t *testing.T, el *xmltree.Element, c Canonicalizer) (*xmltree.Element, crypto.Signer, *x509.Certificate) {
 	t.Helper()
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{
@@ -153,8 +155,8 @@ func signReparse(t *testing.T, el *etree.Element, c Canonicalizer) (*etree.Eleme
 }
 
 // testDoc returns a parsed element suitable for signing.
-func testDoc() *etree.Element {
-	doc := etree.NewDocument()
+func testDoc() *xmltree.Element {
+	doc := xmltree.NewDocument()
 	doc.ReadFromString(`<Root xmlns="urn:test" ID="_abc123"><Child>hello</Child></Root>`)
 	return doc.Root()
 }
@@ -397,10 +399,11 @@ func TestEdge_NoIDAttribute(t *testing.T) {
 	}
 
 	// Element with NO ID attribute at all
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
@@ -428,7 +431,7 @@ func TestEdge_CustomIDAttributeOnVerifier(t *testing.T) {
 		IDAttribute: "CustomID",
 	}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("CustomID", "_custom-id-abc")
@@ -553,13 +556,14 @@ func TestEdge_VeryLargeDocument(t *testing.T) {
 		Certs: []*x509.Certificate{cert},
 	}
 
-	// Create a document with 1000 attributes (not child elements) to keep
-	// round-trip compatible.
-	el := &etree.Element{
+	// Create a document with an attribute count near (but within) the strict
+	// parser's per-element limit; verification reconstructs the element from
+	// canonical bytes via the strict parser.
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_large-doc")
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 200; i++ {
 		el.CreateAttr(fmt.Sprintf("attr%d", i), fmt.Sprintf("value%d", i))
 	}
 
@@ -571,6 +575,19 @@ func TestEdge_VeryLargeDocument(t *testing.T) {
 	}
 	_, err = verifier.Verify(signed)
 	require.NoError(t, err)
+
+	// Beyond the limit, the strict parser refuses to reconstruct the signed
+	// element — the document is rejected rather than processed.
+	huge := &xmltree.Element{Tag: "Root"}
+	huge.CreateAttr("ID", "_too-large")
+	for i := 0; i < 300; i++ {
+		huge.CreateAttr(fmt.Sprintf("attr%d", i), "v")
+	}
+	signedHuge, err := signer.SignEnveloped(huge)
+	require.NoError(t, err)
+	_, err = verifier.Verify(signedHuge)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "attribute limit")
 }
 
 func TestEdge_DeeplyNestedDocument(t *testing.T) {
@@ -583,7 +600,7 @@ func TestEdge_DeeplyNestedDocument(t *testing.T) {
 		Certs: []*x509.Certificate{cert},
 	}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_deep-doc")
@@ -615,7 +632,7 @@ func TestEdge_UnicodeContent(t *testing.T) {
 
 	// Use Unicode content in attributes (not child elements) to avoid the
 	// canonicalization mismatch.
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_unicode-doc")
@@ -643,7 +660,7 @@ func TestEdge_SpecialCharsInAttributes(t *testing.T) {
 		Certs: []*x509.Certificate{cert},
 	}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_special-chars")
@@ -672,7 +689,7 @@ func TestEdge_EmptyElement(t *testing.T) {
 	}
 
 	// Element with no children and no text
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Empty",
 	}
 	el.CreateAttr("ID", "_empty-el")
@@ -697,7 +714,7 @@ func TestEdge_MixedContent(t *testing.T) {
 
 	// Build a document with only attributes (mixed content with child elements
 	// triggers a known canonicalization inconsistency in sign+verify).
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_mixed-content")
@@ -727,7 +744,7 @@ func TestEdge_XMLComments(t *testing.T) {
 		Canonicalizer: MakeC14N11Canonicalizer(),
 	}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("ID", "_comment-test")
@@ -757,7 +774,7 @@ func TestEdge_NamespacesInContent(t *testing.T) {
 	}
 
 	// Element with multiple namespace declarations
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Tag: "Root",
 	}
 	el.CreateAttr("xmlns:ns1", "urn:ns1")
@@ -789,7 +806,7 @@ func TestEdge_VerifyDoesNotMutateInput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize the signed element before Verify
-	docBefore := etree.NewDocument()
+	docBefore := xmltree.NewDocument()
 	docBefore.SetRoot(signed.Copy())
 	xmlBefore, err := docBefore.WriteToString()
 	require.NoError(t, err)
@@ -801,7 +818,7 @@ func TestEdge_VerifyDoesNotMutateInput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize the signed element after Verify
-	docAfter := etree.NewDocument()
+	docAfter := xmltree.NewDocument()
 	docAfter.SetRoot(signed.Copy())
 	xmlAfter, err := docAfter.WriteToString()
 	require.NoError(t, err)
@@ -820,7 +837,7 @@ func TestEdge_SignDoesNotMutateInput(t *testing.T) {
 	el := makeTestElement("_no-mutate-sign")
 
 	// Serialize the element before SignEnveloped
-	docBefore := etree.NewDocument()
+	docBefore := xmltree.NewDocument()
 	docBefore.SetRoot(el.Copy())
 	xmlBefore, err := docBefore.WriteToString()
 	require.NoError(t, err)
@@ -829,7 +846,7 @@ func TestEdge_SignDoesNotMutateInput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize the element after SignEnveloped
-	docAfter := etree.NewDocument()
+	docAfter := xmltree.NewDocument()
 	docAfter.SetRoot(el.Copy())
 	xmlAfter, err := docAfter.WriteToString()
 	require.NoError(t, err)
@@ -848,7 +865,7 @@ func TestCanonicalization_ExcC14N(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_exc-c14n-test")
 
 	signed, err := signer.SignEnveloped(el)
@@ -868,7 +885,7 @@ func TestCanonicalization_C14N11(t *testing.T) {
 		Canonicalizer: MakeC14N11Canonicalizer(),
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_c14n11-test")
 
 	signed, err := signer.SignEnveloped(el)
@@ -888,7 +905,7 @@ func TestCanonicalization_C14N10Rec(t *testing.T) {
 		Canonicalizer: MakeC14N10RecCanonicalizer(),
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_c14n10rec-test")
 
 	signed, err := signer.SignEnveloped(el)
@@ -908,7 +925,7 @@ func TestCanonicalization_ECDSA(t *testing.T) {
 		Hash:  crypto.SHA256,
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_ecdsa-c14n-test")
 
 	signed, err := signer.SignEnveloped(el)
@@ -929,9 +946,9 @@ func TestAlgoRoundTrip(t *testing.T) {
 	ecP384Gen := func() (crypto.Signer, *x509.Certificate) { return randomECDSAP384TestKeyAndCert() }
 
 	tests := []struct {
-		name     string
-		keyGen   keyGenFunc
-		hash     crypto.Hash
+		name      string
+		keyGen    keyGenFunc
+		hash      crypto.Hash
 		allowSHA1 bool
 	}{
 		{"RSA_SHA256", rsaGen, crypto.SHA256, false},
@@ -1314,7 +1331,7 @@ func TestCanonicalizerRoundTrip(t *testing.T) {
 
 			// Use a plain element (no namespace prefix) to avoid
 			// "undeclared namespace prefix" errors with exc-c14n.
-			el := &etree.Element{Tag: "TestRoot"}
+			el := &xmltree.Element{Tag: "TestRoot"}
 			el.CreateAttr("ID", "_c14n-test")
 			signed, err := signer.SignEnveloped(el)
 			require.NoError(t, err)
@@ -1372,7 +1389,7 @@ func TestSigner_CustomPrefix(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize to string and verify the prefix is present
-	xmlDoc := etree.NewDocument()
+	xmlDoc := xmltree.NewDocument()
 	xmlDoc.SetRoot(signed)
 	xmlStr, err := xmlDoc.WriteToString()
 	require.NoError(t, err)
@@ -1404,7 +1421,7 @@ func TestSigner_MultipleCertsInChain(t *testing.T) {
 	require.NoError(t, err)
 
 	// Find all X509Certificate elements in the signed output
-	xmlDoc := etree.NewDocument()
+	xmlDoc := xmltree.NewDocument()
 	xmlDoc.SetRoot(signed)
 	xmlStr, err := xmlDoc.WriteToString()
 	require.NoError(t, err)
@@ -1472,9 +1489,9 @@ func TestPropertyRedundantNamespaceDeclarations(t *testing.T) {
 			redundantXML := `<root xmlns:ns1="urn:example:ns1"><child xmlns:ns1="urn:example:ns1"><ns1:item>value</ns1:item></child></root>`
 			cleanXML := `<root xmlns:ns1="urn:example:ns1"><child><ns1:item>value</ns1:item></child></root>`
 
-			rdoc := etree.NewDocument()
+			rdoc := xmltree.NewDocument()
 			require.NoError(t, rdoc.ReadFromString(redundantXML))
-			cdoc := etree.NewDocument()
+			cdoc := xmltree.NewDocument()
 			require.NoError(t, cdoc.ReadFromString(cleanXML))
 
 			cr, err := tc.C.Canonicalize(rdoc.Root())
@@ -1496,14 +1513,14 @@ func TestPropertyC14NDeterminism(t *testing.T) {
 
 	for _, tc := range allCanonicalizers() {
 		t.Run(tc.Name, func(t *testing.T) {
-			doc := etree.NewDocument()
+			doc := xmltree.NewDocument()
 			require.NoError(t, doc.ReadFromString(xmlStr))
 			first, err := tc.C.Canonicalize(doc.Root())
 			require.NoError(t, err)
 			require.NotEmpty(t, first)
 
 			for i := 1; i < 100; i++ {
-				d := etree.NewDocument()
+				d := xmltree.NewDocument()
 				require.NoError(t, d.ReadFromString(xmlStr))
 				got, err := tc.C.Canonicalize(d.Root())
 				require.NoError(t, err)

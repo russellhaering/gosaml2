@@ -18,8 +18,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/russellhaering/gosaml2/v2/uuid"
 )
@@ -39,7 +39,7 @@ type AssertionParams struct {
 // BuildResponseDocument builds a SAML Response XML document for the given SP,
 // including a signed assertion with the provided parameters. It returns the
 // document, the resolved ACS URL, and any error.
-func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *AssertionParams) (*etree.Document, string, error) {
+func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *AssertionParams) (*xmltree.Document, string, error) {
 	sp, err := idp.lookupSP(spEntityID)
 	if err != nil {
 		return nil, "", err
@@ -85,7 +85,7 @@ func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *As
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(responseEl)
 
 	return doc, acsURL, nil
@@ -111,7 +111,7 @@ func (idp *IdentityProvider) BuildResponseBodyPost(spEntityID string, params *As
 // BuildErrorResponseDocument builds a SAML Response document with an error
 // status code (e.g. StatusCodeResponder). Use this to communicate authentication
 // failures back to the SP.
-func (idp *IdentityProvider) BuildErrorResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*etree.Document, error) {
+func (idp *IdentityProvider) BuildErrorResponseDocument(spEntityID, statusCode, inResponseTo, destination string) (*xmltree.Document, error) {
 	if _, err := idp.lookupSP(spEntityID); err != nil {
 		return nil, err
 	}
@@ -134,19 +134,19 @@ func (idp *IdentityProvider) BuildErrorResponseDocument(spEntityID, statusCode, 
 		}
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(responseEl)
 	return doc, nil
 }
 
-func (idp *IdentityProvider) buildAssertion(sp *SPConfig, params *AssertionParams, acsURL string) *etree.Element {
+func (idp *IdentityProvider) buildAssertion(sp *SPConfig, params *AssertionParams, acsURL string) *xmltree.Element {
 	now := idp.now().UTC()
 	assertionLifetime := idp.assertionLifetime()
 	sessionLifetime := idp.sessionLifetime()
 
 	assertionID := "_" + uuid.NewV4().String()
 
-	assertionEl := etree.NewElement("saml:Assertion")
+	assertionEl := xmltree.NewElement("saml:Assertion")
 	assertionEl.CreateAttr("xmlns:saml", saml2.SAMLAssertionNamespace)
 	assertionEl.CreateAttr("Version", "2.0")
 	assertionEl.CreateAttr("ID", assertionID)
@@ -228,11 +228,11 @@ func (idp *IdentityProvider) buildAssertion(sp *SPConfig, params *AssertionParam
 	return assertionEl
 }
 
-func (idp *IdentityProvider) buildResponse(inResponseTo, destination string) *etree.Element {
+func (idp *IdentityProvider) buildResponse(inResponseTo, destination string) *xmltree.Element {
 	now := idp.now().UTC()
 	responseID := "_" + uuid.NewV4().String()
 
-	responseEl := etree.NewElement("samlp:Response")
+	responseEl := xmltree.NewElement("samlp:Response")
 	responseEl.CreateAttr("xmlns:samlp", saml2.SAMLProtocolNamespace)
 	responseEl.CreateAttr("xmlns:saml", saml2.SAMLAssertionNamespace)
 	responseEl.CreateAttr("ID", responseID)

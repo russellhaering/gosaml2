@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +17,7 @@ func TestSign(t *testing.T) {
 }
 
 func testSignWithSigner(t *testing.T, signer *Signer, sigMethodID string, digestAlgo crypto.Hash) {
-	authnRequest := &etree.Element{
+	authnRequest := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
@@ -94,7 +94,7 @@ func TestSignErrors(t *testing.T) {
 		Prefix:      defaultSigPrefix,
 	}
 
-	authnRequest := &etree.Element{
+	authnRequest := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
@@ -112,7 +112,7 @@ func TestSignNonDefaultID(t *testing.T) {
 		Canonicalizer: MakeC14N11Canonicalizer(),
 	}
 
-	signable := &etree.Element{
+	signable := &xmltree.Element{
 		Space: "foo",
 		Tag:   "Bar",
 	}
@@ -141,7 +141,7 @@ func TestSignWithECDSA(t *testing.T) {
 
 func TestSignNilKey(t *testing.T) {
 	signer := &Signer{}
-	_, err := signer.SignEnveloped(&etree.Element{Tag: "Foo"})
+	_, err := signer.SignEnveloped(&xmltree.Element{Tag: "Foo"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Key must not be nil")
 }
@@ -149,7 +149,7 @@ func TestSignNilKey(t *testing.T) {
 func TestSignEmptyCerts(t *testing.T) {
 	key, _ := randomTestKeyAndCert()
 	signer := &Signer{Key: key}
-	_, err := signer.SignEnveloped(&etree.Element{Tag: "Foo"})
+	_, err := signer.SignEnveloped(&xmltree.Element{Tag: "Foo"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Certs must not be empty")
 }

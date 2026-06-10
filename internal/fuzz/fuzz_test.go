@@ -38,7 +38,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	spkg "github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
@@ -108,7 +108,7 @@ func newFuzzKeyMaterial(f *testing.F) *fuzzKeyMaterial {
 }
 
 // signXML signs an etree element using the given key and cert, returning the signed element.
-func signXML(el *etree.Element, key crypto.Signer, certs []*x509.Certificate) (*etree.Element, error) {
+func signXML(el *xmltree.Element, key crypto.Signer, certs []*x509.Certificate) (*xmltree.Element, error) {
 	signer := &dsig.Signer{
 		Key:   key,
 		Certs: certs,
@@ -174,7 +174,7 @@ func makeResponseXML(km *fuzzKeyMaterial) string {
 // signedResponseB64 signs a response at the Response level and returns the base64-encoded result.
 func signedResponseB64(f *testing.F, xml string, km *fuzzKeyMaterial) string {
 	f.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	if err := doc.ReadFromBytes([]byte(xml)); err != nil {
 		f.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func signedResponseB64(f *testing.F, xml string, km *fuzzKeyMaterial) string {
 	if err != nil {
 		f.Fatal(err)
 	}
-	d2 := etree.NewDocument()
+	d2 := xmltree.NewDocument()
 	d2.SetRoot(signed)
 	b, _ := d2.WriteToBytes()
 	return base64.StdEncoding.EncodeToString(b)
@@ -716,7 +716,7 @@ func FuzzResponseWithSignedAssertions(f *testing.F) {
 
 	// Build a response and sign only the assertion (not the response envelope).
 	validXML := makeResponseXML(km)
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	if err := doc.ReadFromBytes([]byte(validXML)); err != nil {
 		f.Fatal(err)
 	}
@@ -733,7 +733,7 @@ func FuzzResponseWithSignedAssertions(f *testing.F) {
 		}
 	}
 
-	d2 := etree.NewDocument()
+	d2 := xmltree.NewDocument()
 	d2.SetRoot(root)
 	assertionSignedXML, _ := d2.WriteToBytes()
 	assertionSignedB64 := base64.StdEncoding.EncodeToString(assertionSignedXML)

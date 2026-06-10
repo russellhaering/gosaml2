@@ -22,8 +22,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
-	"github.com/russellhaering/gosaml2/v2/types"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	"github.com/russellhaering/gosaml2/v2/types"
 )
 
 // ServiceProvider represents a SAML 2.0 Service Provider. Configure its
@@ -43,8 +43,8 @@ type ServiceProvider struct {
 	IDPSLOBinding string
 
 	// Certificates and keys
-	IDPCertificates []*x509.Certificate
-	SPKeyStore      *saml2.KeyStore
+	IDPCertificates   []*x509.Certificate
+	SPKeyStore        *saml2.KeyStore
 	SPSigningKeyStore *saml2.KeyStore
 
 	// Security

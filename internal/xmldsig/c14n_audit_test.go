@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,8 +37,8 @@ import (
 func TestC14NAudit_NullCanonicalizerPreservesComments(t *testing.T) {
 	// NullCanonicalizer preserves comments in its output.
 	// Verify this behavior is documented/expected.
-	doc := etree.NewDocument()
-	require.NoError(t, doc.ReadFromString(`<Root><!-- comment --><Data>value</Data></Root>`))
+	doc, err := lenientParseDoc(`<Root><!-- comment --><Data>value</Data></Root>`)
+	require.NoError(t, err)
 
 	nullC := MakeNullCanonicalizer()
 	result, err := nullC.Canonicalize(doc.Root())
@@ -83,10 +83,9 @@ func TestC14NAudit_CommentInjectionInTextNodes(t *testing.T) {
 	// etree's Text() concatenates all CharData children, so it returns
 	// the full "admin@evil.com@legit.com".
 
-	// Test that etree.Text() returns full concatenated text (safe behavior)
-	doc := etree.NewDocument()
-	require.NoError(t, doc.ReadFromString(
-		`<NameID>admin@evil.com<!-- injected -->@legit.com</NameID>`))
+	// Test that xmltree.Text() returns full concatenated text (safe behavior)
+	doc, err := lenientParseDoc(`<NameID>admin@evil.com<!-- injected -->@legit.com</NameID>`)
+	require.NoError(t, err)
 
 	root := doc.Root()
 	text := root.Text()
@@ -94,12 +93,12 @@ func TestC14NAudit_CommentInjectionInTextNodes(t *testing.T) {
 	// This is the Go/etree variant of the comment injection vulnerability.
 	if text == "admin@evil.com" {
 		// This is the VULNERABLE behavior — Text() only returns pre-comment text
-		t.Log("WARNING: etree.Text() returns only pre-comment text — " +
+		t.Log("WARNING: xmltree.Text() returns only pre-comment text — " +
 			"classic comment injection applies if consumer uses Text()")
 	} else if text == "admin@evil.com@legit.com" {
-		t.Log("etree.Text() returns full concatenated text (safe)")
+		t.Log("xmltree.Text() returns full concatenated text (safe)")
 	} else {
-		t.Logf("etree.Text() returned unexpected value: %q", text)
+		t.Logf("xmltree.Text() returned unexpected value: %q", text)
 	}
 
 	// Regardless of Text() behavior, verify the canonical form includes
@@ -138,7 +137,7 @@ func TestC14NAudit_CanonicalPrepStripParameterIgnored(t *testing.T) {
 		<Child xmlns:a="urn:a"><a:Item/></Child>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// strip=true (used by C14N11)
@@ -147,7 +146,7 @@ func TestC14NAudit_CanonicalPrepStripParameterIgnored(t *testing.T) {
 	require.NoError(t, err)
 
 	// strip=false (used by NullCanonicalizer)
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(xml))
 	resNoStrip := canonicalPrep(doc2.Root().Copy(), false, false)
 	bytesNoStrip, err := canonicalSerialize(resNoStrip)
@@ -171,7 +170,7 @@ func TestC14NAudit_ExcC14NDefaultNamespaceUndeclaration(t *testing.T) {
 	// Parent has default namespace, child undeclares it
 	xml := `<Parent xmlns="urn:parent"><Child xmlns=""><Data>text</Data></Child></Parent>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	excC14n := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
@@ -202,7 +201,7 @@ func TestC14NAudit_ExcC14NPrefixListDefault(t *testing.T) {
 		<foo:Child>text</foo:Child>
 	</foo:Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// Without #default in PrefixList: default namespace is NOT visibly utilized
@@ -251,7 +250,7 @@ func TestC14NAudit_C14NMethodMismatch(t *testing.T) {
 		Canonicalizer: MakeC14N11Canonicalizer(),
 	}
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_mismatch1")
 	el.CreateElement("Data").SetText("test")
 
@@ -272,7 +271,7 @@ func TestC14NAudit_C14NMethodMismatch(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 	}
 
-	el2 := &etree.Element{Tag: "Response"}
+	el2 := &xmltree.Element{Tag: "Response"}
 	el2.CreateAttr("ID", "_mismatch2")
 	el2.CreateElement("Data").SetText("test")
 
@@ -288,7 +287,7 @@ func TestC14NAudit_C14NMethodMismatch(t *testing.T) {
 // ---------------------------------------------------------------------------
 // 7. NSDetach skips empty default namespace
 //
-// NSDetach skips "prefix == defaultPrefix && namespace == ''".
+// NSDetach skips "prefix == defaultPrefix && namespace == ”".
 // This means if the context has xmlns="" (empty default namespace),
 // it won't be emitted on the detached element. For canonicalization of
 // SignedInfo this is usually fine, but could be an issue if the SignedInfo
@@ -297,7 +296,7 @@ func TestC14NAudit_C14NMethodMismatch(t *testing.T) {
 func TestC14NAudit_NSDetachSkipsEmptyDefaultNS(t *testing.T) {
 	// Build a context where default namespace is explicitly empty
 	xml := `<Root xmlns="urn:root"><Middle xmlns=""><Inner attr="val"/></Middle></Root>`
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	middle := doc.Root().FindElement("Middle")
@@ -315,7 +314,7 @@ func TestC14NAudit_NSDetachSkipsEmptyDefaultNS(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize the detached element
-	detachedDoc := etree.NewDocument()
+	detachedDoc := xmltree.NewDocument()
 	detachedDoc.SetRoot(detached)
 	resultBytes, err := detachedDoc.WriteToBytes()
 	require.NoError(t, err)
@@ -344,7 +343,7 @@ func TestC14NAudit_AttributeSortingWithAncestorNamespaces(t *testing.T) {
 		<Child b:attr="bval" a:attr="aval"/>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// With inclusive C14N, namespace declarations are inherited
@@ -391,8 +390,8 @@ func TestC14NAudit_AttributeSortingResolvePrefixFallback(t *testing.T) {
 	// Create element with two prefixed attributes where the namespace
 	// declarations are NOT on the same element. The sort function's
 	// resolvePrefix will fall back to using the prefix string itself.
-	el := &etree.Element{Tag: "Elem"}
-	el.Attr = []etree.Attr{
+	el := &xmltree.Element{Tag: "Elem"}
+	el.Attr = []xmltree.Attr{
 		// Prefixed attrs without corresponding xmlns declarations on this element
 		{Space: "z", Key: "attr", Value: "zval"},
 		{Space: "a", Key: "attr", Value: "aval"},
@@ -423,7 +422,7 @@ func TestC14NAudit_ExcC14NStripsUnusedNamespaces(t *testing.T) {
 		<used:Child>data</used:Child>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	excC14n := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
@@ -456,7 +455,7 @@ func TestC14NAudit_InclusiveC14NPreservesUnusedNamespaces(t *testing.T) {
 		<used:Child>data</used:Child>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	c14n11 := MakeC14N11Canonicalizer()
@@ -502,7 +501,7 @@ func TestC14NAudit_RoundTripAllCanonicalizers(t *testing.T) {
 				Canonicalizer: cf.make(),
 			}
 
-			el := &etree.Element{Tag: "Response"}
+			el := &xmltree.Element{Tag: "Response"}
 			el.CreateAttr("ID", "_roundtrip")
 			el.CreateAttr("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion")
 			child := el.CreateElement("saml:Assertion")
@@ -533,7 +532,7 @@ func TestC14NAudit_ExcC14NPrefixListPreservesNamespace(t *testing.T) {
 		<saml:Data>text</saml:Data>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// Without xs in prefix list
@@ -542,7 +541,7 @@ func TestC14NAudit_ExcC14NPrefixListPreservesNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	// With xs in prefix list
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(xml))
 	excWithXs := MakeC14N10ExclusiveCanonicalizerWithPrefixList("xs")
 	resWithXs, err := excWithXs.Canonicalize(doc2.Root())
@@ -570,7 +569,7 @@ func TestC14NAudit_VerifyResultIsFromCanonicalBytes(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Build a document with comments and extra whitespace
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_canonical")
 	el.CreateElement("Data").SetText("important")
 
@@ -579,10 +578,11 @@ func TestC14NAudit_VerifyResultIsFromCanonicalBytes(t *testing.T) {
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)
 
-	// Inject a comment after signing (before the signature)
-	// With C14N11 (no comments), this doesn't change the digest
-	signed.InsertChildAt(0, etree.NewComment("injected after signing"))
-	signed = reparse(t, signed)
+	// Inject a comment after signing (before the signature). The strict
+	// parser would reject the serialized form outright, so the injection can
+	// only exist as in-memory tree surgery; verify directly on the tree.
+	// With C14N11 (no comments), this doesn't change the digest.
+	signed.InsertChildAt(0, xmltree.NewComment("injected after signing"))
 
 	v := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
 	result, err := v.Verify(signed)
@@ -590,7 +590,7 @@ func TestC14NAudit_VerifyResultIsFromCanonicalBytes(t *testing.T) {
 
 	// The result element should NOT contain the injected comment
 	// (it's reconstructed from canonical bytes where comments were stripped)
-	resultDoc := etree.NewDocument()
+	resultDoc := xmltree.NewDocument()
 	resultDoc.SetRoot(result.Element)
 	resultXml, err := resultDoc.WriteToString()
 	require.NoError(t, err)
@@ -613,7 +613,7 @@ func TestC14NAudit_NamespaceRedeclarationAfterSigning(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Build document with saml namespace
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_nsredecl")
 	el.CreateAttr("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion")
 	child := el.CreateElement("Assertion")
@@ -660,7 +660,7 @@ func TestC14NAudit_NamespaceRedeclarationAfterSigning(t *testing.T) {
 func TestC14NAudit_ExcC14NXmlPrefixHandling(t *testing.T) {
 	xml := `<Root xml:lang="en"><Child xml:lang="fr">text</Child></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	excC14n := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
@@ -694,7 +694,7 @@ func TestC14NAudit_CanonicalPrepRedundantNamespaceStripping(t *testing.T) {
 		</B>
 	</A>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// C14N 1.1 should strip the redundant xmlns:ns on B but keep the one on C
@@ -738,7 +738,7 @@ func TestC14NAudit_SAMLLikeDocumentRoundTrip(t *testing.T) {
 			}
 
 			// Build SAML-like structure
-			response := &etree.Element{Tag: "Response", Space: "samlp"}
+			response := &xmltree.Element{Tag: "Response", Space: "samlp"}
 			response.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 			response.CreateAttr("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion")
 			response.CreateAttr("xmlns:xs", "http://www.w3.org/2001/XMLSchema")
@@ -795,7 +795,7 @@ func TestC14NAudit_SAMLLikeDocumentRoundTrip(t *testing.T) {
 func TestC14NAudit_NullCanonicalizerBehavior(t *testing.T) {
 	xml := `<A xmlns:ns="urn:ns"><B xmlns:ns="urn:ns"><ns:C/></B></A>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	nullC := MakeNullCanonicalizer()
@@ -813,7 +813,7 @@ func TestC14NAudit_NullCanonicalizerBehavior(t *testing.T) {
 
 	// Also verify attributes are sorted (canonicalPrep does this too)
 	xml2 := `<Root z="3" a="1" m="2"/>`
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(xml2))
 	result2, err := nullC.Canonicalize(doc2.Root())
 	require.NoError(t, err)
@@ -838,7 +838,7 @@ func TestC14NAudit_ExcC14NSameSameNSDifferentPrefixes(t *testing.T) {
 		<b:Child2>text2</b:Child2>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	excC14n := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
@@ -863,14 +863,14 @@ func TestC14NAudit_InclusiveVsExclusiveProduceDifferentDigests(t *testing.T) {
 		<used:Child attr="val">data</used:Child>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	inclusive := MakeC14N11Canonicalizer()
 	resInc, err := inclusive.Canonicalize(doc.Root())
 	require.NoError(t, err)
 
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(xml))
 	exclusive := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
 	resExc, err := exclusive.Canonicalize(doc2.Root())
@@ -909,7 +909,7 @@ func TestC14NAudit_ChangingC14NTransformAfterSigning(t *testing.T) {
 		Canonicalizer: MakeC14N11Canonicalizer(),
 	}
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_c14nswap")
 	el.CreateElement("Data").SetText("test")
 
@@ -956,8 +956,8 @@ func TestC14NAudit_CanonicalPrepDefaultNamespaceHandling(t *testing.T) {
 		not      []string
 	}{
 		{
-			name: "default_ns_declared_once",
-			xml:  `<Root xmlns="urn:root"><Child/></Root>`,
+			name:     "default_ns_declared_once",
+			xml:      `<Root xmlns="urn:root"><Child/></Root>`,
 			contains: []string{`xmlns="urn:root"`},
 		},
 		{
@@ -980,7 +980,7 @@ func TestC14NAudit_CanonicalPrepDefaultNamespaceHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := etree.NewDocument()
+			doc := xmltree.NewDocument()
 			require.NoError(t, doc.ReadFromString(tc.xml))
 
 			result := canonicalPrep(doc.Root(), true, false)
@@ -1026,15 +1026,16 @@ func TestC14NAudit_CanonicalizationIdempotency(t *testing.T) {
 	for _, xml := range xmls {
 		for _, cf := range canonicalizerFactories {
 			t.Run(cf.name, func(t *testing.T) {
-				// First pass
-				doc1 := etree.NewDocument()
-				require.NoError(t, doc1.ReadFromString(xml))
+				// First pass (lenient: some idempotency vectors carry comments)
+				doc1, err := lenientParseDoc(xml)
+				require.NoError(t, err)
 				result1, err := cf.make().Canonicalize(doc1.Root())
 				require.NoError(t, err)
 
 				// Parse the canonical output and canonicalize again
-				doc2 := etree.NewDocument()
-				require.NoError(t, doc2.ReadFromBytes(result1))
+				// (with-comments canonical output needs the lenient loader).
+				doc2, err := parseVectorDoc(result1)
+				require.NoError(t, err)
 				result2, err := cf.make().Canonicalize(doc2.Root())
 				require.NoError(t, err)
 
@@ -1059,7 +1060,7 @@ func TestC14NAudit_ExcC14NMultiplePrefixList(t *testing.T) {
 		<saml:Data>text</saml:Data>
 	</Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// PrefixList with multiple prefixes
@@ -1107,7 +1108,7 @@ func TestC14NAudit_SignVerifyWithPrefixList(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList("xs"),
 	}
 
-	el := &etree.Element{Tag: "Response", Space: "samlp"}
+	el := &xmltree.Element{Tag: "Response", Space: "samlp"}
 	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("xmlns:xs", "http://www.w3.org/2001/XMLSchema")
 	el.CreateAttr("ID", "_prefixlist")
@@ -1145,7 +1146,7 @@ func TestC14NAudit_SignVerifyWithPrefixList(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 	}
 
-	el2 := &etree.Element{Tag: "Response", Space: "samlp"}
+	el2 := &xmltree.Element{Tag: "Response", Space: "samlp"}
 	el2.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el2.CreateAttr("ID", "_prefixlist2")
 	el2.CreateElement("Data").SetText("test")
@@ -1160,7 +1161,7 @@ func TestC14NAudit_SignVerifyWithPrefixList(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 27. etree.Text() behavior with comments — the Go equivalent of VU#475445
+// 27. xmltree.Text() behavior with comments — the Go equivalent of VU#475445
 //
 // This test documents the exact behavior of etree's Text() when comments
 // are embedded in text content. This is critical for understanding whether
@@ -1202,8 +1203,8 @@ func TestC14NAudit_EtreeTextWithEmbeddedComments(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			require.NoError(t, doc.ReadFromString(tc.xml))
+			doc, err := lenientParseDoc(tc.xml)
+			require.NoError(t, err)
 
 			root := doc.Root()
 			text := root.Text()
@@ -1232,7 +1233,7 @@ func TestC14NAudit_VerifiedElementTextMatchesCanonical(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Create and sign a document
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_textmatch")
 	nameID := el.CreateElement("NameID")
 	nameID.SetText("user@example.com")
@@ -1261,7 +1262,7 @@ func TestC14NAudit_VerifiedElementTextMatchesCanonical(t *testing.T) {
 func TestC14NAudit_EmptyElementsHaveEndTags(t *testing.T) {
 	xml := `<Root><Empty/><AlsoEmpty></AlsoEmpty></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	canonicalizerFactories := []struct {
@@ -1275,7 +1276,7 @@ func TestC14NAudit_EmptyElementsHaveEndTags(t *testing.T) {
 
 	for _, cf := range canonicalizerFactories {
 		t.Run(cf.name, func(t *testing.T) {
-			docCopy := etree.NewDocument()
+			docCopy := xmltree.NewDocument()
 			require.NoError(t, docCopy.ReadFromString(xml))
 
 			result, err := cf.make().Canonicalize(docCopy.Root())
@@ -1302,7 +1303,7 @@ func TestC14NAudit_EmptyElementsHaveEndTags(t *testing.T) {
 func TestC14NAudit_ExcC14NNamespaceUsedOnlyInAttribute(t *testing.T) {
 	xml := `<Root xmlns:attr="http://attr-ns"><Child attr:name="val">text</Child></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xml))
 
 	excC14n := MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
@@ -1324,7 +1325,7 @@ func TestC14NAudit_ExcC14NNamespaceUsedOnlyInAttribute(t *testing.T) {
 // ---------------------------------------------------------------------------
 func TestC14NAudit_RealWorldOktaResponse(t *testing.T) {
 	// This is the validExample from verify_test.go
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromBytes([]byte(validExample))
 	require.NoError(t, err)
 
@@ -1355,7 +1356,7 @@ func TestC14NAudit_CDATAHandling(t *testing.T) {
 	// etree converts CDATA to text during parsing
 	xml := `<Root><![CDATA[<special>text</special>]]></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(xml)
 	if err != nil {
 		t.Skipf("etree cannot parse CDATA: %v", err)
@@ -1400,7 +1401,7 @@ func TestC14NAudit_SignVerifyWithNamespacedAttributes(t *testing.T) {
 				Canonicalizer: canonicalizer,
 			}
 
-			el := &etree.Element{Tag: "Response"}
+			el := &xmltree.Element{Tag: "Response"}
 			el.CreateAttr("ID", "_nsattr")
 			el.CreateAttr("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
 			el.CreateAttr("xmlns:xs", "http://www.w3.org/2001/XMLSchema")
@@ -1420,5 +1421,3 @@ func TestC14NAudit_SignVerifyWithNamespacedAttributes(t *testing.T) {
 		})
 	}
 }
-
-

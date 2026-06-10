@@ -70,19 +70,19 @@ func testIdentityProvider(t *testing.T) (*IdentityProvider, *saml2.KeyStore) {
 	spKS, spCert := testSPKeyStore(t)
 
 	idp := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
-		SLOURL:         "https://idp.test/slo",
+		EntityID:        "https://idp.test/metadata",
+		SSOURL:          "https://idp.test/sso",
+		SLOURL:          "https://idp.test/slo",
 		SigningKeyStore: idpKS,
-		SignResponses:  true,
-		SignAssertions: true,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   true,
+		SignAssertions:  true,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
-				EntityID: "https://sp.test/metadata",
-				ACSURLs:  []string{"https://sp.test/acs"},
-				SLOURLs:  []string{"https://sp.test/slo"},
-				SigningCertificates: []*x509.Certificate{spCert},
+				EntityID:              "https://sp.test/metadata",
+				ACSURLs:               []string{"https://sp.test/acs"},
+				SLOURLs:               []string{"https://sp.test/slo"},
+				SigningCertificates:   []*x509.Certificate{spCert},
 				EncryptionCertificate: spCert,
 			},
 		},

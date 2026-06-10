@@ -87,17 +87,17 @@ type Signature struct {
 
 // Assertion represents a saml:Assertion element.
 type Assertion struct {
-	XMLName            xml.Name            `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
-	Version            string              `xml:"Version,attr"`
-	ID                 string              `xml:"ID,attr"`
-	IssueInstant       time.Time           `xml:"IssueInstant,attr"`
-	Issuer             *Issuer             `xml:"Issuer"`
-	Signature          *Signature          `xml:"Signature"`
-	Subject            *Subject            `xml:"Subject"`
-	Conditions         *Conditions         `xml:"Conditions"`
+	XMLName             xml.Name             `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
+	Version             string               `xml:"Version,attr"`
+	ID                  string               `xml:"ID,attr"`
+	IssueInstant        time.Time            `xml:"IssueInstant,attr"`
+	Issuer              *Issuer              `xml:"Issuer"`
+	Signature           *Signature           `xml:"Signature"`
+	Subject             *Subject             `xml:"Subject"`
+	Conditions          *Conditions          `xml:"Conditions"`
 	AttributeStatements []AttributeStatement `xml:"AttributeStatement"`
-	AuthnStatement     *AuthnStatement     `xml:"AuthnStatement"`
-	SignatureValidated bool                `xml:"-"` // not read, not dumped
+	AuthnStatement      *AuthnStatement      `xml:"AuthnStatement"`
+	SignatureValidated  bool                 `xml:"-"` // not read, not dumped
 }
 
 // Subject represents a saml:Subject element.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,11 +23,12 @@ const (
 )
 
 func runCanonicalizationTest(t *testing.T, canonicalizer Canonicalizer, xmlstr string, canonicalXmlstr string) {
-	raw := etree.NewDocument()
-	err := raw.ReadFromString(xmlstr)
-	require.NoError(t, err)
+	// These exercise the canonicalizer, not the parser: load leniently so
+	// comment-bearing vectors (which the strict parser rejects by design)
+	// still reach the WithComments canonicalizers as trees.
+	root := mustLenientParse(t, xmlstr)
 
-	canonicalized, err := canonicalizer.Canonicalize(raw.Root())
+	canonicalized, err := canonicalizer.Canonicalize(root)
 	require.NoError(t, err)
 	require.Equal(t, canonicalXmlstr, string(canonicalized))
 }
@@ -131,7 +132,7 @@ func TestC14N10RecCanonicalizerWithNamespaceInheritance(t *testing.T) {
 			<ns2:GrandChildElement>Hello, World!</ns2:GrandChildElement>
 		</ns2:ChildElement>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	if err := doc.ReadFromString(input); err != nil {
 		t.Fatalf("Error parsing input XML: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestC14N10RecNoSpuriousXmlnsEmpty(t *testing.T) {
 	// not inject xmlns="" when the default namespace was never declared.
 	input := `<Root xmlns="" xmlns:a="http://www.w3.org"><Child/></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(input)
 	require.NoError(t, err)
 
@@ -174,7 +175,7 @@ func TestC14N10RecPreservesXmlnsEmptyWhenNeeded(t *testing.T) {
 	// ancestor undeclares it, the undeclaration must be inherited.
 	input := `<Root xmlns="http://example.com"><Middle xmlns=""><Child/></Middle></Root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err := doc.ReadFromString(input)
 	require.NoError(t, err)
 

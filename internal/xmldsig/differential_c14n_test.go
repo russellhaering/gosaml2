@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // requireXmllint skips the test if xmllint is not available.
@@ -67,15 +67,15 @@ func xmllintC14N(input []byte, mode string) ([]byte, error) {
 func TestDifferentialC14NAgainstXmllint(t *testing.T) {
 	requireXmllint(t)
 
-	// Known limitations where divergence from xmllint is expected:
-	knownLimitations := map[string]string{
-		"attr_whitespace": "etree does not normalize tab/newline in attribute values",
-	}
+	// Known limitations where divergence from xmllint is expected (none —
+	// the strict parser performs spec-correct attribute-value normalization
+	// that the old etree pipeline lacked).
+	knownLimitations := map[string]string{}
 
 	type c14nMethod struct {
-		name         string
-		xmllintFlag  string
-		makeC        func() Canonicalizer
+		name        string
+		xmllintFlag string
+		makeC       func() Canonicalizer
 	}
 
 	// Use with-comments canonicalizers to match xmllint behavior
@@ -125,9 +125,10 @@ func TestDifferentialC14NAgainstXmllint(t *testing.T) {
 					t.Fatalf("xmllint failed: %v", err)
 				}
 
-				// Get Go library output
-				doc := etree.NewDocument()
-				if err := doc.ReadFromBytes(inputBytes); err != nil {
+				// Get Go library output (strict parse where possible, lenient
+				// for comment-bearing vectors)
+				doc, err := parseVectorDoc(inputBytes)
+				if err != nil {
 					t.Fatalf("failed to parse input: %v", err)
 				}
 
@@ -244,8 +245,8 @@ func TestDifferentialC14NInlineInputs(t *testing.T) {
 				}
 
 				// Go library
-				doc := etree.NewDocument()
-				if err := doc.ReadFromString(input.xml); err != nil {
+				doc, err := lenientParseDoc(input.xml)
+				if err != nil {
 					t.Fatalf("failed to parse: %v", err)
 				}
 
@@ -280,7 +281,7 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 		Certs: []*x509.Certificate{cert},
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.ReadFromString(`<root ID="_test123"><data>important</data></root>`)
 
 	signed, err := signer.SignEnveloped(doc.Root())
@@ -289,20 +290,20 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 	}
 
 	// Serialize and re-parse to get clean tree
-	signedDoc := etree.NewDocument()
+	signedDoc := xmltree.NewDocument()
 	signedDoc.SetRoot(signed)
 	xmlBytes, err := signedDoc.WriteToBytes()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	signedDoc2 := etree.NewDocument()
+	signedDoc2 := xmltree.NewDocument()
 	if err := signedDoc2.ReadFromBytes(xmlBytes); err != nil {
 		t.Fatal(err)
 	}
 
 	// Find the SignedInfo element
-	var signedInfo *etree.Element
+	var signedInfo *xmltree.Element
 	for _, child := range signedDoc2.Root().ChildElements() {
 		if child.Tag == "Signature" {
 			for _, grandchild := range child.ChildElements() {
@@ -332,7 +333,7 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 	if !hasNSDecl && siCopy.Space != "" {
 		siCopy.CreateAttr("xmlns:"+siCopy.Space, namespace)
 	}
-	siDoc := etree.NewDocument()
+	siDoc := xmltree.NewDocument()
 	siDoc.SetRoot(siCopy)
 	siBytes, err := siDoc.WriteToBytes()
 	if err != nil {
@@ -356,7 +357,7 @@ func TestDifferentialC14NSignatureRoundTrip(t *testing.T) {
 			}
 
 			// Re-parse for Go canonicalization
-			doc := etree.NewDocument()
+			doc := xmltree.NewDocument()
 			if err := doc.ReadFromBytes(siBytes); err != nil {
 				t.Fatal(err)
 			}
@@ -396,7 +397,7 @@ func TestDifferentialC14NBitFlipDetection(t *testing.T) {
 		TrustedCerts: []*x509.Certificate{cert},
 	}
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.ReadFromString(`<root ID="_test"><data>payload</data></root>`)
 
 	signed, err := signer.SignEnveloped(doc.Root())
@@ -405,7 +406,7 @@ func TestDifferentialC14NBitFlipDetection(t *testing.T) {
 	}
 
 	// Serialize to get the signed XML bytes
-	signedDoc := etree.NewDocument()
+	signedDoc := xmltree.NewDocument()
 	signedDoc.SetRoot(signed)
 	origBytes, err := signedDoc.WriteToBytes()
 	if err != nil {
@@ -413,7 +414,7 @@ func TestDifferentialC14NBitFlipDetection(t *testing.T) {
 	}
 
 	// Verify the original works
-	origDoc := etree.NewDocument()
+	origDoc := xmltree.NewDocument()
 	if err := origDoc.ReadFromBytes(origBytes); err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +435,7 @@ func TestDifferentialC14NBitFlipDetection(t *testing.T) {
 			copy(mutated, origBytes)
 			mutated[byteIdx] ^= 1 << uint(bitIdx)
 
-			mutDoc := etree.NewDocument()
+			mutDoc := xmltree.NewDocument()
 			if err := mutDoc.ReadFromBytes(mutated); err != nil {
 				// Parse failure is fine — mutation broke the XML
 				parseFails++
@@ -576,8 +577,8 @@ func TestDifferentialC14NAttributePermutations(t *testing.T) {
 				}
 				xml := fmt.Sprintf("<elem%s/>", attrStr)
 
-				doc := etree.NewDocument()
-				if err := doc.ReadFromString(xml); err != nil {
+				doc, err := lenientParseDoc(xml)
+				if err != nil {
 					t.Fatalf("permutation %d: parse failed: %v", i, err)
 				}
 
@@ -640,8 +641,8 @@ func TestDifferentialC14NNamespacePermutations(t *testing.T) {
 				}
 				xml := fmt.Sprintf(`<root%s><a:x/><b:y/><c:z/></root>`, declStr)
 
-				doc := etree.NewDocument()
-				if err := doc.ReadFromString(xml); err != nil {
+				doc, err := lenientParseDoc(xml)
+				if err != nil {
 					t.Fatalf("permutation %d: parse failed: %v", i, err)
 				}
 
@@ -679,8 +680,8 @@ func FuzzDifferentialC14N(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, xmlStr string) {
 		// Must be valid XML
-		doc := etree.NewDocument()
-		if err := doc.ReadFromString(xmlStr); err != nil {
+		doc, err := lenientParseDoc(xmlStr)
+		if err != nil {
 			t.Skip()
 		}
 		if doc.Root() == nil {

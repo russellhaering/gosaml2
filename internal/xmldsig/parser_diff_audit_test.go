@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ import (
 // ==========================================================================
 
 // helper: sign an XML string and return the verified element.
-func signAndVerify(t *testing.T, xmlStr string, canonicalizer ...Canonicalizer) *etree.Element {
+func signAndVerify(t *testing.T, xmlStr string, canonicalizer ...Canonicalizer) *xmltree.Element {
 	t.Helper()
 	key, cert := randomTestKeyAndCert()
 
@@ -45,23 +45,23 @@ func signAndVerify(t *testing.T, xmlStr string, canonicalizer ...Canonicalizer) 
 		signer.Canonicalizer = canonicalizer[0]
 	}
 
-	doc := etree.NewDocument()
-	err := doc.ReadFromString(xmlStr)
+	// Lenient parse: this helper deliberately feeds comment/CDATA-bearing
+	// inputs into the signing pipeline to compare parser behaviors. The
+	// strict production parser rejects such inputs at ingestion.
+	root, err := lenientParse(xmlStr)
 	require.NoError(t, err, "failed to parse input XML")
 
-	signed, err := signer.SignEnveloped(doc.Root())
+	signed, err := signer.SignEnveloped(root)
 	require.NoError(t, err, "SignEnveloped failed")
 
-	// SignEnveloped appends the Signature directly to the Child slice,
-	// so we must serialize and re-parse to get a proper document tree
-	// before calling Verify (same as production code would do).
-	reparseDoc := etree.NewDocument()
+	// Serialize and re-parse (leniently — the tree may carry comments) to
+	// fix parent pointers before calling Verify.
+	reparseDoc := xmltree.NewDocument()
 	reparseDoc.SetRoot(signed)
 	reparseStr, err := reparseDoc.WriteToString()
 	require.NoError(t, err, "failed to serialize signed document")
-	reparseDoc2 := etree.NewDocument()
-	require.NoError(t, reparseDoc2.ReadFromString(reparseStr), "failed to re-parse signed document")
-	signed = reparseDoc2.Root()
+	signed, err = lenientParse(reparseStr)
+	require.NoError(t, err, "failed to re-parse signed document")
 
 	verifier := &Verifier{
 		TrustedCerts: []*x509.Certificate{cert},
@@ -76,20 +76,20 @@ func signAndVerify(t *testing.T, xmlStr string, canonicalizer ...Canonicalizer) 
 }
 
 // helper: serialize→re-parse an element to fix parent pointers.
-func reparseElement(t *testing.T, el *etree.Element) *etree.Element {
+func reparseElement(t *testing.T, el *xmltree.Element) *xmltree.Element {
 	t.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(el)
 	s, err := doc.WriteToString()
 	require.NoError(t, err)
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(s))
 	return doc2.Root()
 }
 
 // helper: filter out Signature children.
-func filterSignature(els []*etree.Element) []*etree.Element {
-	var out []*etree.Element
+func filterSignature(els []*xmltree.Element) []*xmltree.Element {
+	var out []*xmltree.Element
 	for _, el := range els {
 		if el.Tag != signatureTag {
 			out = append(out, el)
@@ -99,7 +99,7 @@ func filterSignature(els []*etree.Element) []*etree.Element {
 }
 
 // helper: recursively compare text content between original and verified trees.
-func checkTextContent(t *testing.T, orig, verified *etree.Element, path string) {
+func checkTextContent(t *testing.T, orig, verified *xmltree.Element, path string) {
 	t.Helper()
 	currentPath := path + "/" + orig.Tag
 
@@ -157,12 +157,12 @@ func TestParserDiffEtreeRoundTripStability(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doc1 := etree.NewDocument()
+			doc1 := xmltree.NewDocument()
 			require.NoError(t, doc1.ReadFromString(tc.xml))
 			out1, err := doc1.WriteToString()
 			require.NoError(t, err)
 
-			doc2 := etree.NewDocument()
+			doc2 := xmltree.NewDocument()
 			require.NoError(t, doc2.ReadFromString(out1))
 			out2, err := doc2.WriteToString()
 			require.NoError(t, err)
@@ -194,7 +194,7 @@ func TestParserDiffReParseAfterVerify(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			verified := signAndVerify(t, tc.xml)
 
-			origDoc := etree.NewDocument()
+			origDoc := xmltree.NewDocument()
 			require.NoError(t, origDoc.ReadFromString(tc.xml))
 
 			checkTextContent(t, origDoc.Root(), verified, "")
@@ -273,7 +273,7 @@ func TestParserDiffNamespacePrefixRebinding(t *testing.T) {
 	assert.Equal(t, "child", firstChild.Tag)
 	assert.Equal(t, "in-first-namespace", firstChild.Text())
 
-	var innerEl *etree.Element
+	var innerEl *xmltree.Element
 	for _, ch := range children {
 		if ch.Tag == "inner" {
 			innerEl = ch
@@ -319,6 +319,18 @@ func TestParserDiffCDATA(t *testing.T) {
 		{"CDATAEmpty", `<root ID="_cd3"><data><![CDATA[]]></data></root>`, ""},
 		{"RegularEscapedEquivalent", `<root ID="_cd4"><data>&lt;script&gt;alert(1)&lt;/script&gt;</data></root>`, "<script>alert(1)</script>"},
 	}
+
+	// Production ingestion rejects CDATA outright; the pipeline checks below
+	// run on leniently-loaded trees (CDATA becomes plain character data).
+	t.Run("StrictParserRejectsCDATA", func(t *testing.T) {
+		for _, tc := range cases {
+			if strings.Contains(tc.xml, "CDATA") {
+				_, err := xmltree.Parse([]byte(tc.xml))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "CDATA")
+			}
+		}
+	})
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -417,7 +429,7 @@ func TestParserDiffCommentInjection(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, nameID.Text(), assertion.Subject.NameID,
-		"etree.Text() and encoding/xml.Unmarshal must agree on NameID")
+		"xmltree.Text() and encoding/xml.Unmarshal must agree on NameID")
 }
 
 // =========================================================================
@@ -436,7 +448,7 @@ func TestParserDiffCommentSurvivalThroughPipeline(t *testing.T) {
 			"without-comments C14N should concatenate text around stripped comment")
 
 		for _, child := range nameEl.Child {
-			_, isComment := child.(*etree.Comment)
+			_, isComment := child.(*xmltree.Comment)
 			assert.False(t, isComment, "comment must not survive without-comments C14N")
 		}
 
@@ -444,7 +456,7 @@ func TestParserDiffCommentSurvivalThroughPipeline(t *testing.T) {
 		type Root struct {
 			Name string `xml:"name"`
 		}
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		doc.SetRoot(verified.Copy())
 		b, err := doc.WriteToBytes()
 		require.NoError(t, err)
@@ -454,37 +466,30 @@ func TestParserDiffCommentSurvivalThroughPipeline(t *testing.T) {
 			"encoding/xml must see same value as etree")
 	})
 
-	// C14N-with-comments preserves the comment in canonical bytes.
+	// C14N-with-comments preserves the comment in canonical bytes. The
+	// verifier reconstructs the verified element from those bytes via the
+	// STRICT parser, which rejects comments — so a comment-bearing document
+	// signed with a with-comments canonicalizer cannot complete
+	// verification. (Strictly-parsed production documents can never carry
+	// comments in the first place; this hard-fails the only remaining path,
+	// in-memory injection.)
 	t.Run("WithComments", func(t *testing.T) {
-		verified := signAndVerify(t, xmlWithComment, MakeC14N11WithCommentsCanonicalizer())
-		nameEl := findDescendantByTag(verified, "name")
-		require.NotNil(t, nameEl)
-
-		// etree.Text() concatenates all CharData around comments.
-		assert.Equal(t, "AliceBob", nameEl.Text(),
-			"etree.Text() should concatenate chardata around comments")
-
-		// But the comment node should still be in the tree.
-		hasComment := false
-		for _, child := range nameEl.Child {
-			if _, ok := child.(*etree.Comment); ok {
-				hasComment = true
-			}
+		key, cert := randomTestKeyAndCert()
+		signer := &Signer{
+			Key:           key,
+			Certs:         []*x509.Certificate{cert},
+			Hash:          crypto.SHA256,
+			Canonicalizer: MakeC14N11WithCommentsCanonicalizer(),
 		}
-		assert.True(t, hasComment, "comment should survive with-comments C14N")
-
-		// encoding/xml must see the same concatenated text.
-		type Root struct {
-			Name string `xml:"name"`
-		}
-		doc := etree.NewDocument()
-		doc.SetRoot(verified.Copy())
-		b, err := doc.WriteToBytes()
+		root, err := lenientParse(xmlWithComment)
 		require.NoError(t, err)
-		var r Root
-		require.NoError(t, xml.Unmarshal(b, &r))
-		assert.Equal(t, "AliceBob", r.Name,
-			"encoding/xml must see same concatenated value")
+		signed, err := signer.SignEnveloped(root)
+		require.NoError(t, err)
+
+		_, err = (&Verifier{TrustedCerts: []*x509.Certificate{cert}}).Verify(signed)
+		require.Error(t, err,
+			"comment-bearing canonical bytes must not reconstruct into a verified element")
+		require.Contains(t, err.Error(), "comments are not allowed")
 	})
 }
 
@@ -561,7 +566,7 @@ func TestParserDiffEncodingXMLNamespaceMutationAbsent(t *testing.T) {
 	verified := signAndVerify(t, samlXML)
 
 	// Serialize the verified element
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(verified.Copy())
 	verBytes, err := doc.WriteToBytes()
 	require.NoError(t, err)
@@ -647,7 +652,7 @@ func TestParserDiffNSUnmarshalResidualRisk(t *testing.T) {
 			xmlVal := assertion.Subject.NameID
 
 			assert.Equal(t, etreeVal, xmlVal,
-				"PARSER DIFFERENTIAL: etree.Text()=%q but encoding/xml=%q", etreeVal, xmlVal)
+				"PARSER DIFFERENTIAL: xmltree.Text()=%q but encoding/xml=%q", etreeVal, xmlVal)
 			assert.Equal(t, tc.want, xmlVal)
 		})
 	}
@@ -781,9 +786,9 @@ func TestParserDiffFullSAMLPipeline(t *testing.T) {
 		AttrStatement AttributeStatement `xml:"urn:oasis:names:tc:SAML:2.0:assertion AttributeStatement"`
 	}
 	type Response struct {
-		XMLName   xml.Name       `xml:"urn:oasis:names:tc:SAML:2.0:protocol Response"`
-		Issuer    string         `xml:"urn:oasis:names:tc:SAML:2.0:assertion Issuer"`
-		Assertion SAMLAssertion  `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
+		XMLName   xml.Name      `xml:"urn:oasis:names:tc:SAML:2.0:protocol Response"`
+		Issuer    string        `xml:"urn:oasis:names:tc:SAML:2.0:assertion Issuer"`
+		Assertion SAMLAssertion `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
 	}
 
 	ctx, err := NSBuildParentContext(verified)
@@ -835,7 +840,7 @@ func TestParserDiffExcC14NWithPrefixList(t *testing.T) {
 			Hash:          crypto.SHA256,
 			Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList("b"),
 		}
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		require.NoError(t, doc.ReadFromString(xmlStr))
 		signed, err := signer.SignEnveloped(doc.Root())
 		require.NoError(t, err)
@@ -865,7 +870,7 @@ func TestParserDiffTamperDetection(t *testing.T) {
 
 	xmlStr := `<root ID="_tamper1"><name>Alice</name></root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xmlStr))
 
 	signed, err := signer.SignEnveloped(doc.Root())
@@ -911,7 +916,7 @@ func TestParserDiffCanonicalBytesConsistency(t *testing.T) {
 
 	xmlStr := `<root ID="_con1"><data>payload</data></root>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(xmlStr))
 
 	// Manually canonicalize
@@ -931,7 +936,7 @@ func TestParserDiffCanonicalBytesConsistency(t *testing.T) {
 	signed = reparseElement(t, signed)
 
 	// Extract digest from signed document
-	var sigEl *etree.Element
+	var sigEl *xmltree.Element
 	for _, child := range signed.ChildElements() {
 		if child.Tag == signatureTag {
 			sigEl = child
@@ -982,7 +987,7 @@ func TestParserDiffCanonicalRoundTrip(t *testing.T) {
 		for _, cf := range canonicalizerFactories {
 			t.Run(tc.name+"/"+cf.name, func(t *testing.T) {
 				// Parse original
-				doc := etree.NewDocument()
+				doc := xmltree.NewDocument()
 				require.NoError(t, doc.ReadFromString(tc.xml))
 
 				// First canonicalization
@@ -991,7 +996,7 @@ func TestParserDiffCanonicalRoundTrip(t *testing.T) {
 				require.NoError(t, err)
 
 				// Re-parse canonical bytes (what verifyDigest does)
-				doc2 := etree.NewDocument()
+				doc2 := xmltree.NewDocument()
 				require.NoError(t, doc2.ReadFromBytes(canon1))
 
 				// Second canonicalization
@@ -1047,7 +1052,7 @@ func TestParserDiffMetaEncodingXMLStillBroken(t *testing.T) {
 func TestParserDiffMetaEtreeDoesNotMutate(t *testing.T) {
 	input := `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:Subject>user</saml:Subject></saml:Assertion>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(input))
 	output, err := doc.WriteToString()
 	require.NoError(t, err)

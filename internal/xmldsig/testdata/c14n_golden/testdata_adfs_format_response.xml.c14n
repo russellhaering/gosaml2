@@ -1,0 +1,44 @@
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Consent="urn:oasis:names:tc:SAML:2.0:consent:unspecified" Destination="http://localhost:8080/v1/_saml_callback" ID="_adfs-resp-001" InResponseTo="_req-adfs-001" IssueInstant="2025-01-01T00:00:00Z" Version="2.0">
+  <Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">http://adfs.example.com/adfs/services/trust</Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"></samlp:StatusCode>
+  </samlp:Status>
+  <Assertion xmlns="urn:oasis:names:tc:SAML:2.0:assertion" ID="_adfs-assertion-001" IssueInstant="2025-01-01T00:00:00Z" Version="2.0">
+    <Issuer>http://adfs.example.com/adfs/services/trust</Issuer>
+    <Subject>
+      <NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:WindowsDomainQualifiedName">EXAMPLE\jsmith</NameID>
+      <SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <SubjectConfirmationData InResponseTo="_req-adfs-001" NotOnOrAfter="2116-01-01T01:00:00Z" Recipient="http://localhost:8080/v1/_saml_callback"></SubjectConfirmationData>
+      </SubjectConfirmation>
+    </Subject>
+    <Conditions NotBefore="2024-12-31T23:00:00Z" NotOnOrAfter="2116-01-01T01:00:00Z">
+      <AudienceRestriction>
+        <Audience>https://sp.example.com</Audience>
+      </AudienceRestriction>
+    </Conditions>
+    <AttributeStatement>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress">
+        <AttributeValue>jsmith@example.com</AttributeValue>
+      </Attribute>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname">
+        <AttributeValue>John</AttributeValue>
+      </Attribute>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname">
+        <AttributeValue>Smith</AttributeValue>
+      </Attribute>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn">
+        <AttributeValue>jsmith@example.com</AttributeValue>
+      </Attribute>
+      <Attribute Name="http://schemas.microsoft.com/ws/2008/06/identity/claims/role">
+        <AttributeValue>Domain Users</AttributeValue>
+        <AttributeValue>IT Admins</AttributeValue>
+        <AttributeValue>VPN Users</AttributeValue>
+      </Attribute>
+    </AttributeStatement>
+    <AuthnStatement AuthnInstant="2025-01-01T00:00:00Z" SessionIndex="_adfs-session-001" SessionNotOnOrAfter="2116-01-01T08:00:00Z">
+      <AuthnContext>
+        <AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</AuthnContextClassRef>
+      </AuthnContext>
+    </AuthnStatement>
+  </Assertion>
+</samlp:Response>

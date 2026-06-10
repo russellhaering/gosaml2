@@ -34,9 +34,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 	"github.com/stretchr/testify/require"
 )
@@ -108,19 +108,10 @@ func TestSecurityNovel_CommentInsideIssuer(t *testing.T) {
 		now.Add(-5*time.Minute).Format(time.RFC3339), now.Add(5*time.Minute).Format(time.RFC3339),
 		sp.AudienceURIs[0])
 
-	// Parse to verify the concatenated issuer value
-	_, el, err := parseResponse([]byte(responseWithCommentIssuer), 0)
-	require.NoError(t, err)
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-
-	// The Response-level Issuer should be the full concatenated text
-	issuerValue := decodedResponse.Issuer.Value
-	// It should be the full text with the comment stripped (text nodes concatenated)
-	require.Equal(t, "http://www.okta.com/exk5zt0r12Edi4rD20h7", issuerValue,
-		"Comment injection in Issuer should not truncate value; full concatenation expected")
+	// The strict parser rejects the comment outright.
+	_, _, err := parseResponse([]byte(responseWithCommentIssuer), 0)
+	require.Error(t, err, "comment injection in Issuer must be rejected at parse time")
+	require.Contains(t, err.Error(), "comments are not allowed")
 }
 
 // Test 17: CDATA in Issuer element.
@@ -137,15 +128,10 @@ func TestSecurityNovel_CDATAInIssuer(t *testing.T) {
 </saml2p:Response>`,
 		sp.ACSURL, now.Format(time.RFC3339), sp.IDPEntityID)
 
-	_, el, err := parseResponse([]byte(responseWithCDATA), 0)
-	require.NoError(t, err)
-
-	decodedResponse := &types.Response{}
-	err = xmlUnmarshalElement(el, decodedResponse)
-	require.NoError(t, err)
-
-	require.Equal(t, sp.IDPEntityID, decodedResponse.Issuer.Value,
-		"CDATA-wrapped Issuer should parse to the same string value")
+	// The strict parser rejects CDATA sections outright.
+	_, _, err := parseResponse([]byte(responseWithCDATA), 0)
+	require.Error(t, err, "CDATA must be rejected at parse time")
+	require.Contains(t, err.Error(), "CDATA")
 }
 
 // Test 18: Unicode normalization attack on Issuer (NFC vs NFD).
@@ -160,7 +146,7 @@ func TestSecurityNovel_UnicodeNormalizationIssuer(t *testing.T) {
 	require.Equal(t, nfcIssuer, nfdIssuer, "Go uses byte comparison, no Unicode normalization")
 
 	// Now test actual different byte sequences
-	nfcForm := "caf\u00e9" // U+00E9: single code point
+	nfcForm := "caf\u00e9"  // U+00E9: single code point
 	nfdForm := "cafe\u0301" // U+0065 U+0301: decomposed
 	require.NotEqual(t, nfcForm, nfdForm,
 		"NFC and NFD forms should NOT be equal under byte comparison")
@@ -465,13 +451,13 @@ func TestSecurityNovel_XSWCloneAssertionModifyNameID(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	root := doc.Root()
 
 	// Find the assertion and clone it
-	var origAssertion *etree.Element
+	var origAssertion *xmltree.Element
 	for _, child := range root.ChildElements() {
 		if child.Tag == "Assertion" {
 			origAssertion = child
@@ -510,7 +496,7 @@ func TestSecurityNovel_XSWUnsignedAssertionAlongsideSigned(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	root := doc.Root()
@@ -955,13 +941,13 @@ func TestSecurityNovel_EtreeVsEncodingXMLNamespacePrefix(t *testing.T) {
 	sp, _ := securityTestSP(t)
 
 	validResp := makeValidResponse(sp)
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(validResp))
 
 	root := doc.Root()
 
 	// Find the assertion and detach it
-	var assertion *etree.Element
+	var assertion *xmltree.Element
 	for _, child := range root.ChildElements() {
 		if child.Tag == "Assertion" {
 			assertion = child
@@ -971,14 +957,14 @@ func TestSecurityNovel_EtreeVsEncodingXMLNamespacePrefix(t *testing.T) {
 	require.NotNil(t, assertion)
 
 	// Copy the assertion and re-parse it standalone
-	assertionDoc := etree.NewDocument()
+	assertionDoc := xmltree.NewDocument()
 	assertionDoc.SetRoot(assertion.Copy())
 
 	assertionXML, err := assertionDoc.WriteToString()
 	require.NoError(t, err)
 
 	// Parse back and verify namespace is preserved
-	reDoc := etree.NewDocument()
+	reDoc := xmltree.NewDocument()
 	require.NoError(t, reDoc.ReadFromString(assertionXML))
 
 	reRoot := reDoc.Root()
@@ -1242,7 +1228,7 @@ func TestSecurityNovel_ReferenceURINullByte(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Inject a null byte into the Reference URI
@@ -1309,7 +1295,7 @@ func TestSecurityNovel_EmptyReferenceURI(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Change the Reference URI to empty
@@ -1391,12 +1377,12 @@ func TestSecurityNovel_SignedInfoAttributeReorder(t *testing.T) {
 	raw := buildLegitResponse("legit@example.com")
 	signed := signResponseXML(t, raw, signer)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(signed))
 
 	// Find CanonicalizationMethod and SignatureMethod, swap their Algorithm values
 	for _, si := range doc.Root().FindElements("//SignedInfo") {
-		var canonMethod, sigMethod *etree.Element
+		var canonMethod, sigMethod *xmltree.Element
 		for _, child := range si.ChildElements() {
 			switch child.Tag {
 			case "CanonicalizationMethod":

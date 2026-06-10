@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,10 +38,10 @@ func TestRedirect(t *testing.T) {
 	spURL := "https://sp.test"
 
 	sp := ServiceProvider{
-		ACSURL:           spURL,
-		AudienceURIs:     []string{spURL},
-		EntityID:         spURL,
-		IDPSSOURL:        "https://idp.test/saml/sso",
+		ACSURL:            spURL,
+		AudienceURIs:      []string{spURL},
+		EntityID:          spURL,
+		IDPSSOURL:         "https://idp.test/saml/sso",
 		SignAuthnRequests: false,
 	}
 
@@ -82,17 +82,17 @@ func TestRedirect(t *testing.T) {
 func TestRequestedAuthnContextOmitted(t *testing.T) {
 	spURL := "https://sp.test"
 	sp := ServiceProvider{
-		ACSURL:           spURL,
-		AudienceURIs:     []string{spURL},
-		EntityID:         spURL,
-		IDPSSOURL:        "https://idp.test/saml/sso",
+		ACSURL:            spURL,
+		AudienceURIs:      []string{spURL},
+		EntityID:          spURL,
+		IDPSSOURL:         "https://idp.test/saml/sso",
 		SignAuthnRequests: false,
 	}
 
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 
@@ -119,7 +119,7 @@ func TestRequestedAuthnContextIncluded(t *testing.T) {
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 
@@ -143,7 +143,7 @@ func TestForceAuthnOmitted(t *testing.T) {
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 
@@ -164,7 +164,7 @@ func TestForceAuthnIncluded(t *testing.T) {
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestIsPassiveOmitted(t *testing.T) {
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestIsPassiveIncluded(t *testing.T) {
 	request, err := sp.BuildAuthRequest()
 	require.NoError(t, err)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	err = doc.ReadFromString(request)
 	require.NoError(t, err)
 

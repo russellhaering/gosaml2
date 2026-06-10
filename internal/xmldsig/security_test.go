@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,19 +28,19 @@ import (
 // reparse serializes el to XML and re-parses it so all etree parent pointers
 // are correct. SignEnveloped appends via the Child slice directly, so a
 // serialize→parse round-trip is required before calling Verify.
-func reparse(t *testing.T, el *etree.Element) *etree.Element {
+func reparse(t *testing.T, el *xmltree.Element) *xmltree.Element {
 	t.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(el)
 	s, err := doc.WriteToString()
 	require.NoError(t, err)
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(s))
 	return doc2.Root()
 }
 
 // signAndReparse signs el enveloped, then round-trips through XML text.
-func signAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, el *etree.Element) *etree.Element {
+func signAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, el *xmltree.Element) *xmltree.Element {
 	t.Helper()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 	signed, err := signer.SignEnveloped(el)
@@ -49,9 +49,9 @@ func signAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, el 
 }
 
 // signDoc builds <Response ID=id><Data>good</Data></Response>, signs, reparses.
-func signDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id string) *etree.Element {
+func signDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id string) *xmltree.Element {
 	t.Helper()
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	if id != "" {
 		el.CreateAttr("ID", id)
 	}
@@ -63,7 +63,7 @@ func newVerifier(certs ...*x509.Certificate) *Verifier {
 	return &Verifier{TrustedCerts: certs}
 }
 
-func findSig(el *etree.Element) *etree.Element {
+func findSig(el *xmltree.Element) *xmltree.Element {
 	for _, c := range el.ChildElements() {
 		if c.Tag == signatureTag {
 			return c
@@ -72,7 +72,7 @@ func findSig(el *etree.Element) *etree.Element {
 	return nil
 }
 
-func removeKeyInfoFromSig(el *etree.Element) {
+func removeKeyInfoFromSig(el *xmltree.Element) {
 	sig := findSig(el)
 	if sig == nil {
 		return
@@ -147,9 +147,9 @@ func genECDSAKeyCert(t *testing.T, notBefore, notAfter time.Time) (crypto.Signer
 
 // signDocWithCerts signs a simple <Root ID=id><Data>hello</Data></Root>
 // element, optionally embedding multiple certs in KeyInfo.
-func signDocWithCerts(t *testing.T, key crypto.Signer, certs []*x509.Certificate, id string) *etree.Element {
+func signDocWithCerts(t *testing.T, key crypto.Signer, certs []*x509.Certificate, id string) *xmltree.Element {
 	t.Helper()
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	if id != "" {
 		el.CreateAttr("ID", id)
 	}
@@ -181,7 +181,7 @@ func TestXSW_EvilSiblingElement(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_r1")
 
-	evil := etree.NewElement("Evil")
+	evil := xmltree.NewElement("Evil")
 	evil.SetText("bad")
 	signed.InsertChildAt(0, evil)
 
@@ -196,7 +196,7 @@ func TestXSW_WrappedSignature(t *testing.T) {
 
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	container := etree.NewElement("SigContainer")
+	container := xmltree.NewElement("SigContainer")
 	signed.RemoveChild(sig)
 	container.AddChild(sig)
 	signed.AddChild(container)
@@ -211,8 +211,8 @@ func TestXSW_DuplicateIDDifferentContent(t *testing.T) {
 	signed := signDoc(t, key, cert, "_r1")
 
 	// Put the signed element inside an outer Envelope alongside an evil clone.
-	envelope := etree.NewElement("Envelope")
-	evil := etree.NewElement("Response")
+	envelope := xmltree.NewElement("Envelope")
+	evil := xmltree.NewElement("Response")
 	evil.CreateAttr("ID", "_r1")
 	evil.CreateElement("Data").SetText("evil")
 	envelope.AddChild(evil)
@@ -281,7 +281,7 @@ func TestXSW_RemovedChildAfterSigning(t *testing.T) {
 func TestXSW_ReorderedChildrenAfterSigning(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_reorder")
 	el.CreateElement("First").SetText("1")
 	el.CreateElement("Second").SetText("2")
@@ -307,7 +307,7 @@ func TestXSW_ReorderedChildrenAfterSigning(t *testing.T) {
 func TestXSW_ModifiedNamespaceAfterSigning(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response", Space: "samlp"}
+	el := &xmltree.Element{Tag: "Response", Space: "samlp"}
 	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", "_ns")
 	el.CreateElement("Data").SetText("good")
@@ -347,7 +347,7 @@ func TestTamper_ModifiedTextContent(t *testing.T) {
 func TestTamper_ModifiedAttributeValue(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_attr")
 	el.CreateAttr("Flavor", "vanilla")
 	el.CreateElement("Data").SetText("good")
@@ -393,12 +393,12 @@ func TestTamper_AddedComment(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// --- default C14N 1.1 (strips comments) ---
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_cmt1")
 	el.CreateElement("Data").SetText("good")
 	signed := signAndReparse(t, key, cert, el)
 
-	signed.InsertChildAt(0, etree.NewComment("injected"))
+	signed.InsertChildAt(0, xmltree.NewComment("injected"))
 
 	res, err := newVerifier(cert).Verify(signed)
 	require.NoError(t, err, "comment should be ignored by non-comment c14n")
@@ -409,14 +409,14 @@ func TestTamper_AddedComment(t *testing.T) {
 		Key: key, Certs: []*x509.Certificate{cert},
 		Canonicalizer: MakeC14N11WithCommentsCanonicalizer(),
 	}
-	el2 := &etree.Element{Tag: "Response"}
+	el2 := &xmltree.Element{Tag: "Response"}
 	el2.CreateAttr("ID", "_cmt2")
 	el2.CreateElement("Data").SetText("good")
 	raw2, err := signer2.SignEnveloped(el2)
 	require.NoError(t, err)
 	signed2 := reparse(t, raw2)
 
-	signed2.InsertChildAt(0, etree.NewComment("injected"))
+	signed2.InsertChildAt(0, xmltree.NewComment("injected"))
 
 	_, err = newVerifier(cert).Verify(signed2)
 	require.Error(t, err)
@@ -427,7 +427,7 @@ func TestAlgo_SHA1BlockedByDefault(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}, Hash: crypto.SHA1}
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_sha1")
 	el.CreateElement("Data").SetText("good")
 	raw, err := signer.SignEnveloped(el)
@@ -544,7 +544,7 @@ func TestCert_ExpiredCertificate(t *testing.T) {
 		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_exp")
 	el.CreateElement("Data").SetText("good")
 	signed := signAndReparse(t, key, cert, el)
@@ -565,7 +565,7 @@ func TestCert_NotYetValidCertificate(t *testing.T) {
 		time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_nyv")
 	el.CreateElement("Data").SetText("good")
 	signed := signAndReparse(t, key, cert, el)
@@ -658,7 +658,7 @@ func TestCrossRef_DuplicateIDs_SignedElementVerifies(t *testing.T) {
 	// should succeed and return the content that was actually signed ("good").
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_dup1")
 	el.CreateElement("Data").SetText("good")
 
@@ -684,8 +684,8 @@ func TestCrossRef_DuplicateIDs_EvilSiblingWithSameID(t *testing.T) {
 	signed := signDoc(t, key, cert, "_dup2")
 
 	// Create an outer envelope with an evil sibling having the same ID.
-	envelope := etree.NewElement("Envelope")
-	evil := etree.NewElement("Response")
+	envelope := xmltree.NewElement("Envelope")
+	evil := xmltree.NewElement("Response")
 	evil.CreateAttr("ID", "_dup2")
 	evil.CreateElement("Data").SetText("evil")
 	envelope.AddChild(evil)
@@ -710,11 +710,11 @@ func TestCrossRef_DuplicateIDs_VerifyEvilElementFails(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := signDoc(t, key, cert, "_dup3")
 
-	evil := etree.NewElement("Response")
+	evil := xmltree.NewElement("Response")
 	evil.CreateAttr("ID", "_dup3")
 	evil.CreateElement("Data").SetText("evil")
 
-	envelope := etree.NewElement("Envelope")
+	envelope := xmltree.NewElement("Envelope")
 	envelope.AddChild(evil)
 	envelope.AddChild(signed)
 
@@ -740,7 +740,7 @@ func TestCrossRef_PercentEncodedURI(t *testing.T) {
 	// verification should fail with ErrMissingSignature.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -779,7 +779,7 @@ func TestCrossRef_PercentEncodedAlpha(t *testing.T) {
 	// Expected behavior: No match, verification fails.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "ABC")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -811,7 +811,7 @@ func TestCrossRef_XPointerURI(t *testing.T) {
 	// element's ID, so findSignature returns ErrMissingSignature.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_xp1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -839,7 +839,7 @@ func TestCrossRef_XPointerID(t *testing.T) {
 	// It must not be treated as a simple fragment reference.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_xp2")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -867,7 +867,7 @@ func TestCrossRef_EmptyURI_ValidRoundTrip(t *testing.T) {
 	// A clean round-trip (sign, reparse, verify) should succeed.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	// Deliberately no ID attribute → empty URI.
 	el.CreateElement("Data").SetText("good")
 	signed := signAndReparse(t, key, cert, el)
@@ -890,7 +890,7 @@ func TestCrossRef_EmptyURI_InjectedContentDetected(t *testing.T) {
 	// The digest must fail because the canonical form changes.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateElement("Data").SetText("good")
 	signed := signAndReparse(t, key, cert, el)
 
@@ -908,7 +908,7 @@ func TestCrossRef_EmptyURI_MatchesElementWithID(t *testing.T) {
 	// match any element per the spec: sig.refURI == "" is the first branch.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_hasid")
 	el.CreateElement("Data").SetText("payload")
 
@@ -951,7 +951,7 @@ func TestCrossRef_ExternalHTTPURI(t *testing.T) {
 	// it won't match the element's ID → ErrMissingSignature.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_ext1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -978,7 +978,7 @@ func TestCrossRef_ExternalHTTPSURI(t *testing.T) {
 	// Same as above but with https.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_ext2")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1005,7 +1005,7 @@ func TestCrossRef_FileURI(t *testing.T) {
 	// the verifier read a local file.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_ext3")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1037,7 +1037,7 @@ func TestCrossRef_URIWithQueryString(t *testing.T) {
 	// Expected behavior: No match, verification fails.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1063,7 +1063,7 @@ func TestCrossRef_URIWithAnchorSuffix(t *testing.T) {
 	// Attack scenario: URI="#_id1#extra" – a double-fragment.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1095,7 +1095,7 @@ func TestCrossRef_CaseSensitiveID(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	t.Run("uppercase_id_lowercase_ref", func(t *testing.T) {
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ABC")
 		el.CreateElement("Data").SetText("payload")
 		signed := signAndReparse(t, key, cert, el)
@@ -1118,7 +1118,7 @@ func TestCrossRef_CaseSensitiveID(t *testing.T) {
 	})
 
 	t.Run("lowercase_id_uppercase_ref", func(t *testing.T) {
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_abc")
 		el.CreateElement("Data").SetText("payload")
 		signed := signAndReparse(t, key, cert, el)
@@ -1142,7 +1142,7 @@ func TestCrossRef_CaseSensitiveID(t *testing.T) {
 
 	t.Run("mixed_case_id_matches_exactly", func(t *testing.T) {
 		// Positive test: exact case match should work.
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_AbCdEf")
 		el.CreateElement("Data").SetText("payload")
 		signed := signAndReparse(t, key, cert, el)
@@ -1162,7 +1162,7 @@ func TestCrossRef_URIWithLeadingSpace(t *testing.T) {
 	// strips the '#' and compares " _id1" with "_id1", which should NOT match.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1185,7 +1185,7 @@ func TestCrossRef_URIWithTrailingSpace(t *testing.T) {
 	// Attack scenario: URI="#_id1 " – trailing space. Should not match "_id1".
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1208,7 +1208,7 @@ func TestCrossRef_URIWithTab(t *testing.T) {
 	// Attack scenario: URI="#\t_id1" – tab character. Must not match.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1231,7 +1231,7 @@ func TestCrossRef_URIWithNewline(t *testing.T) {
 	// Attack scenario: URI="#_id1\n" – newline in URI.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1261,7 +1261,7 @@ func TestCrossRef_BareHashURI(t *testing.T) {
 	// doesn't apply either. This must fail.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_bare")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1292,7 +1292,7 @@ func TestCrossRef_URIMismatch(t *testing.T) {
 	// than the element being verified. The library must not match.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_real")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1324,7 +1324,7 @@ func TestCrossRef_NonDefaultIDAttribute(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	t.Run("matching_custom_id", func(t *testing.T) {
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("MyID", "_custom1")
 		el.CreateElement("Data").SetText("good")
 
@@ -1352,7 +1352,7 @@ func TestCrossRef_NonDefaultIDAttribute(t *testing.T) {
 		// Signer uses "MyID" but verifier looks for default "ID".
 		// The element has no "ID" attribute, so idAttr will be empty.
 		// The Reference URI is "#_custom2" which won't match empty string.
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("MyID", "_custom2")
 		el.CreateElement("Data").SetText("good")
 
@@ -1383,7 +1383,7 @@ func TestCrossRef_URIOnlyWhitespace(t *testing.T) {
 	// an element whose ID is empty or contains spaces.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_ws")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1412,7 +1412,7 @@ func TestCrossRef_URIWithNullByte(t *testing.T) {
 	// Go strings include null bytes, so this should not match.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id1")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1426,8 +1426,18 @@ func TestCrossRef_URIWithNullByte(t *testing.T) {
 		}
 	}
 
-	reparsed := reparse(t, signed)
-	_, err := newVerifier(cert).Verify(reparsed)
+	// The strict parser refuses to even reparse a document carrying a null
+	// byte — the attack is rejected at the parse layer.
+	doc := xmltree.NewDocument()
+	doc.SetRoot(signed.Copy())
+	raw, err := doc.WriteToBytes()
+	require.NoError(t, err)
+	_, err = xmltree.Parse(raw)
+	require.Error(t, err, "null byte must be rejected by the parser")
+	require.Contains(t, err.Error(), "invalid character")
+
+	// And even on the in-memory tree, the URI must not match the ID.
+	_, err = newVerifier(cert).Verify(signed)
 	require.Error(t, err, "URI with null byte must not match")
 }
 
@@ -1449,7 +1459,7 @@ func TestCrossRef_ValidURIRoundTrip(t *testing.T) {
 
 	for _, id := range ids {
 		t.Run(id, func(t *testing.T) {
-			el := &etree.Element{Tag: "Response"}
+			el := &xmltree.Element{Tag: "Response"}
 			el.CreateAttr("ID", id)
 			el.CreateElement("Data").SetText("value-" + id)
 			signed := signAndReparse(t, key, cert, el)
@@ -1478,7 +1488,7 @@ func TestCrossRef_UnusedURIRegexp(t *testing.T) {
 
 	// ID starting with a digit – invalid per XML Name rules, but the library
 	// doesn't validate this.
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "123abc")
 	el.CreateElement("Data").SetText("digit-id")
 	signed := signAndReparse(t, key, cert, el)
@@ -1524,7 +1534,7 @@ func TestCrossRef_RelativeURI(t *testing.T) {
 	// The library should not follow relative URIs.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_id")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1558,7 +1568,7 @@ func TestCrossRef_URITamperingInvalidatesSignature(t *testing.T) {
 	// This is the fundamental protection against post-signing URI manipulation.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_orig")
 	el.CreateElement("Data").SetText("payload")
 
@@ -1567,7 +1577,7 @@ func TestCrossRef_URITamperingInvalidatesSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now craft a second element with a different ID.
-	el2 := &etree.Element{Tag: "Response"}
+	el2 := &xmltree.Element{Tag: "Response"}
 	el2.CreateAttr("ID", "_evil")
 	el2.CreateElement("Data").SetText("evil-payload")
 
@@ -1612,13 +1622,13 @@ func TestCrossRef_DigestSwapWithDifferentURI(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign document A.
-	elA := &etree.Element{Tag: "Response"}
+	elA := &xmltree.Element{Tag: "Response"}
 	elA.CreateAttr("ID", "_docA")
 	elA.CreateElement("Data").SetText("A-content")
 	signedA := signAndReparse(t, key, cert, elA)
 
 	// Sign document B.
-	elB := &etree.Element{Tag: "Response"}
+	elB := &xmltree.Element{Tag: "Response"}
 	elB.CreateAttr("ID", "_docB")
 	elB.CreateElement("Data").SetText("B-content")
 	signedB := signAndReparse(t, key, cert, elB)
@@ -1650,7 +1660,7 @@ func TestCrossRef_SignatureTransplantBetweenDocuments(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign legitimate document.
-	elGood := &etree.Element{Tag: "Response"}
+	elGood := &xmltree.Element{Tag: "Response"}
 	elGood.CreateAttr("ID", "_good")
 	elGood.CreateElement("Data").SetText("legitimate")
 	signedGood := signAndReparse(t, key, cert, elGood)
@@ -1660,7 +1670,7 @@ func TestCrossRef_SignatureTransplantBetweenDocuments(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Create evil document and attach the stolen signature.
-	elEvil := &etree.Element{Tag: "Response"}
+	elEvil := &xmltree.Element{Tag: "Response"}
 	elEvil.CreateAttr("ID", "_evil")
 	elEvil.CreateElement("Data").SetText("malicious")
 	elEvil.AddChild(sig.Copy())
@@ -1680,7 +1690,7 @@ func TestCrossRef_SignatureTransplantSameID(t *testing.T) {
 	// but the digest should not.
 	key, cert := randomTestKeyAndCert()
 
-	elGood := &etree.Element{Tag: "Response"}
+	elGood := &xmltree.Element{Tag: "Response"}
 	elGood.CreateAttr("ID", "_shared")
 	elGood.CreateElement("Data").SetText("legitimate")
 	signedGood := signAndReparse(t, key, cert, elGood)
@@ -1689,7 +1699,7 @@ func TestCrossRef_SignatureTransplantSameID(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Evil document with same ID but different content.
-	elEvil := &etree.Element{Tag: "Response"}
+	elEvil := &xmltree.Element{Tag: "Response"}
 	elEvil.CreateAttr("ID", "_shared")
 	elEvil.CreateElement("Data").SetText("evil-content")
 	elEvil.AddChild(sig.Copy())
@@ -1715,7 +1725,7 @@ func TestCrossRef_UnicodeNormalization(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Use precomposed é (U+00E9) in the ID.
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_caf\u00e9")
 	el.CreateElement("Data").SetText("payload")
 	signed := signAndReparse(t, key, cert, el)
@@ -1746,7 +1756,7 @@ func TestCrossRef_IDContainingHash(t *testing.T) {
 	// '#' to compare "#weird" with "#weird" – this should actually work.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "#weird")
 	el.CreateElement("Data").SetText("payload")
 
@@ -1777,7 +1787,7 @@ func TestCrossRef_VerifyResultIsCanonicalElement(t *testing.T) {
 	// This ensures that consumers of VerifyResult always get the verified content.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_canon")
 	el.CreateElement("Data").SetText("verified-content")
 	signed := signAndReparse(t, key, cert, el)
@@ -1833,7 +1843,7 @@ func TestCrossRef_EmptyIDAttribute(t *testing.T) {
 	// URI="" (empty). Verify that this works and is treated consistently.
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "") // Explicitly empty ID.
 	el.CreateElement("Data").SetText("empty-id")
 
@@ -1864,7 +1874,7 @@ func TestCrossRef_LongID(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	longID := "_" + strings.Repeat("a", 10000)
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", longID)
 	el.CreateElement("Data").SetText("long-id")
 	signed := signAndReparse(t, key, cert, el)
@@ -1899,7 +1909,7 @@ func TestCrossRef_IDWithSpecialXMLChars(t *testing.T) {
 
 	for _, tc := range specialIDs {
 		t.Run(tc.name, func(t *testing.T) {
-			el := &etree.Element{Tag: "Response"}
+			el := &xmltree.Element{Tag: "Response"}
 			el.CreateAttr("ID", tc.id)
 			el.CreateElement("Data").SetText("special")
 
@@ -2000,7 +2010,7 @@ func TestNamespaceConfusion(t *testing.T) {
 
 	// signDocWithPrefix is a helper that signs a simple document using
 	// the given namespace prefix for ds: elements.
-	signDocWithPrefix := func(t *testing.T, prefix string, c14n Canonicalizer) (*etree.Element, crypto.Signer, *x509.Certificate) {
+	signDocWithPrefix := func(t *testing.T, prefix string, c14n Canonicalizer) (*xmltree.Element, crypto.Signer, *x509.Certificate) {
 		t.Helper()
 		key, cert := randomTestKeyAndCert()
 		signer := &Signer{
@@ -2012,7 +2022,7 @@ func TestNamespaceConfusion(t *testing.T) {
 			signer.Canonicalizer = c14n
 		}
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_test")
 		el.CreateElement("Data").SetText("payload")
 
@@ -2045,7 +2055,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		// Wrap in an outer element that rebinds "ds" to an evil URI.
 		// The real Signature still carries its own xmlns:ds, so the
 		// verifier should shadow correctly and still verify.
-		envelope := etree.NewElement("Envelope")
+		envelope := xmltree.NewElement("Envelope")
 		envelope.CreateAttr("xmlns:ds", "http://evil.example.com/fake-dsig")
 		envelope.AddChild(signed)
 		envelope = reparse(t, envelope)
@@ -2055,11 +2065,11 @@ func TestNamespaceConfusion(t *testing.T) {
 		require.NotNil(t, response)
 
 		// Detach from envelope so it's the root for Verify.
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		doc.SetRoot(response.Copy())
 		s, err := doc.WriteToString()
 		require.NoError(t, err)
-		doc2 := etree.NewDocument()
+		doc2 := xmltree.NewDocument()
 		require.NoError(t, doc2.ReadFromString(s))
 		responseRoot := doc2.Root()
 
@@ -2078,7 +2088,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		// Manually strip xmlns:ds from the Signature element.
 		sig := findSig(signed2)
 		require.NotNil(t, sig)
-		newAttrs := make([]etree.Attr, 0, len(sig.Attr))
+		newAttrs := make([]xmltree.Attr, 0, len(sig.Attr))
 		for _, attr := range sig.Attr {
 			if attr.Space == "xmlns" && attr.Key == "ds" {
 				continue
@@ -2113,7 +2123,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		key, cert := randomTestKeyAndCert()
 		signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_shadow")
 		el.CreateElement("Data").SetText("payload")
 		signed, err := signer.SignEnveloped(el)
@@ -2164,7 +2174,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		signed, _, cert := signDocWithPrefix(t, "mysig", nil)
 
 		// Sanity: confirm the prefix is actually "mysig" in the output.
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		doc.SetRoot(signed)
 		xmlStr, err := doc.WriteToString()
 		require.NoError(t, err)
@@ -2172,7 +2182,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		assert.Contains(t, xmlStr, "xmlns:mysig")
 
 		// Re-parse (WriteToString may have altered parent pointers).
-		doc2 := etree.NewDocument()
+		doc2 := xmltree.NewDocument()
 		require.NoError(t, doc2.ReadFromString(xmlStr))
 
 		v := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
@@ -2196,7 +2206,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		key, cert := randomTestKeyAndCert()
 		signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_undecl")
 		el.CreateAttr("xmlns:app", "urn:example:app")
 
@@ -2232,7 +2242,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		key, cert := randomTestKeyAndCert()
 		signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_attrval")
 		// Put the dsig namespace URI in a plain attribute value.
 		el.CreateAttr("SchemaLocation", namespace)
@@ -2271,7 +2281,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		key, cert := randomTestKeyAndCert()
 		signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_multi")
 		el.CreateAttr("xmlns:ns1", "urn:example:shared")
 		el.CreateAttr("xmlns:ns2", "urn:example:shared")
@@ -2304,7 +2314,7 @@ func TestNamespaceConfusion(t *testing.T) {
 
 		key, cert := randomTestKeyAndCert()
 
-		el := &etree.Element{Tag: "Response"}
+		el := &xmltree.Element{Tag: "Response"}
 		el.CreateAttr("ID", "_ns_fake")
 		el.CreateElement("Data").SetText("payload")
 
@@ -2331,7 +2341,7 @@ func TestNamespaceConfusion(t *testing.T) {
 
 		// Bonus: also add a REAL signature and the fake one. The verifier
 		// must use the real one, ignoring the fake.
-		el2 := &etree.Element{Tag: "Response"}
+		el2 := &xmltree.Element{Tag: "Response"}
 		el2.CreateAttr("ID", "_ns_fake2")
 		el2.CreateAttr("xmlns:fake", "http://evil.com/ns")
 		el2.CreateElement("Data").SetText("payload")
@@ -2376,7 +2386,7 @@ func TestNamespaceConfusion(t *testing.T) {
 		signed, _, cert := signDocWithPrefix(t, "ds", nil)
 
 		// Serialize to XML.
-		doc := etree.NewDocument()
+		doc := xmltree.NewDocument()
 		doc.SetRoot(signed)
 		xmlStr, err := doc.WriteToString()
 		require.NoError(t, err)
@@ -2386,11 +2396,11 @@ func TestNamespaceConfusion(t *testing.T) {
 			`<ds:Outer xmlns:ds="http://other.com/ns">%s</ds:Outer>`,
 			xmlStr,
 		)
-		doc2 := etree.NewDocument()
+		doc2 := xmltree.NewDocument()
 		require.NoError(t, doc2.ReadFromString(wrapped))
 
 		// Extract the inner Response.
-		var response *etree.Element
+		var response *xmltree.Element
 		for _, child := range doc2.Root().ChildElements() {
 			if child.Tag == "Response" {
 				response = child
@@ -2400,11 +2410,11 @@ func TestNamespaceConfusion(t *testing.T) {
 		require.NotNil(t, response)
 
 		// Re-root the response (detach from the outer element).
-		doc3 := etree.NewDocument()
+		doc3 := xmltree.NewDocument()
 		doc3.SetRoot(response.Copy())
 		reXML, err := doc3.WriteToString()
 		require.NoError(t, err)
-		doc4 := etree.NewDocument()
+		doc4 := xmltree.NewDocument()
 		require.NoError(t, doc4.ReadFromString(reXML))
 
 		v := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
@@ -2425,7 +2435,7 @@ func TestNamespaceConfusion_PrefixRebindOnSignedInfoChildren(t *testing.T) {
 	// Attempt to add a namespace rebinding on the SignedInfo element.
 	sig := findSig(signed)
 	require.NotNil(t, sig)
-	var signedInfo *etree.Element
+	var signedInfo *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signedInfoTag {
 			signedInfo = c
@@ -2472,7 +2482,7 @@ func TestNamespaceConfusion_UnprefixedSignature(t *testing.T) {
   </Signature>
 </Response>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(rawXML))
 
 	v := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
@@ -2490,7 +2500,7 @@ func TestNamespaceConfusion_UnprefixedSignature(t *testing.T) {
   </Signature>
 </Response>`
 
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(rawXML2))
 
 	_, err = v.Verify(doc2.Root())
@@ -2507,7 +2517,7 @@ func TestNamespaceConfusion_MultipleDsigPrefixesOnSameElement(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_multi_dsig")
 	// Declare the dsig namespace under a second prefix on the root.
 	el.CreateAttr("xmlns:dsig2", namespace)
@@ -2539,7 +2549,7 @@ func TestNamespaceConfusion_SignatureInWrongDefaultNS(t *testing.T) {
   </Signature>
 </Response>`
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	require.NoError(t, doc.ReadFromString(rawXML))
 
 	v := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
@@ -2568,7 +2578,7 @@ func TestNamespaceConfusion_AlternativePrefixes_ExcC14N(t *testing.T) {
 				Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 			}
 
-			el := &etree.Element{Tag: "Response"}
+			el := &xmltree.Element{Tag: "Response"}
 			el.CreateAttr("ID", fmt.Sprintf("_prefix_%s", name))
 			el.CreateElement("Data").SetText("test-" + name)
 
@@ -2614,7 +2624,7 @@ func TestNamespaceConfusion_DeeplyNestedPrefixShadowing(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_deep")
 	el.CreateAttr("xmlns:app", "urn:level0")
 
@@ -2645,13 +2655,13 @@ func TestNamespaceConfusion_DeeplyNestedPrefixShadowing(t *testing.T) {
 	signed2 = reparse(t, signed2)
 
 	// Find Level2 and change its xmlns:app.
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(signed2)
 	xmlStr, err := doc.WriteToString()
 	require.NoError(t, err)
 	// Tamper by replacing the namespace URI.
 	tampered := strings.Replace(xmlStr, "urn:level2", "urn:evil2", 1)
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(tampered))
 
 	_, err = v.Verify(doc2.Root())

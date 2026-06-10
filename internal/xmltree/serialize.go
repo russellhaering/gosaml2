@@ -21,8 +21,10 @@ import "bytes"
 // destroyed by re-parsing). Emitting our only output format in canonical
 // lexical form makes parse→serialize→parse lossless and keeps the writer
 // shared between message building and canonicalization. The only mode
-// difference: canonical form writes empty elements as start/end tag pairs
-// and omits comments.
+// difference: canonical form writes empty elements as start/end tag pairs.
+// Comments are emitted in both modes (per c14n §2.2 comment serialization);
+// canonicalizers that omit comments strip them from the tree before
+// serializing.
 
 // WriteToBytes serializes the document. No XML declaration is emitted —
 // SAML messages travel base64-encoded inside other envelopes and gosaml2
@@ -79,11 +81,9 @@ func (e *Element) write(buf *bytes.Buffer, canonical bool) {
 		case *CharData:
 			escapeText(buf, c.Data)
 		case *Comment:
-			if !canonical {
-				buf.WriteString("<!--")
-				buf.WriteString(c.Data)
-				buf.WriteString("-->")
-			}
+			buf.WriteString("<!--")
+			buf.WriteString(c.Data)
+			buf.WriteString("-->")
 		}
 	}
 	buf.WriteString("</")

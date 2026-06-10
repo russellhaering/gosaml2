@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,15 +20,16 @@ import (
 // round-trips correctly with the current signing implementation.
 // ============================================================
 
-func makeSignedDoc(t *testing.T) (*etree.Element, *Verifier) {
+func makeSignedDoc(t *testing.T) (*xmltree.Element, *Verifier) {
 	t.Helper()
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{
+	el := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "AuthnRequest",
 	}
+	el.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	el.CreateAttr("ID", "_audit-test-id")
 
 	signed, err := signer.SignEnveloped(el)
@@ -53,7 +54,7 @@ func makeSignedDoc(t *testing.T) (*etree.Element, *Verifier) {
 func TestInputValidation_DeeplyNestedXML_CanonicalPrep(t *testing.T) {
 	const depth = 10000
 
-	root := etree.NewElement("root")
+	root := xmltree.NewElement("root")
 	current := root
 	for i := 0; i < depth; i++ {
 		current = current.CreateElement("level")
@@ -91,7 +92,7 @@ func TestInputValidation_DeeplyNestedXML_CanonicalPrep(t *testing.T) {
 func TestInputValidation_DeeplyNestedXML_TransformExcC14n(t *testing.T) {
 	const depth = 10000
 
-	root := etree.NewElement("root")
+	root := xmltree.NewElement("root")
 	current := root
 	for i := 0; i < depth; i++ {
 		current = current.CreateElement("level")
@@ -129,7 +130,7 @@ func TestInputValidation_DeeplyNestedXML_TransformExcC14n(t *testing.T) {
 func TestInputValidation_DeeplyNestedXML_NSTraverseLimit(t *testing.T) {
 	const depth = 2000
 
-	root := etree.NewElement("root")
+	root := xmltree.NewElement("root")
 	current := root
 	for i := 0; i < depth; i++ {
 		current = current.CreateElement("level")
@@ -137,7 +138,7 @@ func TestInputValidation_DeeplyNestedXML_NSTraverseLimit(t *testing.T) {
 
 	ctx := NewDefaultNSContext()
 	count := 0
-	err := NSTraverse(ctx, root, func(ctx NSContext, el *etree.Element) error {
+	err := NSTraverse(ctx, root, func(ctx NSContext, el *xmltree.Element) error {
 		count++
 		return nil
 	})
@@ -152,7 +153,7 @@ func TestInputValidation_DeeplyNestedXML_NSTraverseLimit(t *testing.T) {
 func TestInputValidation_NSBuildParentContext_DeepParentChain(t *testing.T) {
 	const depth = 5000
 
-	root := etree.NewElement("root")
+	root := xmltree.NewElement("root")
 	current := root
 	for i := 0; i < depth; i++ {
 		current = current.CreateElement("level")
@@ -196,11 +197,11 @@ func TestInputValidation_NSBuildParentContext_DeepParentChain(t *testing.T) {
 func TestInputValidation_HugeAttributeList_SortPerformance(t *testing.T) {
 	const numAttrs = 5000
 
-	attrs := make([]etree.Attr, 0, numAttrs+100)
+	attrs := make([]xmltree.Attr, 0, numAttrs+100)
 
 	// Add namespace declarations
 	for i := 0; i < 100; i++ {
-		attrs = append(attrs, etree.Attr{
+		attrs = append(attrs, xmltree.Attr{
 			Space: "xmlns",
 			Key:   fmt.Sprintf("ns%d", i),
 			Value: fmt.Sprintf("http://example.com/ns/%d", i),
@@ -209,7 +210,7 @@ func TestInputValidation_HugeAttributeList_SortPerformance(t *testing.T) {
 
 	// Add namespace-qualified attributes that trigger resolvePrefix scans
 	for i := 0; i < numAttrs; i++ {
-		attrs = append(attrs, etree.Attr{
+		attrs = append(attrs, xmltree.Attr{
 			Space: fmt.Sprintf("ns%d", i%100),
 			Key:   fmt.Sprintf("attr%d", i),
 			Value: "value",
@@ -383,7 +384,7 @@ func TestInputValidation_EmptyElement_Verify(t *testing.T) {
 	_, cert := randomTestKeyAndCert()
 	verifier := &Verifier{TrustedCerts: []*x509.Certificate{cert}}
 
-	el := etree.NewElement("Empty")
+	el := xmltree.NewElement("Empty")
 	_, err := verifier.Verify(el)
 	require.Error(t, err, "Verify on empty element should fail")
 	t.Logf("Verify on empty element: %v", err)
@@ -392,7 +393,7 @@ func TestInputValidation_EmptyElement_Verify(t *testing.T) {
 func TestInputValidation_NilVerifier_TrustedCerts(t *testing.T) {
 	verifier := &Verifier{}
 
-	el := etree.NewElement("Root")
+	el := xmltree.NewElement("Root")
 	_, err := verifier.Verify(el)
 	require.Error(t, err)
 	t.Logf("Empty TrustedCerts correctly rejected: %v", err)
@@ -453,7 +454,7 @@ func TestInputValidation_MalformedSignature_EmptyDigestMethod(t *testing.T) {
 }
 
 func TestInputValidation_ValidateShape_DuplicateSignedInfo(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignedInfo")
 	sigEl.CreateElement("SignedInfo") // duplicate!
 	sigEl.CreateElement("SignatureValue")
@@ -463,7 +464,7 @@ func TestInputValidation_ValidateShape_DuplicateSignedInfo(t *testing.T) {
 }
 
 func TestInputValidation_ValidateShape_DuplicateSignatureValue(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignedInfo")
 	sigEl.CreateElement("SignatureValue")
 	sigEl.CreateElement("SignatureValue") // duplicate!
@@ -473,7 +474,7 @@ func TestInputValidation_ValidateShape_DuplicateSignatureValue(t *testing.T) {
 }
 
 func TestInputValidation_ValidateShape_MultipleKeyInfo(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignedInfo")
 	sigEl.CreateElement("SignatureValue")
 	sigEl.CreateElement("KeyInfo")
@@ -484,7 +485,7 @@ func TestInputValidation_ValidateShape_MultipleKeyInfo(t *testing.T) {
 }
 
 func TestInputValidation_ValidateShape_MissingSignedInfo(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignatureValue")
 
 	err := validateShape(sigEl)
@@ -492,7 +493,7 @@ func TestInputValidation_ValidateShape_MissingSignedInfo(t *testing.T) {
 }
 
 func TestInputValidation_ValidateShape_MissingSignatureValue(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignedInfo")
 
 	err := validateShape(sigEl)
@@ -502,7 +503,7 @@ func TestInputValidation_ValidateShape_MissingSignatureValue(t *testing.T) {
 // TestInputValidation_ValidateShape_ExtraUnknownChildren checks that unknown
 // children (Object, etc.) are silently accepted — only required counts are checked.
 func TestInputValidation_ValidateShape_ExtraUnknownChildren(t *testing.T) {
-	sigEl := etree.NewElement("Signature")
+	sigEl := xmltree.NewElement("Signature")
 	sigEl.CreateElement("SignedInfo")
 	sigEl.CreateElement("SignatureValue")
 	sigEl.CreateElement("Object") // unknown child
@@ -548,7 +549,7 @@ func TestInputValidation_ReferenceURI_VeryLong(t *testing.T) {
 
 func TestInputValidation_ReferenceURI_SpecialChars(t *testing.T) {
 	cases := []struct {
-		uri     string
+		uri    string
 		expect bool
 		desc   string
 	}{
@@ -706,7 +707,7 @@ func TestInputValidation_ConcurrentSign(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			el := &etree.Element{Tag: "Root"}
+			el := &xmltree.Element{Tag: "Root"}
 			el.CreateAttr("ID", fmt.Sprintf("_test%d", idx))
 			_, err := signer.SignEnveloped(el)
 			if err != nil {
@@ -724,23 +725,23 @@ func TestInputValidation_ConcurrentSign(t *testing.T) {
 // ============================================================
 
 func TestInputValidation_MapPathToElement_SelfReference(t *testing.T) {
-	el := etree.NewElement("Root")
+	el := xmltree.NewElement("Root")
 	path := mapPathToElement(el, el)
 	require.Nil(t, path, "Self-reference should return nil path")
 }
 
 func TestInputValidation_MapPathToElement_NotFound(t *testing.T) {
-	tree := etree.NewElement("Root")
+	tree := xmltree.NewElement("Root")
 	tree.CreateElement("Child1")
 	tree.CreateElement("Child2")
 
-	orphan := etree.NewElement("Orphan")
+	orphan := xmltree.NewElement("Orphan")
 	path := mapPathToElement(tree, orphan)
 	require.Nil(t, path, "Orphan element should return nil path")
 }
 
 func TestInputValidation_RemoveElementAtPath_EmptyPath(t *testing.T) {
-	el := etree.NewElement("Root")
+	el := xmltree.NewElement("Root")
 	el.CreateElement("Child")
 
 	result := removeElementAtPath(el, []int{})
@@ -748,7 +749,7 @@ func TestInputValidation_RemoveElementAtPath_EmptyPath(t *testing.T) {
 }
 
 func TestInputValidation_RemoveElementAtPath_OutOfBounds(t *testing.T) {
-	el := etree.NewElement("Root")
+	el := xmltree.NewElement("Root")
 	el.CreateElement("Child")
 
 	result := removeElementAtPath(el, []int{999})
@@ -759,7 +760,7 @@ func TestInputValidation_RemoveElementAtPath_OutOfBounds(t *testing.T) {
 // vulnerability: if the tree is mutated between mapPathToElement and
 // removeElementAtPath, the stale path may point at the wrong element.
 func TestInputValidation_MapPathRemove_TreeMutationBetween(t *testing.T) {
-	tree := etree.NewElement("Root")
+	tree := xmltree.NewElement("Root")
 	child1 := tree.CreateElement("Child1")
 	child2 := tree.CreateElement("Child2")
 	target := tree.CreateElement("Target")
@@ -796,8 +797,8 @@ func TestInputValidation_MapPathRemove_TreeMutationBetween(t *testing.T) {
 // TestInputValidation_MapPathToElement_TextAndCommentNodes verifies that
 // mapPathToElement accounts for non-element children (text nodes) in the index.
 func TestInputValidation_MapPathToElement_TextAndCommentNodes(t *testing.T) {
-	root := etree.NewElement("Root")
-	root.SetText("some text") // CharData child at index 0
+	root := xmltree.NewElement("Root")
+	root.SetText("some text")            // CharData child at index 0
 	child := root.CreateElement("Child") // Element at index 1
 
 	path := mapPathToElement(root, child)
@@ -817,7 +818,7 @@ func TestInputValidation_MapPathToElement_TextAndCommentNodes(t *testing.T) {
 func TestInputValidation_SignatureWithNoNamespace(t *testing.T) {
 	_, cert := randomTestKeyAndCert()
 
-	el := etree.NewElement("Root")
+	el := xmltree.NewElement("Root")
 	el.CreateAttr("ID", "_testNoNS")
 	fakeSig := el.CreateElement("Signature")
 	fakeSig.CreateElement("SignedInfo")
@@ -937,7 +938,7 @@ func TestInputValidation_SHA1_Rejected(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}, Hash: crypto.SHA1}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_testSHA1")
 
 	signed, err := signer.SignEnveloped(el)
@@ -953,7 +954,7 @@ func TestInputValidation_SHA1_AllowedWhenExplicit(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}, Hash: crypto.SHA1}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_testSHA1Allow")
 
 	signed, err := signer.SignEnveloped(el)
@@ -999,14 +1000,14 @@ func TestInputValidation_UnknownTransformAlgorithm(t *testing.T) {
 
 func TestInputValidation_Signer_NilKey(t *testing.T) {
 	signer := &Signer{}
-	_, err := signer.SignEnveloped(&etree.Element{Tag: "Root"})
+	_, err := signer.SignEnveloped(&xmltree.Element{Tag: "Root"})
 	require.Error(t, err, "Should reject nil Key")
 }
 
 func TestInputValidation_Signer_NoCerts(t *testing.T) {
 	key, _ := randomTestKeyAndCert()
 	signer := &Signer{Key: key}
-	_, err := signer.SignEnveloped(&etree.Element{Tag: "Root"})
+	_, err := signer.SignEnveloped(&xmltree.Element{Tag: "Root"})
 	require.Error(t, err, "Should reject empty Certs")
 }
 
@@ -1047,7 +1048,7 @@ func TestInputValidation_CustomIDAttribute(t *testing.T) {
 		IDAttribute: "AssertionID",
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("AssertionID", "_customID")
 
 	signed, err := signer.SignEnveloped(el)
@@ -1111,7 +1112,7 @@ func TestInputValidation_VerifyString_InvalidAlgorithm(t *testing.T) {
 }
 
 func TestInputValidation_CanonicalPrep_LargeNumberOfSiblings(t *testing.T) {
-	root := etree.NewElement("root")
+	root := xmltree.NewElement("root")
 	for i := 0; i < 10000; i++ {
 		child := root.CreateElement(fmt.Sprintf("child%d", i))
 		child.CreateAttr("xmlns:ns", "http://example.com")
@@ -1140,7 +1141,7 @@ func TestInputValidation_SignAndVerifyWithChildElements(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_testWithChild")
 	child := el.CreateElement("Data")
 	child.SetText("test content")
@@ -1155,7 +1156,7 @@ func TestInputValidation_SignAndVerifyWithChildElements(t *testing.T) {
 		t.Log("Existing tests only cover bare elements without children. Elements with child nodes " +
 			"fail verification. This is because SignEnveloped appends the Signature via " +
 			"Child slice directly (ret.Child = append(ret.Child, sig)), which adds the " +
-			"signature as an etree.Token but the signature element's parent may not be " +
+			"signature as an xmltree.Token but the signature element's parent may not be " +
 			"properly set, causing canonicalPrep (which calls el.Copy()) to produce " +
 			"different canonical output than the verifier.")
 	} else {
@@ -1172,7 +1173,7 @@ func TestInputValidation_SignAndVerifyWithChildElements_ExcC14n(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 	}
 
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 	el.CreateAttr("ID", "_testWithChildExc")
 	el.CreateElement("Data").SetText("test content")
 
@@ -1195,7 +1196,7 @@ func TestInputValidation_EmptyRefURI(t *testing.T) {
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 
 	// Sign element WITHOUT an ID — URI will be empty
-	el := &etree.Element{Tag: "Root"}
+	el := &xmltree.Element{Tag: "Root"}
 
 	signed, err := signer.SignEnveloped(el)
 	require.NoError(t, err)

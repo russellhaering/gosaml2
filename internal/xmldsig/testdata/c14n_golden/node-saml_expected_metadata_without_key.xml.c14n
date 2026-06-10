@@ -1,0 +1,6 @@
+<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" ID="d700077e-60ad-49c1-b93a-dd1753528708" entityID="http://example.serviceprovider.com">
+  <SPSSODescriptor AuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <NameIDFormat>urn:oasis:names:tc:SAML:2.0:nameid-format:transient</NameIDFormat>
+    <AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="http://example.serviceprovider.com/saml/callback" index="1" isDefault="true"></AssertionConsumerService>
+  </SPSSODescriptor>
+</EntityDescriptor>

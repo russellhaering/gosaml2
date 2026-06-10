@@ -91,6 +91,29 @@ func NewElement(tag string) *Element {
 	return &Element{Space: space, Tag: local}
 }
 
+// NewComment returns a comment token. The parser never produces comments;
+// this exists for canonicalization tests and tree surgery.
+func NewComment(data string) *Comment {
+	return &Comment{Data: data}
+}
+
+// ReadFromBytes parses data with the strict profile (see Parse) and replaces
+// the document's root. It exists for API familiarity — it is exactly
+// Parse, never a lenient alternative.
+func (d *Document) ReadFromBytes(data []byte) error {
+	parsed, err := Parse(data)
+	if err != nil {
+		return err
+	}
+	d.root = parsed.root
+	return nil
+}
+
+// ReadFromString parses s with the strict profile; see ReadFromBytes.
+func (d *Document) ReadFromString(s string) error {
+	return d.ReadFromBytes([]byte(s))
+}
+
 // SetRoot replaces the document's root element. The element is detached
 // from any previous parent.
 func (d *Document) SetRoot(el *Element) {
@@ -116,6 +139,20 @@ func (e *Element) FullTag() string {
 // Parent returns the element's parent, or nil.
 func (e *Element) Parent() *Element {
 	return e.parent
+}
+
+// Index returns e's position in its parent's child list, or -1 if e has no
+// parent.
+func (e *Element) Index() int {
+	if e.parent == nil {
+		return -1
+	}
+	for i, t := range e.parent.Child {
+		if t == Token(e) {
+			return i
+		}
+	}
+	return -1
 }
 
 // CreateElement creates an element with the given (possibly prefixed) tag,
@@ -174,16 +211,42 @@ func (e *Element) RemoveAttr(key string) bool {
 	return false
 }
 
-// SelectElement returns the first child element matching the given
-// (possibly prefixed) tag, or nil.
+// spaceMatch reports whether a queried prefix selects an element prefix: an
+// unprefixed query matches any element prefix (matching etree's element
+// selection semantics, which the dsig layer's by-local-name lookups rely
+// on). Attribute selection deliberately does NOT use this — XML-DSig
+// attributes (URI, Algorithm, ...) are unprefixed per schema, and a
+// prefixed look-alike must not satisfy a lookup for them.
+func spaceMatch(query, space string) bool {
+	return query == "" || query == space
+}
+
+// SelectElement returns the first child element matching the given tag, or
+// nil. An unprefixed tag matches any namespace prefix; a prefixed tag
+// matches exactly.
 func (e *Element) SelectElement(tag string) *Element {
 	space, local := splitQName(tag)
 	for _, t := range e.Child {
-		if c, ok := t.(*Element); ok && c.Space == space && c.Tag == local {
+		if c, ok := t.(*Element); ok && spaceMatch(space, c.Space) && c.Tag == local {
 			return c
 		}
 	}
 	return nil
+}
+
+// SelectLastElement returns the last child element matching the given tag,
+// or nil. encoding/xml assigns the last matching child to a single-valued
+// struct field; extractors that must match that behavior use this rather
+// than SelectElement.
+func (e *Element) SelectLastElement(tag string) *Element {
+	space, local := splitQName(tag)
+	var found *Element
+	for _, t := range e.Child {
+		if c, ok := t.(*Element); ok && spaceMatch(space, c.Space) && c.Tag == local {
+			found = c
+		}
+	}
+	return found
 }
 
 // ChildElements returns the element children in document order.
@@ -219,6 +282,22 @@ func (e *Element) RemoveChild(t Token) bool {
 		}
 	}
 	return false
+}
+
+// InsertChildAt inserts the token at index i of e's children. An element
+// child is first detached from any previous parent.
+func (e *Element) InsertChildAt(i int, t Token) {
+	if c, ok := t.(*Element); ok {
+		if c.parent != nil {
+			c.parent.RemoveChild(c)
+		}
+		c.parent = e
+	}
+	if i >= len(e.Child) {
+		e.Child = append(e.Child, t)
+		return
+	}
+	e.Child = append(e.Child[:i], append([]Token{t}, e.Child[i:]...)...)
 }
 
 // RemoveChildAt removes the child at index i.
@@ -292,4 +371,25 @@ func splitQName(name string) (space, local string) {
 		return before, after
 	}
 	return "", name
+}
+
+// NamespaceURI resolves the element's namespace by walking the declarations
+// on the element and its ancestors. It returns "" for an undeclared prefix
+// or an unprefixed element with no default namespace in scope.
+func (e *Element) NamespaceURI() string {
+	prefix := e.Space
+	for cur := e; cur != nil; cur = cur.parent {
+		for _, a := range cur.Attr {
+			if prefix == "" && a.Space == "" && a.Key == "xmlns" {
+				return a.Value
+			}
+			if prefix != "" && a.Space == "xmlns" && a.Key == prefix {
+				return a.Value
+			}
+		}
+	}
+	if prefix == "xml" {
+		return xmlNamespaceURI
+	}
+	return ""
 }

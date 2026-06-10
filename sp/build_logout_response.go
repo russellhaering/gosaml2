@@ -18,17 +18,17 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/beevik/etree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/uuid"
 )
 
-func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID string, includeSig bool) (*etree.Document, error) {
+func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID string, includeSig bool) (*xmltree.Document, error) {
 	if sp.EntityID == "" {
 		return nil, fmt.Errorf("EntityID must not be empty")
 	}
 
-	logoutResponse := &etree.Element{
+	logoutResponse := &xmltree.Element{
 		Space: "samlp",
 		Tag:   "LogoutResponse",
 	}
@@ -50,7 +50,7 @@ func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID str
 	statusCode := status.CreateElement("samlp:StatusCode")
 	statusCode.CreateAttr("Value", statusCodeValue)
 
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 
 	if includeSig {
 		signed, err := sp.SignLogoutResponse(logoutResponse)
@@ -64,21 +64,22 @@ func (sp *ServiceProvider) buildLogoutResponse(statusCodeValue string, reqID str
 	}
 	return doc, nil
 }
+
 // BuildLogoutResponseDocument builds a signed LogoutResponse XML document
 // with the given status code and InResponseTo value.
-func (sp *ServiceProvider) BuildLogoutResponseDocument(status string, reqID string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutResponseDocument(status string, reqID string) (*xmltree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, true)
 }
 
 // BuildLogoutResponseDocumentNoSig builds a LogoutResponse XML document
 // without an embedded signature.
-func (sp *ServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*etree.Document, error) {
+func (sp *ServiceProvider) BuildLogoutResponseDocumentNoSig(status string, reqID string) (*xmltree.Document, error) {
 	return sp.buildLogoutResponse(status, reqID, false)
 }
 
 // SignLogoutResponse signs a LogoutResponse element, placing the Signature
 // element after the Issuer per the SAML schema.
-func (sp *ServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element, error) {
+func (sp *ServiceProvider) SignLogoutResponse(el *xmltree.Element) (*xmltree.Element, error) {
 	signer, err := sp.Signer()
 	if err != nil {
 		return nil, err
@@ -95,7 +96,7 @@ func (sp *ServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element
 		sigEl := children[len(children)-1]
 		signed.RemoveChild(sigEl)
 
-		var newChildren []etree.Token
+		var newChildren []xmltree.Token
 		newChildren = append(newChildren, signed.Child[0])
 		newChildren = append(newChildren, sigEl)
 		newChildren = append(newChildren, signed.Child[1:]...)
@@ -105,7 +106,7 @@ func (sp *ServiceProvider) SignLogoutResponse(el *etree.Element) (*etree.Element
 	return signed, nil
 }
 
-func (sp *ServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	respBuf, err := doc.WriteToBytes()
 	if err != nil {
 		return nil, err
@@ -115,6 +116,6 @@ func (sp *ServiceProvider) buildLogoutResponseBodyPostFromDocument(relayState st
 
 // BuildLogoutResponseBodyPostFromDocument builds an HTML auto-submit POST form
 // containing the LogoutResponse for the HTTP-POST binding.
-func (sp *ServiceProvider) BuildLogoutResponseBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
+func (sp *ServiceProvider) BuildLogoutResponseBodyPostFromDocument(relayState string, doc *xmltree.Document) ([]byte, error) {
 	return sp.buildLogoutResponseBodyPostFromDocument(relayState, doc)
 }

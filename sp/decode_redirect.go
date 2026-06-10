@@ -23,13 +23,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/url"
 
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
@@ -167,12 +166,13 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponseRedirect(
 		return nil, err
 	}
 
-	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+	doc, err := xmltree.Parse(raw)
+	if err != nil {
 		return nil, fmt.Errorf("redirect logout response XML validation failed: %v", err)
 	}
 
-	response := &types.LogoutResponse{}
-	if err := xml.Unmarshal(raw, response); err != nil {
+	response, err := types.LogoutResponseFromElement(doc.Root())
+	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal logout response: %v", err)
 	}
 	response.SignatureValidated = !sp.InsecureSkipSignatureValidation
@@ -198,12 +198,13 @@ func (sp *ServiceProvider) ValidateEncodedLogoutRequestRedirect(
 		return nil, err
 	}
 
-	if err := rtvalidator.Validate(bytes.NewReader(raw)); err != nil {
+	doc, err := xmltree.Parse(raw)
+	if err != nil {
 		return nil, fmt.Errorf("redirect logout request XML validation failed: %v", err)
 	}
 
-	request := &saml2.LogoutRequest{}
-	if err := xml.Unmarshal(raw, request); err != nil {
+	request, err := saml2.LogoutRequestFromElement(doc.Root())
+	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal logout request: %v", err)
 	}
 	request.SignatureValidated = !sp.InsecureSkipSignatureValidation

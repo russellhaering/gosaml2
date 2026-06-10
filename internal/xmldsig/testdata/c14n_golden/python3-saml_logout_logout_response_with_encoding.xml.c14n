@@ -1,0 +1,6 @@
+<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Destination="http://stuff.com/endpoints/endpoints/sls.php" ID="_f9ee61bd9dbf63606faa9ae3b10548d5b3656fb859" InResponseTo="ONELOGIN_21584ccdfaca36a145ae990442dcd96bfe60151e" IssueInstant="2013-12-10T04:39:31Z" Version="2.0">
+    <saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">http://idp.example.com/</saml:Issuer>
+    <samlp:Status>
+        <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"></samlp:StatusCode>
+    </samlp:Status>
+</samlp:LogoutResponse>

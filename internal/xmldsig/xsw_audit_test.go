@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,18 +32,18 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-func xswReparse(t *testing.T, el *etree.Element) *etree.Element {
+func xswReparse(t *testing.T, el *xmltree.Element) *xmltree.Element {
 	t.Helper()
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(el)
 	s, err := doc.WriteToString()
 	require.NoError(t, err)
-	doc2 := etree.NewDocument()
+	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(s))
 	return doc2.Root()
 }
 
-func xswSignAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, el *etree.Element) *etree.Element {
+func xswSignAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, el *xmltree.Element) *xmltree.Element {
 	t.Helper()
 	signer := &Signer{Key: key, Certs: []*x509.Certificate{cert}}
 	signed, err := signer.SignEnveloped(el)
@@ -51,9 +51,9 @@ func xswSignAndReparse(t *testing.T, key crypto.Signer, cert *x509.Certificate, 
 	return xswReparse(t, signed)
 }
 
-func xswSignDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id string) *etree.Element {
+func xswSignDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id string) *xmltree.Element {
 	t.Helper()
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	if id != "" {
 		el.CreateAttr("ID", id)
 	}
@@ -61,7 +61,7 @@ func xswSignDoc(t *testing.T, key crypto.Signer, cert *x509.Certificate, id stri
 	return xswSignAndReparse(t, key, cert, el)
 }
 
-func xswFindSig(el *etree.Element) *etree.Element {
+func xswFindSig(el *xmltree.Element) *xmltree.Element {
 	for _, c := range el.ChildElements() {
 		if c.Tag == signatureTag {
 			return c
@@ -75,8 +75,8 @@ func xswVerifier(certs ...*x509.Certificate) *Verifier {
 }
 
 // buildSAMLResponse builds a minimal SAML-like Response with an Assertion.
-func buildSAMLResponse(responseID, assertionID, nameID string) *etree.Element {
-	resp := etree.NewElement("Response")
+func buildSAMLResponse(responseID, assertionID, nameID string) *xmltree.Element {
+	resp := xmltree.NewElement("Response")
 	resp.CreateAttr("xmlns:samlp", "urn:oasis:names:tc:SAML:2.0:protocol")
 	resp.CreateAttr("ID", responseID)
 
@@ -140,7 +140,7 @@ func TestXSW_Audit_EmptyURI_WrapInOuterElement(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	signed := xswSignDoc(t, key, cert, "")
 
-	envelope := etree.NewElement("Envelope")
+	envelope := xmltree.NewElement("Envelope")
 	envelope.AddChild(signed)
 	envelope = xswReparse(t, envelope)
 
@@ -170,7 +170,7 @@ func TestXSW_Audit_XSW1_EvilAssertionSibling(t *testing.T) {
 	signed := xswSignAndReparse(t, key, cert, resp)
 
 	// Attack: inject an evil assertion as the first child.
-	evilAssertion := etree.NewElement("Assertion")
+	evilAssertion := xmltree.NewElement("Assertion")
 	evilAssertion.CreateAttr("ID", "_evil_assert")
 	evilSubject := evilAssertion.CreateElement("Subject")
 	evilSubject.CreateElement("NameID").SetText("admin@evil.com")
@@ -206,7 +206,7 @@ func TestXSW_Audit_XSW3_MoveSignedIntoExtensions(t *testing.T) {
 	// the digest should fail.
 
 	// Move the real Assertion into Extensions.
-	var assertion *etree.Element
+	var assertion *xmltree.Element
 	for _, c := range signed.ChildElements() {
 		if c.Tag == "Assertion" {
 			assertion = c
@@ -220,7 +220,7 @@ func TestXSW_Audit_XSW3_MoveSignedIntoExtensions(t *testing.T) {
 	ext.AddChild(assertion)
 
 	// Put evil assertion in original position.
-	evilAssertion := etree.NewElement("Assertion")
+	evilAssertion := xmltree.NewElement("Assertion")
 	evilAssertion.CreateAttr("ID", "_evil_assert3")
 	evilAssertion.CreateElement("Subject").CreateElement("NameID").SetText("admin@evil.com")
 	signed.InsertChildAt(0, evilAssertion)
@@ -269,7 +269,7 @@ func TestXSW_Audit_SignatureMovedToSibling(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Create evil element with the same ID and move the sig there.
-	evil := etree.NewElement("Response")
+	evil := xmltree.NewElement("Response")
 	evil.CreateAttr("ID", "_sig_sib")
 	evil.CreateElement("Data").SetText("evil")
 	signed.RemoveChild(sig)
@@ -319,7 +319,7 @@ func TestXSW_Audit_TwoSignaturesDifferentRefs(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign an element with an ID (produces URI="#_id").
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_two_ref")
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
@@ -362,7 +362,7 @@ func TestXSW_Audit_TwoSignaturesDifferentRefs(t *testing.T) {
 func TestXSW_Audit_ReturnedElementIsCanonical(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_ret_id")
 	el.CreateElement("Data").SetText("good")
 	el.CreateElement("Extra").SetText("extra")
@@ -393,7 +393,7 @@ func TestXSW_Audit_EmptyURI_StolenToOtherElement(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign an element with no ID (empty URI).
-	el := &etree.Element{Tag: "Original"}
+	el := &xmltree.Element{Tag: "Original"}
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
@@ -402,7 +402,7 @@ func TestXSW_Audit_EmptyURI_StolenToOtherElement(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Create a completely different element and attach the stolen sig.
-	evil := etree.NewElement("EvilResponse")
+	evil := xmltree.NewElement("EvilResponse")
 	evil.CreateElement("Data").SetText("evil")
 	evil.AddChild(sig.Copy())
 	evil = xswReparse(t, evil)
@@ -458,14 +458,14 @@ func TestXSW_Audit_ReferenceURIMismatch(t *testing.T) {
 func TestXSW_Audit_RemoveElementAtPath_MultipleSignatures(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_multi_sig")
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
 	// Add a decoy Signature element (not in ds: namespace, so findSignature ignores it)
 	// but it IS named "Signature" — tests that path-based removal targets the right one.
-	decoy := etree.NewElement("Signature")
+	decoy := xmltree.NewElement("Signature")
 	decoy.CreateAttr("xmlns", "urn:fake:namespace")
 	decoy.CreateElement("Fake").SetText("decoy")
 	// Insert decoy BEFORE the real signature.
@@ -501,7 +501,7 @@ func TestXSW_Audit_ContentMovedToObject(t *testing.T) {
 	sig := xswFindSig(signed)
 	require.NotNil(t, sig)
 	obj := sig.CreateElement("Object")
-	origData := etree.NewElement("Data")
+	origData := xmltree.NewElement("Data")
 	origData.SetText("good")
 	obj.AddChild(origData)
 
@@ -524,7 +524,7 @@ func TestXSW_Audit_IDAttributeConfusion(t *testing.T) {
 
 	// Signer uses default IDAttribute="ID".
 	// Element has ID="_real" but also has id="_fake".
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_real")
 	el.CreateAttr("id", "_fake")
 	el.CreateElement("Data").SetText("good")
@@ -562,7 +562,7 @@ func TestXSW_Audit_CrossElementReference(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign element B.
-	elB := &etree.Element{Tag: "ElementB"}
+	elB := &xmltree.Element{Tag: "ElementB"}
 	elB.CreateAttr("ID", "_elemB")
 	elB.CreateElement("Data").SetText("B-content")
 	signedB := xswSignAndReparse(t, key, cert, elB)
@@ -572,7 +572,7 @@ func TestXSW_Audit_CrossElementReference(t *testing.T) {
 	require.NotNil(t, sigB)
 
 	// Create element A with a different ID. Attach B's signature to A.
-	elA := etree.NewElement("ElementA")
+	elA := xmltree.NewElement("ElementA")
 	elA.CreateAttr("ID", "_elemA")
 	elA.CreateElement("Data").SetText("A-content")
 	elA.AddChild(sigB.Copy())
@@ -602,7 +602,7 @@ func TestXSW_Audit_EmptyURI_OnElementWithID(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign an element WITHOUT an ID → produces empty URI.
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
@@ -631,7 +631,7 @@ func TestXSW_Audit_EmptyURI_AcceptsAnyElement(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign element with no ID.
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
@@ -643,7 +643,7 @@ func TestXSW_Audit_EmptyURI_AcceptsAnyElement(t *testing.T) {
 	sig := xswFindSig(signed)
 	require.NotNil(t, sig)
 
-	evil := etree.NewElement("Response")
+	evil := xmltree.NewElement("Response")
 	evil.CreateElement("Data").SetText("evil")
 	evil.AddChild(sig.Copy())
 	evil = xswReparse(t, evil)
@@ -669,7 +669,7 @@ func TestXSW_Audit_EmptyURI_AcceptsAnyElement(t *testing.T) {
 func TestXSW_Audit_VerifyReturnsVerifiedContent(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_verified_content")
 	el.CreateElement("Data").SetText("good")
 	el.CreateElement("Secret").SetText("secret-value")
@@ -767,7 +767,7 @@ func TestXSW_Audit_ShapeValidation_DuplicateSignedInfo(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Find SignedInfo and duplicate it.
-	var si *etree.Element
+	var si *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == signedInfoTag {
 			si = c
@@ -791,7 +791,7 @@ func TestXSW_Audit_ShapeValidation_DuplicateKeyInfo(t *testing.T) {
 	require.NotNil(t, sig)
 
 	// Find KeyInfo and duplicate it.
-	var ki *etree.Element
+	var ki *xmltree.Element
 	for _, c := range sig.ChildElements() {
 		if c.Tag == keyInfoTag {
 			ki = c
@@ -832,7 +832,7 @@ func TestXSW_Audit_CommentInjectionInNameID(t *testing.T) {
 
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_comment1")
 	nameID := el.CreateElement("NameID")
 	nameID.SetText("admin@evil.com")
@@ -846,13 +846,20 @@ func TestXSW_Audit_CommentInjectionInNameID(t *testing.T) {
 	assert.Equal(t, "admin@evil.com", nid.Text())
 
 	// Inject a comment into the NameID text.
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(signed)
 	xmlStr, err := doc.WriteToString()
 	require.NoError(t, err)
 	tampered := strings.Replace(xmlStr, "admin@evil.com", "admin<!--comment-->@evil.com", 1)
-	doc2 := etree.NewDocument()
-	require.NoError(t, doc2.ReadFromString(tampered))
+
+	// First line of defense: the strict parser rejects comment-bearing
+	// protocol messages outright, so this document can no longer even be
+	// ingested. Load leniently below to prove the deeper layers are also
+	// safe on an injected tree.
+	_, err = xmltree.Parse([]byte(tampered))
+	require.Error(t, err, "strict parser must reject the comment-injected document")
+	doc2, err := lenientParseDoc(tampered)
+	require.NoError(t, err)
 
 	// Verification SUCCEEDS because C14N strips comments → same digest.
 	result2, err := xswVerifier(cert).Verify(doc2.Root())
@@ -868,7 +875,7 @@ func TestXSW_Audit_CommentInjectionInNameID(t *testing.T) {
 
 	// Verify no comment node exists in returned element.
 	for _, child := range nid2.Child {
-		_, isComment := child.(*etree.Comment)
+		_, isComment := child.(*xmltree.Comment)
 		assert.False(t, isComment, "returned element should not contain comments")
 	}
 
@@ -894,28 +901,33 @@ func TestXSW_Audit_CommentInjection_ReturnedElementIsClean(t *testing.T) {
 
 	key, cert := randomTestKeyAndCert()
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("ID", "_comment_exploit")
 	nameID := el.CreateElement("NameID")
 	nameID.SetText("admin@legit-domain.com")
 	signed := xswSignAndReparse(t, key, cert, el)
 
 	// Inject comment.
-	doc := etree.NewDocument()
+	doc := xmltree.NewDocument()
 	doc.SetRoot(signed)
 	xmlStr, _ := doc.WriteToString()
 	tampered := strings.Replace(xmlStr,
 		"admin@legit-domain.com",
 		"admin<!--injected-->@legit-domain.com", 1)
-	doc2 := etree.NewDocument()
-	require.NoError(t, doc2.ReadFromString(tampered))
+
+	// Strict ingestion rejects the injected document; load leniently to
+	// exercise the deeper layers.
+	_, perr := xmltree.Parse([]byte(tampered))
+	require.Error(t, perr, "strict parser must reject the comment-injected document")
+	doc2, err := lenientParseDoc(tampered)
+	require.NoError(t, err)
 
 	// The INPUT element has a comment in it.
 	inputNameID := doc2.Root().FindElement("//NameID")
 	require.NotNil(t, inputNameID)
 	hasComment := false
 	for _, child := range inputNameID.Child {
-		if _, ok := child.(*etree.Comment); ok {
+		if _, ok := child.(*xmltree.Comment); ok {
 			hasComment = true
 		}
 	}
@@ -975,7 +987,7 @@ func TestXSW_Audit_SAMLInjectedAssertionNotInVerifiedResult(t *testing.T) {
 	signed := xswSignAndReparse(t, key, cert, resp)
 
 	// Attack: inject evil assertion.
-	evilAssertion := etree.NewElement("Assertion")
+	evilAssertion := xmltree.NewElement("Assertion")
 	evilAssertion.CreateAttr("ID", "_evil")
 	evilAssertion.CreateElement("Subject").CreateElement("NameID").SetText("admin@evil.com")
 	signed.InsertChildAt(0, evilAssertion)
@@ -1007,7 +1019,7 @@ func TestXSW_Audit_EmptyURI_MatchesElementWithAnyID(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign element with no ID → URI="".
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
@@ -1060,7 +1072,7 @@ func TestXSW_Audit_VerifyDigest_EmptyURISkipsCheck(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 
 	// Sign without ID.
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateElement("Data").SetText("good")
 	signed := xswSignAndReparse(t, key, cert, el)
 
@@ -1086,7 +1098,7 @@ func TestXSW_Audit_ExcC14N_PrefixListTamper(t *testing.T) {
 		Canonicalizer: MakeC14N10ExclusiveCanonicalizerWithPrefixList(""),
 	}
 
-	el := &etree.Element{Tag: "Response"}
+	el := &xmltree.Element{Tag: "Response"}
 	el.CreateAttr("xmlns:saml", "urn:oasis:names:tc:SAML:2.0:assertion")
 	el.CreateAttr("ID", "_exc_c14n")
 	el.CreateElement("Data").SetText("good")

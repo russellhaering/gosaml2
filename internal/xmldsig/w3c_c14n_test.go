@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/beevik/etree"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
 
 // TestW3CC14NConformance tests the library's canonicalization against reference
@@ -20,18 +20,10 @@ import (
 // Any divergence between our output and xmllint's output indicates a spec
 // non-compliance that could be exploited for signature forgery.
 func TestW3CC14NConformance(t *testing.T) {
-	// Known limitations where divergence from xmllint is expected:
-	// - attr_whitespace: etree does not perform XML attribute value normalization
-	//   (tabs/newlines in attrs remain as &#x9;/&#xA; instead of being normalized
-	//   to spaces before C14N). This is an etree parser limitation.
-	knownLimitations := map[string]string{
-		"attr_whitespace": "etree does not normalize tab/newline in attribute values (parser limitation)",
-	}
-
 	type c14nMethod struct {
-		name   string
-		ext    string // file extension for expected output
-		makeC  func() Canonicalizer
+		name  string
+		ext   string // file extension for expected output
+		makeC func() Canonicalizer
 	}
 
 	// Use with-comments canonicalizers since xmllint always includes comments
@@ -78,16 +70,13 @@ func TestW3CC14NConformance(t *testing.T) {
 			}
 
 			t.Run(baseName+"/"+method.name, func(t *testing.T) {
-				if reason, ok := knownLimitations[baseName]; ok {
-					t.Skipf("known limitation: %s", reason)
-				}
 				inputBytes, err := os.ReadFile(xmlFile)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				doc := etree.NewDocument()
-				if err := doc.ReadFromBytes(inputBytes); err != nil {
+				doc, err := parseVectorDoc(inputBytes)
+				if err != nil {
 					t.Fatalf("failed to parse input XML: %v", err)
 				}
 
@@ -126,9 +115,9 @@ func TestW3CC14NWithComments(t *testing.T) {
 </doc>`
 
 	tests := []struct {
-		name           string
-		makeC          func() Canonicalizer
-		expectComment  bool
+		name          string
+		makeC         func() Canonicalizer
+		expectComment bool
 	}{
 		{"ExcC14N/NoComments", func() Canonicalizer { return MakeC14N10ExclusiveCanonicalizerWithPrefixList("") }, false},
 		{"ExcC14N/WithComments", func() Canonicalizer { return MakeC14N10ExclusiveWithCommentsCanonicalizerWithPrefixList("") }, true},
@@ -140,8 +129,8 @@ func TestW3CC14NWithComments(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -168,31 +157,31 @@ func TestW3CExcC14NNamespacePushdown(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "UnusedNamespaceStripped",
-			input: `<a xmlns:unused="http://unused" xmlns:used="http://used"><used:b/></a>`,
+			name:     "UnusedNamespaceStripped",
+			input:    `<a xmlns:unused="http://unused" xmlns:used="http://used"><used:b/></a>`,
 			expected: `<a><used:b xmlns:used="http://used"></used:b></a>`,
 		},
 		{
-			name: "NamespacePushedToUser",
-			input: `<root xmlns:p="http://p"><a><p:b/></a></root>`,
+			name:     "NamespacePushedToUser",
+			input:    `<root xmlns:p="http://p"><a><p:b/></a></root>`,
 			expected: `<root><a><p:b xmlns:p="http://p"></p:b></a></root>`,
 		},
 		{
-			name: "DefaultNamespacePreserved",
-			input: `<root xmlns="http://default"><a><b/></a></root>`,
+			name:     "DefaultNamespacePreserved",
+			input:    `<root xmlns="http://default"><a><b/></a></root>`,
 			expected: `<root xmlns="http://default"><a><b></b></a></root>`,
 		},
 		{
-			name: "AttributeNamespaceIncluded",
-			input: `<root xmlns:a="http://a"><elem a:x="1"/></root>`,
+			name:     "AttributeNamespaceIncluded",
+			input:    `<root xmlns:a="http://a"><elem a:x="1"/></root>`,
 			expected: `<root><elem xmlns:a="http://a" a:x="1"></elem></root>`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(tt.input); err != nil {
+			doc, err := lenientParseDoc(tt.input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -242,8 +231,8 @@ func TestW3CC14NAttributeSorting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -277,8 +266,8 @@ func TestW3CC14NEmptyElements(t *testing.T) {
 
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -337,8 +326,8 @@ func TestW3CC14NSpecialCharacters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(tt.input); err != nil {
+			doc, err := lenientParseDoc(tt.input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -362,8 +351,8 @@ func TestW3CC14NNamespaceRedeclaration(t *testing.T) {
 	input := `<root xmlns:p="http://first"><a xmlns:p="http://second"><p:b/></a></root>`
 
 	t.Run("C14N11", func(t *testing.T) {
-		doc := etree.NewDocument()
-		if err := doc.ReadFromString(input); err != nil {
+		doc, err := lenientParseDoc(input)
+		if err != nil {
 			t.Fatal(err)
 		}
 
@@ -381,8 +370,8 @@ func TestW3CC14NNamespaceRedeclaration(t *testing.T) {
 	})
 
 	t.Run("ExcC14N", func(t *testing.T) {
-		doc := etree.NewDocument()
-		if err := doc.ReadFromString(input); err != nil {
+		doc, err := lenientParseDoc(input)
+		if err != nil {
 			t.Fatal(err)
 		}
 
@@ -426,8 +415,8 @@ func TestW3CC14NSuperfluous(t *testing.T) {
 
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -492,8 +481,8 @@ func TestW3CC14NStartEndTags(t *testing.T) {
 
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -526,29 +515,29 @@ func TestW3CExcC14NInclusiveNamespaces(t *testing.T) {
 </n0:local>`
 
 	tests := []struct {
-		name       string
-		prefixList string
-		contains   []string
+		name        string
+		prefixList  string
+		contains    []string
 		notContains []string
 	}{
 		{
 			name:       "NoPrefixes",
 			prefixList: "",
 			// n3 only visibly used on <n3:stuff>, so pushed down there
-			contains:   []string{`<n3:stuff xmlns:n3="ftp://example.org"`},
+			contains: []string{`<n3:stuff xmlns:n3="ftp://example.org"`},
 		},
 		{
 			name:       "IncludeN3",
 			prefixList: "n3",
 			// n3 is now inclusive, so it should appear on the root
-			contains:   []string{`xmlns:n3="ftp://example.org"`},
+			contains: []string{`xmlns:n3="ftp://example.org"`},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -592,8 +581,8 @@ func TestW3CC14NXmlAttributes(t *testing.T) {
 
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
-			doc := etree.NewDocument()
-			if err := doc.ReadFromString(input); err != nil {
+			doc, err := lenientParseDoc(input)
+			if err != nil {
 				t.Fatal(err)
 			}
 
@@ -623,8 +612,8 @@ func TestW3CC14NXmlAttributes(t *testing.T) {
 func TestW3CC14NUnicodeContent(t *testing.T) {
 	input := `<doc><text>日本語テスト</text><text>Ñoño</text></doc>`
 
-	doc := etree.NewDocument()
-	if err := doc.ReadFromString(input); err != nil {
+	doc, err := lenientParseDoc(input)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -666,7 +655,7 @@ func TestC14NIdempotency(t *testing.T) {
 		for _, m := range methods {
 			t.Run(m.name, func(t *testing.T) {
 				// First pass
-				doc1 := etree.NewDocument()
+				doc1 := xmltree.NewDocument()
 				if err := doc1.ReadFromString(input); err != nil {
 					t.Fatal(err)
 				}
@@ -676,7 +665,7 @@ func TestC14NIdempotency(t *testing.T) {
 				}
 
 				// Second pass: canonicalize the canonical output
-				doc2 := etree.NewDocument()
+				doc2 := xmltree.NewDocument()
 				if err := doc2.ReadFromBytes(pass1); err != nil {
 					t.Fatalf("failed to re-parse canonical output: %v", err)
 				}

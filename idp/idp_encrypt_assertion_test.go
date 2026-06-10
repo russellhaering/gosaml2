@@ -64,12 +64,12 @@ func testEncryptionRoundtrip(t *testing.T, algorithm string) {
 	require.NoError(t, err)
 
 	idpInst := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
+		EntityID:        "https://idp.test/metadata",
+		SSOURL:          "https://idp.test/sso",
 		SigningKeyStore: idpKS,
-		SignResponses:  true,
-		SignAssertions: false,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   true,
+		SignAssertions:  false,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
 				EntityID:              "https://sp.test/metadata",
@@ -83,15 +83,15 @@ func testEncryptionRoundtrip(t *testing.T, algorithm string) {
 	}
 
 	spInst := &sp.ServiceProvider{
-		EntityID:         "https://sp.test/metadata",
-		ACSURL:           "https://sp.test/acs",
-		IDPEntityID:      "https://idp.test/metadata",
-		IDPSSOURL:        "https://idp.test/sso",
-		IDPCertificates:  []*x509.Certificate{idpCert},
-		SPKeyStore:       spKS,
-		AudienceURIs:     []string{"https://sp.test/metadata"},
+		EntityID:          "https://sp.test/metadata",
+		ACSURL:            "https://sp.test/acs",
+		IDPEntityID:       "https://idp.test/metadata",
+		IDPSSOURL:         "https://idp.test/sso",
+		IDPCertificates:   []*x509.Certificate{idpCert},
+		SPKeyStore:        spKS,
+		AudienceURIs:      []string{"https://sp.test/metadata"},
 		AllowIDPInitiated: true,
-		Clock:            func() time.Time { return testTime },
+		Clock:             func() time.Time { return testTime },
 	}
 
 	params := &AssertionParams{
@@ -141,12 +141,12 @@ func TestEncryptionRoundtrip_DirectDecryptBytes(t *testing.T) {
 	require.NoError(t, err)
 
 	idpInst := &IdentityProvider{
-		EntityID:       "https://idp.test/metadata",
-		SSOURL:         "https://idp.test/sso",
+		EntityID:        "https://idp.test/metadata",
+		SSOURL:          "https://idp.test/sso",
 		SigningKeyStore: idpKS,
-		SignResponses:  false,
-		SignAssertions: false,
-		Clock:          func() time.Time { return testTime },
+		SignResponses:   false,
+		SignAssertions:  false,
+		Clock:           func() time.Time { return testTime },
 		ServiceProviders: map[string]*SPConfig{
 			"https://sp.test/metadata": {
 				EntityID:              "https://sp.test/metadata",
