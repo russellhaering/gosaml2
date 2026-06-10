@@ -1073,14 +1073,14 @@ func TestInputValidation_Verifier_NoKeyInfo_MultipleTrustedCerts(t *testing.T) {
 		keyInfoEl.Parent().RemoveChild(keyInfoEl)
 	}
 
-	// Use verifier with cert2 but we also need the original cert
-	// Just use two unrelated certs - the point is "no KeyInfo + multiple trusted certs"
+	// Two trusted certs, neither of which signed the document. Each is tried
+	// and each fails signature verification.
 	_, cert3 := randomTestKeyAndCert()
 	verifier := &Verifier{TrustedCerts: []*x509.Certificate{cert2, cert3}}
 
 	_, err := verifier.Verify(signed)
-	require.Error(t, err, "Should reject when no KeyInfo and multiple trusted certs")
-	t.Logf("No KeyInfo with multiple trusted certs correctly rejected: %v", err)
+	require.ErrorIs(t, err, ErrSignatureInvalid,
+		"no KeyInfo and no trusted cert matching the signing key must fail signature verification")
 }
 
 // TestInputValidation_SignString_EmptyContent tests that SignString rejects empty

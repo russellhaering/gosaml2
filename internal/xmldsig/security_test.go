@@ -586,9 +586,9 @@ func TestCert_NoKeyInfoMultipleTrustedCerts(t *testing.T) {
 	signed := signDoc(t, key, cert, "_r1")
 	removeKeyInfoFromSig(signed)
 
-	_, err := newVerifier(cert, cert2).Verify(signed)
-	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrCertificateNotTrusted), "got: %v", err)
+	res, err := newVerifier(cert, cert2).Verify(signed)
+	require.NoError(t, err, "each trusted cert should be tried when KeyInfo is absent")
+	require.True(t, res.Certificate.Equal(cert))
 }
 
 func TestCert_NoKeyInfoSingleTrustedCert(t *testing.T) {
@@ -2806,7 +2806,7 @@ func TestCertEdge_MultipleKeyInfoCerts(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. KeyInfo cert omitted: single trusted → fallback; multiple → error
+// 6. KeyInfo cert omitted: every trusted cert is tried
 // ---------------------------------------------------------------------------
 func TestCertEdge_NoKeyInfo_SingleTrustedFallback(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
@@ -2822,7 +2822,7 @@ func TestCertEdge_NoKeyInfo_SingleTrustedFallback(t *testing.T) {
 	assert.True(t, res.Certificate.Equal(cert))
 }
 
-func TestCertEdge_NoKeyInfo_MultipleTrustedFails(t *testing.T) {
+func TestCertEdge_NoKeyInfo_MultipleTrustedTriesEach(t *testing.T) {
 	key, cert := randomTestKeyAndCert()
 	_, cert2 := randomTestKeyAndCert()
 
@@ -2831,10 +2831,10 @@ func TestCertEdge_NoKeyInfo_MultipleTrustedFails(t *testing.T) {
 	signed = reparse(t, signed)
 
 	v := newVerifier(cert, cert2)
-	_, err := v.Verify(signed)
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrCertificateNotTrusted),
-		"expected ErrCertificateNotTrusted with multiple trusted certs and no KeyInfo, got: %v", err)
+	res, err := v.Verify(signed)
+	require.NoError(t, err,
+		"with no KeyInfo each trusted cert should be tried until one verifies")
+	assert.True(t, res.Certificate.Equal(cert))
 }
 
 // ---------------------------------------------------------------------------

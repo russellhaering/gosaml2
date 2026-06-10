@@ -16,6 +16,7 @@ gosaml2 v2 is designed with security as the primary concern:
 
 - **Secure by default.** SHA-1 is rejected, signatures are required, IDP-initiated SSO is off, and condition violations are hard errors. Insecure behavior requires explicit opt-in.
 - **Encrypted assertions require a signed response.** An `EncryptedAssertion` is decrypted only after the enclosing response's signature has been verified. A response that carries an encrypted assertion but no verified signature is rejected with `ErrUnsignedEncryptedAssertion` — the library never feeds attacker-reachable ciphertext to the decrypter. This eliminates the CBC padding-oracle (e.g. CVE-2021-29108) and XML-Signature-Wrapping-on-decrypted-content attack classes, and matches the strict behavior of SAML SPs such as PingFederate.
+- **Certificate pinning, rotation-safe.** A certificate embedded in a signature's `KeyInfo` is never trusted on its own — it must exactly match one of the configured IdP certificates, and then only selects which pinned certificate to verify against. When a signature omits `KeyInfo`, each pinned certificate is tried in turn, so configuring both the outgoing and incoming certificate during IdP certificate rotation works regardless of whether the IdP embeds `KeyInfo`.
 - **No panics.** Every code path returns errors. A panic in this library is considered a bug.
 - **Defense in depth.** XML roundtrip validation (via xml-roundtrip-validator), signature verification, condition enforcement, and InResponseTo tracking each provide independent layers of protection.
 

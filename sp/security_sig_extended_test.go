@@ -289,8 +289,10 @@ func TestCertConfusion_EmbedAttackerCertInKeyInfo(t *testing.T) {
 	t.Logf("EmbedAttackerCert correctly rejected: %v", err)
 }
 
-// TestCertConfusion_OmitKeyInfoMultipleTrustedCerts verifies behavior when
-// KeyInfo is omitted and multiple trusted certs are configured.
+// TestCertConfusion_OmitKeyInfoMultipleTrustedCerts verifies that when KeyInfo
+// is omitted and multiple trusted certs are configured (the certificate
+// rotation scenario), the verifier tries each trusted cert and accepts a
+// signature made by any of them.
 func TestCertConfusion_OmitKeyInfoMultipleTrustedCerts(t *testing.T) {
 	ks := xswKeyStore(t)
 	sp := xswServiceProvider(t, ks)
@@ -315,11 +317,63 @@ func TestCertConfusion_OmitKeyInfoMultipleTrustedCerts(t *testing.T) {
 	tampered, err := doc.WriteToString()
 	require.NoError(t, err)
 
-	// Without KeyInfo, the verifier cannot determine which cert to use when
-	// multiple trusted certs exist. This should result in rejection.
-	_, err = sp.ValidateEncodedResponse(context.Background(), encodeResponse(tampered))
-	require.Error(t, err, "missing KeyInfo with multiple trusted certs should be rejected")
-	t.Logf("OmitKeyInfo (multiple certs) correctly rejected: %v", err)
+	// Without KeyInfo, each trusted cert is tried until one verifies the
+	// signature. The signing cert is among the trusted set, so this succeeds.
+	resp, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(tampered))
+	require.NoError(t, err, "missing KeyInfo with multiple trusted certs should try each cert")
+	require.Equal(t, "legit@example.com", resp.Assertions[0].Subject.NameID.Value)
+}
+
+// TestCertConfusion_CertRotationNoKeyInfo simulates IdP certificate rotation:
+// the SP pins both the outgoing and incoming certs, and the IdP signs with the
+// new key while omitting KeyInfo. The old cert is listed first, so acceptance
+// requires trying each pinned cert rather than just the first.
+func TestCertConfusion_CertRotationNoKeyInfo(t *testing.T) {
+	ks := xswKeyStore(t)
+	signer := xswSigner(t, ks)
+
+	newCert, err := x509.ParseCertificate(ks.Cert)
+	require.NoError(t, err)
+
+	oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	oldTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(99),
+		NotBefore:    xswFakeTime.Add(-24 * time.Hour),
+		NotAfter:     xswFakeTime.Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	oldDER, err := x509.CreateCertificate(rand.Reader, oldTemplate, oldTemplate, &oldKey.PublicKey, oldKey)
+	require.NoError(t, err)
+	oldCert, err := x509.ParseCertificate(oldDER)
+	require.NoError(t, err)
+
+	sp := &ServiceProvider{
+		IDPEntityID:       "https://idp.example.com",
+		ACSURL:            "https://sp.example.com/acs",
+		AudienceURIs:      []string{"https://sp.example.com"},
+		IDPCertificates:   []*x509.Certificate{oldCert, newCert},
+		SPKeyStore:        ks,
+		SignAuthnRequests: true,
+		Clock:             func() time.Time { return xswFakeTime },
+	}
+
+	raw := buildLegitResponse("legit@example.com")
+	signed := signResponseXML(t, raw, signer)
+
+	doc := etree.NewDocument()
+	require.NoError(t, doc.ReadFromString(signed))
+	for _, ki := range doc.Root().FindElements("//KeyInfo") {
+		if p := ki.Parent(); p != nil {
+			p.RemoveChild(ki)
+		}
+	}
+	stripped, err := doc.WriteToString()
+	require.NoError(t, err)
+
+	resp, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(stripped))
+	require.NoError(t, err, "response signed by the second pinned cert's key should verify")
+	require.Equal(t, "legit@example.com", resp.Assertions[0].Subject.NameID.Value)
 }
 
 // TestCertConfusion_OmitKeyInfoSingleTrustedCert verifies that when KeyInfo is

@@ -145,7 +145,8 @@ func TestCertCrypto_SingleTrustedCertNoKeyInfoWrongKey(t *testing.T) {
 }
 
 // TestCertCrypto_MultipleTrustedCertsNoKeyInfo ensures that with >1 trusted
-// certs and no KeyInfo, verification fails (cannot determine which cert to use).
+// certs and no KeyInfo, the verifier tries each trusted cert and accepts a
+// signature made by any of them (e.g. during IdP certificate rotation).
 func TestCertCrypto_MultipleTrustedCertsNoKeyInfo(t *testing.T) {
 	key1, cert1 := randomTestKeyAndCert()
 	_, cert2 := randomTestKeyAndCert()
@@ -161,10 +162,10 @@ func TestCertCrypto_MultipleTrustedCertsNoKeyInfo(t *testing.T) {
 	signed = reparse(t, signed)
 
 	verifier := &Verifier{TrustedCerts: []*x509.Certificate{cert1, cert2}}
-	_, err = verifier.Verify(signed)
-	assert.Error(t, err, "multiple trusted certs + no KeyInfo must fail")
-	assert.True(t, errors.Is(err, ErrCertificateNotTrusted),
-		"expected ErrCertificateNotTrusted, got: %v", err)
+	res, err := verifier.Verify(signed)
+	require.NoError(t, err, "multiple trusted certs + no KeyInfo should try each cert")
+	assert.True(t, res.Certificate.Equal(cert1),
+		"verification should report the cert that actually signed")
 }
 
 // ===========================================================================

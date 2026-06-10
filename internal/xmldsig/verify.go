@@ -140,15 +140,30 @@ func (v *Verifier) Verify(el *etree.Element) (*VerifyResult, error) {
 		return nil, err
 	}
 
-	// Determine which cert to use and verify
-	cert, err := v.verifyCertificate(sig)
+	// Determine which trusted cert(s) may have produced the signature.
+	candidates, err := v.candidateCertificates(sig)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify the signature over SignedInfo
-	if err := verifySignature(cert, sig.sigMethod, canonicalSignedInfo, decodedSignature); err != nil {
-		return nil, err
+	// Verify the signature over SignedInfo against each candidate.
+	now := v.now()
+	var cert *x509.Certificate
+	var lastErr error
+	for _, candidate := range candidates {
+		if now.Before(candidate.NotBefore) || now.After(candidate.NotAfter) {
+			lastErr = ErrCertificateExpired
+			continue
+		}
+		if err := verifySignature(candidate, sig.sigMethod, canonicalSignedInfo, decodedSignature); err != nil {
+			lastErr = err
+			continue
+		}
+		cert = candidate
+		break
+	}
+	if cert == nil {
+		return nil, lastErr
 	}
 
 	// Now use only the verified SignedInfo to extract reference data.
@@ -454,48 +469,37 @@ func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *etree.Eleme
 	return sig, nil
 }
 
-func (v *Verifier) verifyCertificate(sig *parsedSignature) (*x509.Certificate, error) {
-	now := v.now()
+// candidateCertificates returns the trusted certificate(s) a signature may be
+// verified against. When the signature embeds a certificate in KeyInfo, that
+// certificate must exactly match a trusted certificate (pinning) and is the
+// sole candidate — KeyInfo selects among trusted certs, it never expands
+// trust. When KeyInfo is absent, every trusted certificate is a candidate;
+// the caller tries each, which keeps verification working when multiple
+// certs are pinned (e.g. during IdP certificate rotation).
+func (v *Verifier) candidateCertificates(sig *parsedSignature) ([]*x509.Certificate, error) {
+	if len(sig.keyInfoCerts) == 0 || sig.keyInfoCerts[0] == "" {
+		// No KeyInfo — any trusted cert may have produced the signature.
+		return v.TrustedCerts, nil
+	}
 
-	var untrustedCert *x509.Certificate
+	certData, err := base64.StdEncoding.DecodeString(
+		whiteSpace.ReplaceAllString(sig.keyInfoCerts[0], ""))
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to decode certificate", ErrMalformedSignature)
+	}
 
-	if len(sig.keyInfoCerts) > 0 && sig.keyInfoCerts[0] != "" {
-		certData, err := base64.StdEncoding.DecodeString(
-			whiteSpace.ReplaceAllString(sig.keyInfoCerts[0], ""))
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to decode certificate", ErrMalformedSignature)
-		}
-
-		untrustedCert, err = x509.ParseCertificate(certData)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to parse certificate", ErrMalformedSignature)
-		}
-	} else {
-		// No KeyInfo — use the single trusted cert if there is exactly one
-		if len(v.TrustedCerts) == 1 {
-			untrustedCert = v.TrustedCerts[0]
-		} else {
-			return nil, fmt.Errorf("%w: no KeyInfo and multiple trusted certs", ErrCertificateNotTrusted)
-		}
+	untrustedCert, err := x509.ParseCertificate(certData)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to parse certificate", ErrMalformedSignature)
 	}
 
 	// Find matching trusted cert
-	var trustedCert *x509.Certificate
 	for _, root := range v.TrustedCerts {
 		if root.Equal(untrustedCert) {
-			trustedCert = root
-			break
+			return []*x509.Certificate{root}, nil
 		}
 	}
-	if trustedCert == nil {
-		return nil, ErrCertificateNotTrusted
-	}
-
-	if now.Before(trustedCert.NotBefore) || now.After(trustedCert.NotAfter) {
-		return nil, ErrCertificateExpired
-	}
-
-	return trustedCert, nil
+	return nil, ErrCertificateNotTrusted
 }
 
 // verifySignature performs direct signature verification without cert.CheckSignature.
