@@ -993,14 +993,21 @@ func TestSecurityConditions_MultipleAssertionsDifferentSubjects(t *testing.T) {
 		now.Add(-5*time.Minute).Format(time.RFC3339), now.Add(5*time.Minute).Format(time.RFC3339),
 		sp.AudienceURIs[0], now.Format(time.RFC3339))
 
-	// Sign the response envelope (both assertions will be covered)
+	// Sign the response envelope (both assertions will be covered).
 	encoded := signAndEncode(t, responseXML, sp)
-	info, err := sp.RetrieveAssertionInfo(context.Background(), encoded)
-	require.NoError(t, err, "Multiple assertions should be accepted")
-	// RetrieveAssertionInfo uses only the first assertion
-	require.Equal(t, "alice@example.com", info.NameID,
-		"RetrieveAssertionInfo should use the first assertion's NameID")
-	require.Len(t, info.Assertions, 2, "Both assertions should be present")
+
+	// ValidateEncodedResponse validates BOTH assertions and returns them.
+	resp, err := sp.ValidateEncodedResponse(context.Background(), encoded)
+	require.NoError(t, err, "both validly-conditioned assertions should pass ValidateEncodedResponse")
+	require.Len(t, resp.Assertions, 2, "both assertions should be present and validated")
+
+	// RetrieveAssertionInfo extracts a single subject and must refuse an
+	// ambiguous multi-assertion response rather than silently using the first.
+	sp = setupSPWithTracker(t)
+	encoded = signAndEncode(t, responseXML, sp)
+	_, err = sp.RetrieveAssertionInfo(context.Background(), encoded)
+	require.ErrorIs(t, err, saml2.ErrMultipleAssertions,
+		"RetrieveAssertionInfo must reject responses carrying multiple assertions")
 }
 
 // Test 40: Assertion without Subject element.

@@ -102,15 +102,21 @@ func (ea *EncryptedAssertion) DecryptBytes(cert *tls.Certificate) ([]byte, error
 
 // removePadding removes padding from CBC-decrypted data.
 //
-// It handles two padding schemes:
-//   - PKCS#7/PKCS#5 (per XML Encryption spec §5.2): the last byte indicates
-//     the pad count. The pad count must be in range 1..blockSize.
-//   - Zero-padding: some IdPs pad with zero bytes instead of PKCS#7.
-//     Zero-trim is only applied when the last byte is 0x00, so it never
-//     interferes with PKCS#7 interpretation.
+// IMPORTANT: XML Encryption (W3C xmlenc-core §5.2) does NOT use PKCS#7 padding.
+// Only the final octet is meaningful — it gives the number of padding octets —
+// and the preceding padding octets are unspecified (an implementation may, and
+// real ones such as Shibboleth do, fill them with arbitrary/random bytes).
+// We therefore validate only the pad *length*, never the pad *content*; a
+// content check would reject spec-compliant ciphertext.
 //
-// All error paths return the same generic message to prevent padding oracle
-// attacks (CWE-649).
+// This function is not the padding-oracle control. The decisive control is in
+// the SP pipeline, which only ever decrypts ciphertext from a
+// signature-verified response — so an attacker has no oracle to probe (a
+// tampered ciphertext fails the signature long before it reaches here). All
+// error paths still return the same generic message as defense in depth.
+//
+// As a compatibility fallback, when the final octet is 0x00 the data is treated
+// as zero-padded and trailing NULs are trimmed (XML content never contains NUL).
 func removePadding(data []byte, blockSize int) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("invalid padding")
@@ -118,15 +124,13 @@ func removePadding(data []byte, blockSize int) ([]byte, error) {
 
 	padLength := int(data[len(data)-1])
 
-	// PKCS#7: last byte is the pad count, must be in range 1..blockSize.
+	// xmlenc CBC: final octet is the pad count, in range 1..blockSize.
 	if padLength >= 1 && padLength <= blockSize && padLength <= len(data) {
 		return data[:len(data)-padLength], nil
 	}
 
-	// Zero-padding fallback: some IdPs pad with zeros instead of PKCS#7.
-	// This path is only reached when the last byte is 0x00 (padLength == 0),
-	// so it never conflicts with the PKCS#7 path above. XML content never
-	// contains null bytes, so stripping trailing zeros is safe for SAML.
+	// Zero-padding fallback: some IdPs pad with zeros. Only reached when the
+	// final octet is 0x00, so it never conflicts with the path above.
 	if padLength == 0 {
 		trimmed := bytes.TrimRight(data, "\x00")
 		if len(trimmed) > 0 {

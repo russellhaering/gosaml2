@@ -18,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	saml2 "github.com/russellhaering/gosaml2/v2"
 	"github.com/russellhaering/gosaml2/v2/sp"
+	"github.com/stretchr/testify/require"
 )
 
 func fakeClock(t time.Time) func() time.Time {
@@ -56,6 +58,10 @@ func TestValidateResponses(t *testing.T) {
 			},
 		},
 		{
+			// This fixture is an encrypted assertion carried in an UNSIGNED
+			// response (assertion signed inside the ciphertext). Strict mode
+			// rejects it: encrypted assertions require a signature-verified
+			// response so we never decrypt attacker-reachable ciphertext.
 			ScenarioName: "AdfsEncrypted",
 			Response:     LoadRawResponse("./testdata/adfs_response_enc.b64"),
 			ServiceProvider: &sp.ServiceProvider{
@@ -68,6 +74,9 @@ func TestValidateResponses(t *testing.T) {
 				SPKeyStore:        LoadKeyStore("./testdata/adfs_sp_encryption_cert.pem", "./testdata/adfs_sp_encryption_key.pem"),
 				SPSigningKeyStore: LoadKeyStore("./testdata/adfs_sp_signing_cert.pem", "./testdata/adfs_sp_signing_key.pem"),
 				Clock:             fakeClock(time.Date(2017, 9, 21, 23, 20, 0, 0, time.UTC)),
+			},
+			CheckError: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, saml2.ErrUnsignedEncryptedAssertion)
 			},
 		},
 		{

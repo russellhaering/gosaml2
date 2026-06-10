@@ -28,9 +28,12 @@ const (
 	SubjMethodBearer = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 )
 
-// verifyAssertionConditions inspects an assertion's Conditions element and
-// enforces all SAML2 constraints.
-func (sp *ServiceProvider) verifyAssertionConditions(assertion *types.Assertion, info *AssertionInfo) error {
+// validateAssertionConditions enforces the security-critical SAML2 constraints
+// in an assertion's Conditions element: the NotBefore/NotOnOrAfter validity
+// window and AudienceRestriction. It is invoked by Validate for *every*
+// assertion, so that callers of ValidateEncodedResponse (not just
+// RetrieveAssertionInfo) get these checks.
+func (sp *ServiceProvider) validateAssertionConditions(assertion *types.Assertion) error {
 	now := sp.now()
 	skew := sp.clockSkew()
 
@@ -91,6 +94,18 @@ func (sp *ServiceProvider) verifyAssertionConditions(assertion *types.Assertion,
 		}
 	}
 
+	return nil
+}
+
+// extractAssertionConditionInfo copies advisory (non-security) fields from an
+// assertion's Conditions element into info. The security-critical validation is
+// performed separately by validateAssertionConditions during Validate.
+func (sp *ServiceProvider) extractAssertionConditionInfo(assertion *types.Assertion, info *AssertionInfo) {
+	conditions := assertion.Conditions
+	if conditions == nil {
+		return
+	}
+
 	if conditions.OneTimeUse != nil {
 		info.OneTimeUse = true
 	}
@@ -108,8 +123,6 @@ func (sp *ServiceProvider) verifyAssertionConditions(assertion *types.Assertion,
 
 		info.ProxyRestriction = proxyRestrictionInfo
 	}
-
-	return nil
 }
 
 // Validate ensures that the assertion passed is valid for the current Service
@@ -239,6 +252,12 @@ func (sp *ServiceProvider) Validate(response *types.Response) error {
 			}
 		}
 
+		// Enforce the assertion's Conditions (validity window + audience) for
+		// every assertion, not just the first one extracted by
+		// RetrieveAssertionInfo.
+		if err := sp.validateAssertionConditions(&assertion); err != nil {
+			return err
+		}
 	}
 
 	return nil

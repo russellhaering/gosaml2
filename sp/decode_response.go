@@ -130,12 +130,27 @@ func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 	return &decryptCert, nil
 }
 
+// hasEncryptedAssertion reports whether el contains any saml:EncryptedAssertion
+// element anywhere in its subtree.
+func hasEncryptedAssertion(el *etree.Element) bool {
+	found := false
+	_ = dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, func(_ dsig.NSContext, _ *etree.Element) error {
+		found = true
+		return dsig.ErrTraversalHalted
+	})
+	return found
+}
+
 func (sp *ServiceProvider) decryptAssertions(el *etree.Element) error {
 	var decryptCert *tls.Certificate
 
 	decryptAssertion := func(ctx dsig.NSContext, encryptedElement *etree.Element) error {
-		if encryptedElement.Parent() != el {
-			return fmt.Errorf("found encrypted assertion with unexpected parent element: %s", encryptedElement.Parent().Tag)
+		if parent := encryptedElement.Parent(); parent != el {
+			parentTag := "<none>"
+			if parent != nil {
+				parentTag = parent.Tag
+			}
+			return fmt.Errorf("found encrypted assertion with unexpected parent element: %s", parentTag)
 		}
 
 		detached, err := dsig.NSDetach(ctx, encryptedElement) // make a detached copy
@@ -297,9 +312,15 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 	decodedResponse.Assertions = []types.Assertion{}
 	decodedResponse.EncryptedAssertions = []types.EncryptedAssertion{}
 
-	err = sp.decryptAssertions(unverifiedResponse)
-	if err != nil {
-		return nil, err
+	// Strict mode (PingFederate-style): we only reach this branch when the
+	// response carries no verified signature. Encrypted assertions are decrypted
+	// exclusively from a signature-verified response (the branch above), so that
+	// attacker-controllable ciphertext is never fed to the decrypter — doing so
+	// would expose a CBC padding-oracle surface and enable XML Signature
+	// Wrapping on the decrypted content. Reject any encrypted assertion that
+	// arrives without a verified response signature.
+	if hasEncryptedAssertion(unverifiedResponse) {
+		return nil, &saml2.ValidationError{Reason: saml2.ErrUnsignedEncryptedAssertion}
 	}
 
 	addSignedAssertion := func(ctx dsig.NSContext, unverifiedAssertion *etree.Element) error {
@@ -407,8 +428,11 @@ func extractAudiences(rawXML []byte) []string {
 }
 
 func maybeDeflate(data []byte, maxSize int64, decoder func([]byte) error) error {
-	err := decoder(data)
-	if err == nil {
+	// Try the data as-is first (the common HTTP-POST case, where it is not
+	// compressed). Keep this error: if the data turns out not to be DEFLATE
+	// either, it is the more informative one to surface.
+	origErr := decoder(data)
+	if origErr == nil {
 		return nil
 	}
 
@@ -420,7 +444,9 @@ func maybeDeflate(data []byte, maxSize int64, decoder func([]byte) error) error 
 
 	deflated, err := io.ReadAll(lr)
 	if err != nil {
-		return err
+		// Not valid DEFLATE — the input was simply undecodable. Report the
+		// original decode error rather than the (misleading) inflate error.
+		return origErr
 	}
 
 	if int64(len(deflated)) > maxSize {

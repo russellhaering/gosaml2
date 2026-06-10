@@ -321,13 +321,17 @@ func TestInvalidResponseBadCompression(t *testing.T) {
 	sp := &ServiceProvider{}
 
 	// Value from: https://github.com/golang/go/blob/23416315060bf7601e5779c3a6a2529d4d604584/src/compress/flate/flate_test.go#L219
+	// This input is neither valid XML nor a valid DEFLATE stream. maybeDeflate
+	// tries the bytes as XML first (the primary, uncompressed format) and, when
+	// the DEFLATE fallback also fails, surfaces the original XML decode error
+	// rather than the less-informative inflate error.
 	rawResponse, err := hex.DecodeString("33180700")
 	require.NoError(t, err)
 
 	b64Response := base64.StdEncoding.EncodeToString(rawResponse)
 
 	response, err := sp.ValidateEncodedResponse(context.Background(), b64Response)
-	require.EqualError(t, err, "flate: corrupt input before offset 3")
+	require.EqualError(t, err, "XML syntax error on line 1: illegal character code U+0018")
 	require.Nil(t, response)
 }
 

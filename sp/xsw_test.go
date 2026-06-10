@@ -764,20 +764,16 @@ func TestXSW14_AudienceMismatchInSignedResponse(t *testing.T) {
 	)
 	signed := signResponseXML(t, responseXML, signer)
 
-	resp, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(signed))
-	require.NoError(t, err, "audience is validated in RetrieveAssertionInfo, not ValidateEncodedResponse")
+	// AudienceRestriction is now enforced by Validate, so both entry points
+	// must reject a mismatched audience.
+	_, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(signed))
+	require.ErrorIs(t, err, saml2.ErrAudienceMismatch,
+		"ValidateEncodedResponse must reject a mismatched audience")
 
-	// Now test via RetrieveAssertionInfo which calls verifyAssertionConditions
 	_, err = sp.RetrieveAssertionInfo(context.Background(), encodeResponse(signed))
-	if err != nil {
-		require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
-		t.Logf("XSW14 (audience mismatch) correctly rejected at RetrieveAssertionInfo: %v", err)
-	} else {
-		// Audience check may have passed if the signed response re-canonicalized the audience
-		// Check if the assertion was accepted with wrong audience
-		_ = resp // suppress unused
-		t.Log("XSW14: WARNING - audience mismatch was not caught")
-	}
+	require.ErrorIs(t, err, saml2.ErrAudienceMismatch,
+		"RetrieveAssertionInfo must reject a mismatched audience")
+	t.Logf("XSW14 (audience mismatch) correctly rejected: %v", err)
 }
 
 // ---------- Test: XSW15 - Recipient mismatch ----------

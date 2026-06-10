@@ -33,19 +33,30 @@ func (sp *ServiceProvider) RetrieveAssertionInfo(ctx context.Context, encodedRes
 		return nil, fmt.Errorf("error validating response: %w", err)
 	}
 
-	// TODO: Support multiple assertions
 	if len(response.Assertions) == 0 {
 		return nil, &saml2.ValidationError{Reason: saml2.ErrMissingAssertion}
+	}
+
+	// RetrieveAssertionInfo extracts a single subject's identity. A response
+	// carrying more than one assertion is ambiguous here: silently returning
+	// only the first would discard the rest. Callers that need to handle
+	// multiple assertions should use ValidateEncodedResponse directly, which
+	// validates every assertion.
+	if len(response.Assertions) > 1 {
+		return nil, &saml2.ValidationError{
+			Reason: saml2.ErrMultipleAssertions,
+			Detail: fmt.Sprintf("response contains %d assertions; use ValidateEncodedResponse to handle multiple", len(response.Assertions)),
+		}
 	}
 
 	assertion := response.Assertions[0]
 	assertionInfo.Assertions = response.Assertions
 	assertionInfo.ResponseSignatureValidated = response.SignatureValidated
 
-	err = sp.verifyAssertionConditions(&assertion, assertionInfo)
-	if err != nil {
-		return nil, err
-	}
+	// The security-critical Conditions checks already ran for every assertion
+	// inside ValidateEncodedResponse -> Validate. Here we only copy the
+	// advisory fields (OneTimeUse / ProxyRestriction) into the returned info.
+	sp.extractAssertionConditionInfo(&assertion, assertionInfo)
 
 	//Get the NameID
 	subject := assertion.Subject

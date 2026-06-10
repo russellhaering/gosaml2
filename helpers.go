@@ -19,6 +19,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/xml"
 	"errors"
 	"html/template"
@@ -97,6 +98,23 @@ func SignatureAlgorithmHash(algorithm string) crypto.Hash {
 		return crypto.SHA512
 	default:
 		return 0
+	}
+}
+
+// SignatureAlgorithmKeyType returns the public-key algorithm (RSA or ECDSA)
+// implied by a signature method URI, or x509.UnknownPublicKeyAlgorithm if the
+// URI is unrecognized. It is used to ensure a redirect-binding SigAlg's declared
+// key family matches the verifying certificate's actual key type.
+func SignatureAlgorithmKeyType(algorithm string) x509.PublicKeyAlgorithm {
+	switch algorithm {
+	case dsig.RSASHA1SignatureMethod, dsig.RSASHA256SignatureMethod,
+		dsig.RSASHA384SignatureMethod, dsig.RSASHA512SignatureMethod:
+		return x509.RSA
+	case dsig.ECDSASHA1SignatureMethod, dsig.ECDSASHA256SignatureMethod,
+		dsig.ECDSASHA384SignatureMethod, dsig.ECDSASHA512SignatureMethod:
+		return x509.ECDSA
+	default:
+		return x509.UnknownPublicKeyAlgorithm
 	}
 }
 

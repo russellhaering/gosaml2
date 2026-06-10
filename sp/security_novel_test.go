@@ -788,17 +788,13 @@ func TestSecurityNovel_NotBeforeFutureBeyondSkew(t *testing.T) {
 		sp.AudienceURIs[0],
 		now.Format(time.RFC3339))
 
-	// ValidateEncodedResponse does NOT check Conditions (that happens in
-	// RetrieveAssertionInfo via verifyAssertionConditions). So the response
-	// should parse fine here.
-	resp, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(malformedResp))
-	require.NoError(t, err, "ValidateEncodedResponse does not enforce Conditions")
-	require.NotNil(t, resp)
-
-	// Verify the far-future NotBefore is present in the parsed assertion
-	require.NotNil(t, resp.Assertions[0].Conditions,
-		"Conditions should be present in parsed assertion for downstream validation")
-	t.Log("NotBefore in the future parsed successfully; enforcement happens in RetrieveAssertionInfo")
+	// ValidateEncodedResponse now enforces Conditions for every assertion, so a
+	// NotBefore beyond the clock skew must be rejected here (not only in
+	// RetrieveAssertionInfo).
+	_, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(malformedResp))
+	require.ErrorIs(t, err, saml2.ErrNotYetValid,
+		"ValidateEncodedResponse must reject a future Conditions.NotBefore beyond skew")
+	t.Logf("NotBefore beyond skew correctly rejected by ValidateEncodedResponse: %v", err)
 }
 
 // Test 35: Empty Conditions element (no NotBefore/NotOnOrAfter attributes).

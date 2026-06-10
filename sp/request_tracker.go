@@ -38,6 +38,11 @@ type MemoryRequestTracker struct {
 	mu      sync.Mutex
 	expiry  time.Duration
 	entries map[string]time.Time
+
+	// Clock returns the current time, used for entry timestamps and expiry.
+	// Defaults to time.Now. Set it to align the tracker with a fixed clock in
+	// tests, or with the ServiceProvider's Clock.
+	Clock func() time.Time
 }
 
 // NewMemoryRequestTracker creates a MemoryRequestTracker with the given expiry
@@ -49,8 +54,16 @@ func NewMemoryRequestTracker(expiry time.Duration) *MemoryRequestTracker {
 	}
 }
 
+// now returns the current time using the configured clock, or time.Now.
+func (m *MemoryRequestTracker) now() time.Time {
+	if m.Clock != nil {
+		return m.Clock()
+	}
+	return time.Now()
+}
+
 func (m *MemoryRequestTracker) sweep() {
-	cutoff := time.Now().Add(-m.expiry)
+	cutoff := m.now().Add(-m.expiry)
 	for id, ts := range m.entries {
 		if ts.Before(cutoff) {
 			delete(m.entries, id)
@@ -63,7 +76,7 @@ func (m *MemoryRequestTracker) StoreRequest(_ context.Context, id string) error 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweep()
-	m.entries[id] = time.Now()
+	m.entries[id] = m.now()
 	return nil
 }
 

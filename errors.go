@@ -29,12 +29,22 @@ var (
 	ErrBadStatus        = errors.New("saml: response status not success")
 	ErrReplay           = errors.New("saml: request ID not recognized")
 	ErrMissingAssertion = errors.New("saml: missing assertion")
+	ErrMultipleAssertions = errors.New("saml: multiple assertions are not supported by this method")
 	ErrMissingElement   = errors.New("saml: missing required element")
 	ErrBadVersion       = errors.New("saml: unsupported SAML version")
 	ErrMalformed        = errors.New("saml: malformed SAML document")
 	ErrUnknownSP        = errors.New("saml: unknown service provider")
 	ErrBadACSURL        = errors.New("saml: invalid assertion consumer service URL")
 	ErrEncryptionFailed = errors.New("saml: assertion encryption failed")
+	// ErrUnsignedEncryptedAssertion is returned when an EncryptedAssertion is
+	// present in a response whose signature has not been verified. Encrypted
+	// assertions are only ever decrypted from a signature-verified response, so
+	// that attacker-controllable ciphertext is never fed to the decrypter (which
+	// would otherwise expose a CBC padding-oracle surface and enable XML
+	// Signature Wrapping on the decrypted content). This mirrors the long-
+	// standing guidance from the 2012 "XML Signature Validation" advisory and
+	// the behavior of strict SAML SPs such as PingFederate.
+	ErrUnsignedEncryptedAssertion = errors.New("saml: encrypted assertion requires a signed response")
 )
 
 // ValidationError wraps a sentinel error with human-readable context.

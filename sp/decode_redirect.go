@@ -21,6 +21,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
@@ -74,6 +75,14 @@ func (sp *ServiceProvider) verifyRedirectSignature(
 		return fmt.Errorf("hash algorithm %v not available", hash)
 	}
 
+	// The SigAlg URI declares both a hash and a key family (RSA vs ECDSA). Bind
+	// to the declared key family so a signature is only ever verified against a
+	// certificate of the matching key type.
+	expectedKeyType := saml2.SignatureAlgorithmKeyType(sigAlg)
+	if expectedKeyType == x509.UnknownPublicKeyAlgorithm {
+		return fmt.Errorf("unsupported or unrecognized signature algorithm: %s", sigAlg)
+	}
+
 	hashed := hash.New()
 	hashed.Write(signedContent)
 	digest := hashed.Sum(nil)
@@ -83,6 +92,12 @@ func (sp *ServiceProvider) verifyRedirectSignature(
 	// Try each trusted certificate.
 	var lastErr error
 	for _, cert := range sp.IDPCertificates {
+		// Skip certificates whose key type doesn't match the declared SigAlg.
+		if cert.PublicKeyAlgorithm != expectedKeyType {
+			lastErr = fmt.Errorf("certificate key type %v does not match signature algorithm %s", cert.PublicKeyAlgorithm, sigAlg)
+			continue
+		}
+
 		// Check certificate validity period.
 		if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
 			lastErr = fmt.Errorf("IDP certificate is not valid at this time (notBefore=%s, notAfter=%s)",
