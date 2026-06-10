@@ -74,6 +74,23 @@ func xmlName(namespace, local string) xml.Name {
 	return xml.Name{Space: namespace, Local: local}
 }
 
+// singleChild returns the unique direct child element with the given local
+// name. A SAML element the schema permits at most once (Subject, Conditions,
+// NameID, Status, Issuer, ...) appearing more than once is malformed;
+// rejecting it removes the parser-differential ambiguity of "which one a
+// consumer honors" rather than silently picking one. Returns nil (no error)
+// when the element is absent.
+func singleChild(el *xmltree.Element, tag string) (*xmltree.Element, error) {
+	matches := el.SelectElements(tag)
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("saml: %d <%s> elements where at most one is allowed", len(matches), tag)
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+	return matches[0], nil
+}
+
 // parseTimeAttr parses an RFC 3339 time attribute; a missing attribute
 // yields the zero time.
 func parseTimeAttr(el *xmltree.Element, key string) (time.Time, error) {
@@ -118,25 +135,31 @@ func ResponseFromElement(el *xmltree.Element) (*Response, error) {
 		Version:      el.SelectAttrValue("Version", ""),
 		IssueInstant: issueInstant,
 	}
-	for _, child := range el.ChildElements() {
-		switch child.Tag {
-		case "Status":
-			resp.Status = statusFromElement(child)
-		case "Issuer":
-			resp.Issuer = issuerFromElement(child)
-		case "Assertion":
-			assertion, err := assertionFromElementNoNSCheck(child)
-			if err != nil {
-				return nil, err
-			}
-			resp.Assertions = append(resp.Assertions, *assertion)
-		case "EncryptedAssertion":
-			ea, err := EncryptedAssertionFromElement(child)
-			if err != nil {
-				return nil, err
-			}
-			resp.EncryptedAssertions = append(resp.EncryptedAssertions, *ea)
+	if statusEl, err := singleChild(el, "Status"); err != nil {
+		return nil, err
+	} else if statusEl != nil {
+		if resp.Status, err = statusFromElement(statusEl); err != nil {
+			return nil, err
 		}
+	}
+	if issuerEl, err := singleChild(el, "Issuer"); err != nil {
+		return nil, err
+	} else if issuerEl != nil {
+		resp.Issuer = issuerFromElement(issuerEl)
+	}
+	for _, child := range el.SelectElements("Assertion") {
+		assertion, err := assertionFromElementNoNSCheck(child)
+		if err != nil {
+			return nil, err
+		}
+		resp.Assertions = append(resp.Assertions, *assertion)
+	}
+	for _, child := range el.SelectElements("EncryptedAssertion") {
+		ea, err := EncryptedAssertionFromElement(child)
+		if err != nil {
+			return nil, err
+		}
+		resp.EncryptedAssertions = append(resp.EncryptedAssertions, *ea)
 	}
 	return resp, nil
 }
@@ -159,11 +182,17 @@ func LogoutResponseFromElement(el *xmltree.Element) (*LogoutResponse, error) {
 		Version:      el.SelectAttrValue("Version", ""),
 		IssueInstant: issueInstant,
 	}
-	if status := el.SelectLastElement("Status"); status != nil {
-		resp.Status = statusFromElement(status)
+	if statusEl, err := singleChild(el, "Status"); err != nil {
+		return nil, err
+	} else if statusEl != nil {
+		if resp.Status, err = statusFromElement(statusEl); err != nil {
+			return nil, err
+		}
 	}
-	if issuer := el.SelectLastElement("Issuer"); issuer != nil {
-		resp.Issuer = issuerFromElement(issuer)
+	if issuerEl, err := singleChild(el, "Issuer"); err != nil {
+		return nil, err
+	} else if issuerEl != nil {
+		resp.Issuer = issuerFromElement(issuerEl)
 	}
 	return resp, nil
 }
@@ -189,25 +218,39 @@ func assertionFromElementNoNSCheck(el *xmltree.Element) (*Assertion, error) {
 		ID:           el.SelectAttrValue("ID", ""),
 		IssueInstant: issueInstant,
 	}
-	for _, child := range el.ChildElements() {
-		switch child.Tag {
-		case "Issuer":
-			assertion.Issuer = issuerFromElement(child)
-		case "Signature":
-			assertion.Signature = &Signature{SignatureDocument: innerXML(child)}
-		case "Subject":
-			assertion.Subject = subjectFromElement(child)
-		case "Conditions":
-			assertion.Conditions = conditionsFromElement(child)
-		case "AttributeStatement":
-			assertion.AttributeStatements = append(assertion.AttributeStatements,
-				*attributeStatementFromElement(child))
-		case "AuthnStatement":
-			authn, err := authnStatementFromElement(child)
-			if err != nil {
-				return nil, err
-			}
-			assertion.AuthnStatement = authn
+	if issuerEl, err := singleChild(el, "Issuer"); err != nil {
+		return nil, err
+	} else if issuerEl != nil {
+		assertion.Issuer = issuerFromElement(issuerEl)
+	}
+	if sigEl, err := singleChild(el, "Signature"); err != nil {
+		return nil, err
+	} else if sigEl != nil {
+		assertion.Signature = &Signature{SignatureDocument: innerXML(sigEl)}
+	}
+	if subjectEl, err := singleChild(el, "Subject"); err != nil {
+		return nil, err
+	} else if subjectEl != nil {
+		if assertion.Subject, err = subjectFromElement(subjectEl); err != nil {
+			return nil, err
+		}
+	}
+	if condEl, err := singleChild(el, "Conditions"); err != nil {
+		return nil, err
+	} else if condEl != nil {
+		if assertion.Conditions, err = conditionsFromElement(condEl); err != nil {
+			return nil, err
+		}
+	}
+	for _, child := range el.SelectElements("AttributeStatement") {
+		assertion.AttributeStatements = append(assertion.AttributeStatements,
+			*attributeStatementFromElement(child))
+	}
+	if authnEl, err := singleChild(el, "AuthnStatement"); err != nil {
+		return nil, err
+	} else if authnEl != nil {
+		if assertion.AuthnStatement, err = authnStatementFromElement(authnEl); err != nil {
+			return nil, err
 		}
 	}
 	return assertion, nil
@@ -224,15 +267,19 @@ func innerXML(el *xmltree.Element) []byte {
 	return out
 }
 
-func statusFromElement(el *xmltree.Element) *Status {
+func statusFromElement(el *xmltree.Element) (*Status, error) {
 	status := &Status{XMLName: xmlName(ProtocolNamespace, "Status")}
-	if sc := el.SelectLastElement("StatusCode"); sc != nil {
+	sc, err := singleChild(el, "StatusCode")
+	if err != nil {
+		return nil, err
+	}
+	if sc != nil {
 		status.StatusCode = &StatusCode{
 			XMLName: xmlName(ProtocolNamespace, "StatusCode"),
 			Value:   sc.SelectAttrValue("Value", ""),
 		}
 	}
-	return status
+	return status, nil
 }
 
 func issuerFromElement(el *xmltree.Element) *Issuer {
@@ -242,22 +289,33 @@ func issuerFromElement(el *xmltree.Element) *Issuer {
 	}
 }
 
-func subjectFromElement(el *xmltree.Element) *Subject {
+func subjectFromElement(el *xmltree.Element) (*Subject, error) {
 	subject := &Subject{XMLName: xmlName(AssertionNamespace, "Subject")}
-	if nameID := el.SelectLastElement("NameID"); nameID != nil {
+	nameID, err := singleChild(el, "NameID")
+	if err != nil {
+		return nil, err
+	}
+	if nameID != nil {
 		subject.NameID = &NameID{
 			XMLName: xmlName(AssertionNamespace, "NameID"),
 			Format:  nameID.SelectAttrValue("Format", ""),
 			Value:   nameID.Text(),
 		}
 	}
-	if sc := el.SelectLastElement("SubjectConfirmation"); sc != nil {
-		subject.SubjectConfirmation = &SubjectConfirmation{
+	// SubjectConfirmation is repeatable per the SAML schema (e.g. bearer and
+	// holder-of-key together); model all of them. SubjectConfirmationData,
+	// however, is at most one per confirmation.
+	for _, sc := range el.SelectElements("SubjectConfirmation") {
+		confirmation := SubjectConfirmation{
 			XMLName: xmlName(AssertionNamespace, "SubjectConfirmation"),
 			Method:  sc.SelectAttrValue("Method", ""),
 		}
-		if scd := sc.SelectLastElement("SubjectConfirmationData"); scd != nil {
-			subject.SubjectConfirmation.SubjectConfirmationData = &SubjectConfirmationData{
+		scd, err := singleChild(sc, "SubjectConfirmationData")
+		if err != nil {
+			return nil, err
+		}
+		if scd != nil {
+			confirmation.SubjectConfirmationData = &SubjectConfirmationData{
 				XMLName:      xmlName(AssertionNamespace, "SubjectConfirmationData"),
 				NotBefore:    scd.SelectAttrValue("NotBefore", ""),
 				NotOnOrAfter: scd.SelectAttrValue("NotOnOrAfter", ""),
@@ -265,44 +323,52 @@ func subjectFromElement(el *xmltree.Element) *Subject {
 				InResponseTo: scd.SelectAttrValue("InResponseTo", ""),
 			}
 		}
+		subject.SubjectConfirmations = append(subject.SubjectConfirmations, confirmation)
 	}
-	return subject
+	return subject, nil
 }
 
-func conditionsFromElement(el *xmltree.Element) *Conditions {
+func conditionsFromElement(el *xmltree.Element) (*Conditions, error) {
 	conditions := &Conditions{
 		XMLName:      xmlName(AssertionNamespace, "Conditions"),
 		NotBefore:    el.SelectAttrValue("NotBefore", ""),
 		NotOnOrAfter: el.SelectAttrValue("NotOnOrAfter", ""),
 	}
-	for _, child := range el.ChildElements() {
-		switch child.Tag {
-		case "AudienceRestriction":
-			ar := AudienceRestriction{XMLName: xmlName(AssertionNamespace, "AudienceRestriction")}
-			for _, aud := range child.SelectElements("Audience") {
-				ar.Audiences = append(ar.Audiences, Audience{
-					XMLName: xmlName(AssertionNamespace, "Audience"),
-					Value:   aud.Text(),
-				})
-			}
-			conditions.AudienceRestrictions = append(conditions.AudienceRestrictions, ar)
-		case "OneTimeUse":
-			conditions.OneTimeUse = &OneTimeUse{XMLName: xmlName(AssertionNamespace, "OneTimeUse")}
-		case "ProxyRestriction":
-			pr := &ProxyRestriction{XMLName: xmlName(AssertionNamespace, "ProxyRestriction")}
-			if count := child.SelectAttrValue("Count", ""); count != "" {
-				fmt.Sscanf(count, "%d", &pr.Count)
-			}
-			for _, aud := range child.SelectElements("Audience") {
-				pr.Audience = append(pr.Audience, Audience{
-					XMLName: xmlName(AssertionNamespace, "Audience"),
-					Value:   aud.Text(),
-				})
-			}
-			conditions.ProxyRestriction = pr
+	// AudienceRestriction is repeatable; OneTimeUse and ProxyRestriction are
+	// each at most one.
+	for _, child := range el.SelectElements("AudienceRestriction") {
+		ar := AudienceRestriction{XMLName: xmlName(AssertionNamespace, "AudienceRestriction")}
+		for _, aud := range child.SelectElements("Audience") {
+			ar.Audiences = append(ar.Audiences, Audience{
+				XMLName: xmlName(AssertionNamespace, "Audience"),
+				Value:   aud.Text(),
+			})
 		}
+		conditions.AudienceRestrictions = append(conditions.AudienceRestrictions, ar)
 	}
-	return conditions
+	if otu, err := singleChild(el, "OneTimeUse"); err != nil {
+		return nil, err
+	} else if otu != nil {
+		conditions.OneTimeUse = &OneTimeUse{XMLName: xmlName(AssertionNamespace, "OneTimeUse")}
+	}
+	prEl, err := singleChild(el, "ProxyRestriction")
+	if err != nil {
+		return nil, err
+	}
+	if prEl != nil {
+		pr := &ProxyRestriction{XMLName: xmlName(AssertionNamespace, "ProxyRestriction")}
+		if count := prEl.SelectAttrValue("Count", ""); count != "" {
+			fmt.Sscanf(count, "%d", &pr.Count)
+		}
+		for _, aud := range prEl.SelectElements("Audience") {
+			pr.Audience = append(pr.Audience, Audience{
+				XMLName: xmlName(AssertionNamespace, "Audience"),
+				Value:   aud.Text(),
+			})
+		}
+		conditions.ProxyRestriction = pr
+	}
+	return conditions, nil
 }
 
 func attributeStatementFromElement(el *xmltree.Element) *AttributeStatement {
@@ -341,9 +407,17 @@ func authnStatementFromElement(el *xmltree.Element) (*AuthnStatement, error) {
 		AuthnInstant:        authnInstant,
 		SessionNotOnOrAfter: sessionNotOnOrAfter,
 	}
-	if ac := el.SelectLastElement("AuthnContext"); ac != nil {
+	ac, err := singleChild(el, "AuthnContext")
+	if err != nil {
+		return nil, err
+	}
+	if ac != nil {
 		stmt.AuthnContext = &AuthnContext{XMLName: xmlName(AssertionNamespace, "AuthnContext")}
-		if ref := ac.SelectLastElement("AuthnContextClassRef"); ref != nil {
+		ref, err := singleChild(ac, "AuthnContextClassRef")
+		if err != nil {
+			return nil, err
+		}
+		if ref != nil {
 			stmt.AuthnContext.AuthnContextClassRef = &AuthnContextClassRef{
 				XMLName: xmlName(AssertionNamespace, "AuthnContextClassRef"),
 				Value:   ref.Text(),
@@ -366,8 +440,10 @@ func UnverifiedBaseResponseFromElement(el *xmltree.Element) (*UnverifiedBaseResp
 		Destination:  el.SelectAttrValue("Destination", ""),
 		Version:      el.SelectAttrValue("Version", ""),
 	}
-	if issuer := el.SelectLastElement("Issuer"); issuer != nil {
-		resp.Issuer = issuerFromElement(issuer)
+	if issuerEl, err := singleChild(el, "Issuer"); err != nil {
+		return nil, err
+	} else if issuerEl != nil {
+		resp.Issuer = issuerFromElement(issuerEl)
 	}
 	seen := make(map[string]bool)
 	for _, assertion := range el.SelectElements("Assertion") {

@@ -102,9 +102,12 @@ type Assertion struct {
 
 // Subject represents a saml:Subject element.
 type Subject struct {
-	XMLName             xml.Name             `xml:"urn:oasis:names:tc:SAML:2.0:assertion Subject"`
-	NameID              *NameID              `xml:"NameID"`
-	SubjectConfirmation *SubjectConfirmation `xml:"SubjectConfirmation"`
+	XMLName xml.Name `xml:"urn:oasis:names:tc:SAML:2.0:assertion Subject"`
+	NameID  *NameID  `xml:"NameID"`
+	// SubjectConfirmations holds every saml:SubjectConfirmation. The SAML
+	// schema permits more than one (e.g. bearer alongside holder-of-key); a
+	// subject is confirmed if at least one uses a method the SP accepts.
+	SubjectConfirmations []SubjectConfirmation `xml:"SubjectConfirmation"`
 }
 
 // AuthnContext represents a saml:AuthnContext element.

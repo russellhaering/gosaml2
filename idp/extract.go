@@ -40,10 +40,18 @@ func receivedAuthnRequestFromElement(el *xmltree.Element) (*ReceivedAuthnRequest
 		ForceAuthn:                    el.SelectAttrValue("ForceAuthn", ""),
 		IsPassive:                     el.SelectAttrValue("IsPassive", ""),
 	}
-	if issuer := el.SelectLastElement("Issuer"); issuer != nil {
+	issuer, err := el.SingleElement("Issuer")
+	if err != nil {
+		return nil, err
+	}
+	if issuer != nil {
 		req.Issuer = issuer.Text()
 	}
-	if nip := el.SelectLastElement("NameIDPolicy"); nip != nil {
+	nip, err := el.SingleElement("NameIDPolicy")
+	if err != nil {
+		return nil, err
+	}
+	if nip != nil {
 		req.NameIDPolicy = &NameIDPolicy{
 			XMLName:     xml.Name{Space: saml2.SAMLProtocolNamespace, Local: "NameIDPolicy"},
 			AllowCreate: nip.SelectAttrValue("AllowCreate", ""),
@@ -66,14 +74,26 @@ func receivedLogoutRequestFromElement(el *xmltree.Element) (*ReceivedLogoutReque
 		IssueInstant: el.SelectAttrValue("IssueInstant", ""),
 		Destination:  el.SelectAttrValue("Destination", ""),
 	}
-	if issuer := el.SelectLastElement("Issuer"); issuer != nil {
+	issuer, err := el.SingleElement("Issuer")
+	if err != nil {
+		return nil, err
+	}
+	if issuer != nil {
 		req.Issuer = issuer.Text()
 	}
-	if nameID := el.SelectLastElement("NameID"); nameID != nil {
+	nameID, err := el.SingleElement("NameID")
+	if err != nil {
+		return nil, err
+	}
+	if nameID != nil {
 		req.NameID.Format = nameID.SelectAttrValue("Format", "")
 		req.NameID.Value = nameID.Text()
 	}
-	if si := el.SelectLastElement("SessionIndex"); si != nil {
+	si, err := el.SingleElement("SessionIndex")
+	if err != nil {
+		return nil, err
+	}
+	if si != nil {
 		req.SessionIndex = si.Text()
 	}
 	return req, nil

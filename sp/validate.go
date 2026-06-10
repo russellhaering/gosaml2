@@ -193,63 +193,29 @@ func (sp *ServiceProvider) Validate(response *types.Response) error {
 			return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "Subject"}
 		}
 
-		subjectConfirmation := subject.SubjectConfirmation
-		if subjectConfirmation == nil {
+		if len(subject.SubjectConfirmations) == 0 {
 			return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "SubjectConfirmation"}
 		}
 
-		if subjectConfirmation.Method != SubjMethodBearer {
-			return &saml2.ValidationError{
-				Reason: saml2.ErrMalformed,
-				Detail: fmt.Sprintf("unsupported SubjectConfirmation method %s", subjectConfirmation.Method),
-			}
-		}
-
-		subjectConfirmationData := subjectConfirmation.SubjectConfirmationData
-		if subjectConfirmationData == nil {
-			return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "SubjectConfirmationData"}
-		}
-
-		if subjectConfirmationData.Recipient != sp.ACSURL {
-			return &saml2.ValidationError{
-				Reason: saml2.ErrBadRecipient,
-				Detail: fmt.Sprintf("expected %s, got %s", sp.ACSURL, subjectConfirmationData.Recipient),
-			}
-		}
-
-		if subjectConfirmationData.NotBefore != "" {
-			notBefore, err := time.Parse(time.RFC3339, subjectConfirmationData.NotBefore)
-			if err != nil {
-				return &saml2.ValidationError{
-					Reason: saml2.ErrMalformed,
-					Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotBefore %q as time", subjectConfirmationData.NotBefore),
+		// The SAML schema permits multiple SubjectConfirmations; the subject
+		// is confirmed if at least one is a valid bearer confirmation. Try
+		// each and accept on the first that validates; if none does, surface
+		// the first failure (identical to the old single-confirmation error
+		// for the common one-confirmation case).
+		var confirmationErr error
+		confirmed := false
+		for i := range subject.SubjectConfirmations {
+			if err := sp.validateBearerConfirmation(&subject.SubjectConfirmations[i], now, skew); err != nil {
+				if confirmationErr == nil {
+					confirmationErr = err
 				}
+				continue
 			}
-			if now.Add(skew).Before(notBefore) {
-				return &saml2.ValidationError{
-					Reason: saml2.ErrNotYetValid,
-					Detail: fmt.Sprintf("SubjectConfirmationData.NotBefore %s, now %s", subjectConfirmationData.NotBefore, now.Format(time.RFC3339)),
-				}
-			}
+			confirmed = true
+			break
 		}
-
-		if subjectConfirmationData.NotOnOrAfter == "" {
-			return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "NotOnOrAfter attribute on SubjectConfirmationData"}
-		}
-
-		notOnOrAfter, err := time.Parse(time.RFC3339, subjectConfirmationData.NotOnOrAfter)
-		if err != nil {
-			return &saml2.ValidationError{
-				Reason: saml2.ErrMalformed,
-				Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotOnOrAfter %q as time", subjectConfirmationData.NotOnOrAfter),
-			}
-		}
-
-		if now.Add(-skew).After(notOnOrAfter) {
-			return &saml2.ValidationError{
-				Reason: saml2.ErrExpired,
-				Detail: fmt.Sprintf("NotOnOrAfter %s, now %s", subjectConfirmationData.NotOnOrAfter, now.Format(time.RFC3339)),
-			}
+		if !confirmed {
+			return confirmationErr
 		}
 
 		// Enforce the assertion's Conditions (validity window + audience) for
@@ -257,6 +223,69 @@ func (sp *ServiceProvider) Validate(response *types.Response) error {
 		// RetrieveAssertionInfo.
 		if err := sp.validateAssertionConditions(&assertion); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// validateBearerConfirmation checks a single SubjectConfirmation as a bearer
+// confirmation: the method must be bearer, and the SubjectConfirmationData
+// must name this SP as Recipient and fall within its validity window. It
+// returns nil when the confirmation is valid. The caller accepts an assertion
+// if any of its confirmations validates.
+func (sp *ServiceProvider) validateBearerConfirmation(sc *types.SubjectConfirmation, now time.Time, skew time.Duration) error {
+	if sc.Method != SubjMethodBearer {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrMalformed,
+			Detail: fmt.Sprintf("unsupported SubjectConfirmation method %s", sc.Method),
+		}
+	}
+
+	scd := sc.SubjectConfirmationData
+	if scd == nil {
+		return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "SubjectConfirmationData"}
+	}
+
+	if scd.Recipient != sp.ACSURL {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrBadRecipient,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.ACSURL, scd.Recipient),
+		}
+	}
+
+	if scd.NotBefore != "" {
+		notBefore, err := time.Parse(time.RFC3339, scd.NotBefore)
+		if err != nil {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrMalformed,
+				Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotBefore %q as time", scd.NotBefore),
+			}
+		}
+		if now.Add(skew).Before(notBefore) {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrNotYetValid,
+				Detail: fmt.Sprintf("SubjectConfirmationData.NotBefore %s, now %s", scd.NotBefore, now.Format(time.RFC3339)),
+			}
+		}
+	}
+
+	if scd.NotOnOrAfter == "" {
+		return &saml2.ValidationError{Reason: saml2.ErrMissingElement, Detail: "NotOnOrAfter attribute on SubjectConfirmationData"}
+	}
+
+	notOnOrAfter, err := time.Parse(time.RFC3339, scd.NotOnOrAfter)
+	if err != nil {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrMalformed,
+			Detail: fmt.Sprintf("cannot parse SubjectConfirmationData.NotOnOrAfter %q as time", scd.NotOnOrAfter),
+		}
+	}
+
+	if now.Add(-skew).After(notOnOrAfter) {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrExpired,
+			Detail: fmt.Sprintf("NotOnOrAfter %s, now %s", scd.NotOnOrAfter, now.Format(time.RFC3339)),
 		}
 	}
 
@@ -370,17 +399,21 @@ func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *t
 	}
 
 	for _, assertion := range response.Assertions {
-		if assertion.Subject == nil || assertion.Subject.SubjectConfirmation == nil {
+		if assertion.Subject == nil {
 			continue
 		}
-		scd := assertion.Subject.SubjectConfirmation.SubjectConfirmationData
-		if scd == nil {
-			continue
-		}
-		if scd.InResponseTo != "" && scd.InResponseTo != inResponseTo {
-			return &saml2.ValidationError{
-				Reason: saml2.ErrReplay,
-				Detail: fmt.Sprintf("SubjectConfirmationData.InResponseTo %s does not match Response.InResponseTo %s", scd.InResponseTo, inResponseTo),
+		// Any SubjectConfirmationData that names an InResponseTo must match
+		// our request: a mismatch on any confirmation is a replay signal.
+		for i := range assertion.Subject.SubjectConfirmations {
+			scd := assertion.Subject.SubjectConfirmations[i].SubjectConfirmationData
+			if scd == nil {
+				continue
+			}
+			if scd.InResponseTo != "" && scd.InResponseTo != inResponseTo {
+				return &saml2.ValidationError{
+					Reason: saml2.ErrReplay,
+					Detail: fmt.Sprintf("SubjectConfirmationData.InResponseTo %s does not match Response.InResponseTo %s", scd.InResponseTo, inResponseTo),
+				}
 			}
 		}
 	}

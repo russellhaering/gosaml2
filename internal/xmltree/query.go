@@ -14,7 +14,25 @@
 
 package xmltree
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// SingleElement returns the unique direct child element with the given tag,
+// erroring if more than one exists. Callers use it to reject documents that
+// repeat an element the schema permits at most once, rather than silently
+// choosing one. Returns nil (no error) when the element is absent.
+func (e *Element) SingleElement(tag string) (*Element, error) {
+	matches := e.SelectElements(tag)
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("xmltree: %d <%s> elements where at most one is allowed", len(matches), tag)
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+	return matches[0], nil
+}
 
 // FindElement / FindElements implement the small path-query subset that
 // gosaml2's tests use to point at elements inside built documents:

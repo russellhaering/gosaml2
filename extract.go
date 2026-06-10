@@ -50,13 +50,21 @@ func LogoutRequestFromElement(el *xmltree.Element) (*LogoutRequest, error) {
 		req.IssueInstant = ts
 	}
 
-	if issuer := el.SelectLastElement("Issuer"); issuer != nil {
+	issuer, err := el.SingleElement("Issuer")
+	if err != nil {
+		return nil, err
+	}
+	if issuer != nil {
 		req.Issuer = &types.Issuer{
 			XMLName: xml.Name{Space: SAMLAssertionNamespace, Local: "Issuer"},
 			Value:   issuer.Text(),
 		}
 	}
-	if nameID := el.SelectLastElement("NameID"); nameID != nil {
+	nameID, err := el.SingleElement("NameID")
+	if err != nil {
+		return nil, err
+	}
+	if nameID != nil {
 		req.NameID = &types.NameID{
 			XMLName: xml.Name{Space: SAMLAssertionNamespace, Local: "NameID"},
 			Format:  nameID.SelectAttrValue("Format", ""),
