@@ -15,7 +15,6 @@
 package sp
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/tls"
@@ -26,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -189,7 +187,7 @@ func TestCompressedResponse(t *testing.T) {
 }
 
 func TestDecodeColonsInLocalNames(t *testing.T) {
-	if rtvalidator.Validate(bytes.NewReader([]byte(`<x::Root/>`))) == nil {
+	if strictParseErr("<x::Root/>") == nil {
 		t.Skip()
 	}
 
@@ -198,7 +196,7 @@ func TestDecodeColonsInLocalNames(t *testing.T) {
 }
 
 func TestDecodeDoubleColonInjectionAttackResponse(t *testing.T) {
-	if rtvalidator.Validate(bytes.NewReader([]byte(`<x::Root/>`))) == nil {
+	if strictParseErr("<x::Root/>") == nil {
 		t.Skip()
 	}
 

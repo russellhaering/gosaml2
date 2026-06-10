@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	rtvalidator "github.com/mattermost/xml-roundtrip-validator"
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 	"github.com/russellhaering/gosaml2/v2/types"
@@ -149,18 +148,17 @@ func makeLogoutRequestXML(issuer, destination, nameID string) string {
 }
 
 // ===========================================================================
-// VULNERABILITY 1: Missing xml-roundtrip-validator in redirect binding
+// REGRESSION: redirect binding rejects parser-differential payloads
 //
-// parseResponse() (used by POST binding) runs rtvalidator.Validate() to
-// block Go encoding/xml parser differential attacks (CVE-2020-29509 class).
-// The redirect binding methods call xml.Unmarshal directly WITHOUT running
-// the validator. This is a critical gap.
+// Historically the POST binding ran xml-roundtrip-validator while the
+// redirect binding called xml.Unmarshal directly, creating a
+// CVE-2020-29509-class gap. Both bindings now route through the strict
+// parser (xmltree.Parse), so both reject these payloads identically.
 // ===========================================================================
 
-// TestVuln_RedirectLogoutResponse_MissingRTValidator demonstrates that the
-// redirect binding accepts XML payloads containing constructs that the
-// xml-roundtrip-validator would reject. The POST binding correctly rejects
-// these same payloads via parseResponse().
+// TestVuln_RedirectLogoutResponse_MissingRTValidator confirms the redirect
+// binding rejects XML payloads containing parser-differential constructs,
+// matching the POST binding.
 func TestVuln_RedirectLogoutResponse_MissingRTValidator(t *testing.T) {
 	sp, key := redirectTestSP(t)
 
@@ -174,14 +172,8 @@ func TestVuln_RedirectLogoutResponse_MissingRTValidator(t *testing.T) {
 		`<x::ExtraElement>attack</x::ExtraElement>` +
 		`</samlp:LogoutResponse>`
 
-	rtErr := rtvalidator.Validate(bytes.NewReader([]byte(maliciousXML)))
-
-	// If the go/xml version has been fixed and rtvalidator passes, skip.
-	if rtErr == nil {
-		t.Skip("rtvalidator does not flag this input on this Go version; parser may be fixed")
-	}
-
-	t.Logf("rtvalidator correctly rejects this payload: %v", rtErr)
+	require.Error(t, strictParseErr(maliciousXML),
+		"strict parser must reject the double-colon payload")
 
 	// Verify that the POST binding (parseResponse) rejects it.
 	_, _, postErr := parseResponse([]byte(maliciousXML), 0)
@@ -199,17 +191,8 @@ func TestVuln_RedirectLogoutResponse_MissingRTValidator(t *testing.T) {
 		context.Background(), encoded, "", sigAlg, sig,
 	)
 
-	// SECURITY FINDING: If this does NOT error, the redirect binding is
-	// vulnerable to parser differential attacks that the POST binding
-	// correctly blocks.
-	if redirectErr == nil {
-		t.Error("SECURITY VULNERABILITY: Redirect binding accepted XML that rtvalidator rejects. " +
-			"The redirect path (ValidateEncodedLogoutResponseRedirect) does NOT run " +
-			"xml-roundtrip-validator, unlike the POST path (parseResponse). " +
-			"This enables CVE-2020-29509 class parser differential attacks.")
-	} else {
-		t.Logf("Redirect binding also rejected (good): %v", redirectErr)
-	}
+	require.Error(t, redirectErr,
+		"redirect binding must reject parser-differential XML, same as POST")
 }
 
 // TestVuln_RedirectLogoutRequest_MissingRTValidator — same as above but for LogoutRequest.
@@ -222,10 +205,8 @@ func TestVuln_RedirectLogoutRequest_MissingRTValidator(t *testing.T) {
 		`<x::ExtraElement>attack</x::ExtraElement>` +
 		`</samlp:LogoutRequest>`
 
-	rtErr := rtvalidator.Validate(bytes.NewReader([]byte(maliciousXML)))
-	if rtErr == nil {
-		t.Skip("rtvalidator does not flag this input on this Go version")
-	}
+	require.Error(t, strictParseErr(maliciousXML),
+		"strict parser must reject the double-colon payload")
 
 	// POST binding rejects:
 	_, _, postErr := parseResponse([]byte(maliciousXML), 0)
@@ -241,12 +222,8 @@ func TestVuln_RedirectLogoutRequest_MissingRTValidator(t *testing.T) {
 		context.Background(), encoded, "", sigAlg, sig,
 	)
 
-	if redirectErr == nil {
-		t.Error("SECURITY VULNERABILITY: Redirect LogoutRequest binding accepted XML that " +
-			"rtvalidator rejects. Missing xml-roundtrip-validator in redirect path.")
-	} else {
-		t.Logf("Redirect binding also rejected (good): %v", redirectErr)
-	}
+	require.Error(t, redirectErr,
+		"redirect LogoutRequest binding must reject parser-differential XML")
 }
 
 // TestVuln_Redirect_CommentInjection tests a realistic comment-injection
@@ -606,26 +583,16 @@ func TestVuln_RedirectVsPost_RTValidatorGap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Check if rtvalidator flags this
-			rtErr := rtvalidator.Validate(bytes.NewReader([]byte(tc.xml)))
-			if rtErr == nil {
-				t.Skipf("rtvalidator does not flag %q on this Go version", tc.name)
-			}
+			// The strict parser is the single validation gate both the POST
+			// and redirect bindings now route through, so the differential
+			// this test originally exposed is structurally impossible: both
+			// reject the payload, and the redirect path no longer touches
+			// encoding/xml at all.
+			require.Error(t, strictParseErr(tc.xml),
+				"strict parser must reject the malicious payload")
 
-			// POST binding: should reject via parseResponse
 			_, _, postErr := parseResponse([]byte(tc.xml), 0)
-
-			// Redirect binding: direct xml.Unmarshal
-			var resp types.LogoutResponse
-			redirectErr := xml.Unmarshal([]byte(tc.xml), &resp)
-
-			t.Logf("POST binding error: %v", postErr)
-			t.Logf("Redirect xml.Unmarshal error: %v", redirectErr)
-
-			if postErr != nil && redirectErr == nil {
-				t.Errorf("SECURITY GAP: POST binding rejects %q but Redirect binding's "+
-					"xml.Unmarshal accepts it. This is the rtvalidator gap.", tc.name)
-			}
+			require.Error(t, postErr, "POST binding must reject the payload")
 		})
 	}
 }

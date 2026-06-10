@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/russellhaering/gosaml2/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/russellhaering/gosaml2/actions/workflows/test.yml?query=branch%3Amain)
 [![GoDoc](https://pkg.go.dev/badge/github.com/russellhaering/gosaml2/v2)](https://pkg.go.dev/github.com/russellhaering/gosaml2/v2)
 
-SAML 2.0 library for Go with both **Service Provider** and **Identity Provider** support. Built on [etree](https://github.com/beevik/etree) and a vendored pure-Go XML digital signatures implementation.
+SAML 2.0 library for Go with both **Service Provider** and **Identity Provider** support. Built on a purpose-built strict XML parser and a vendored pure-Go XML digital signatures implementation — no general-purpose XML library is used to parse attacker-reachable input. See [SECURITY.md](SECURITY.md) for the parser's accepted profile and the vulnerability classes it eliminates.
 
 ## Features
 
@@ -14,7 +14,7 @@ SAML 2.0 library for Go with both **Service Provider** and **Identity Provider**
 - **Encryption**: AES-GCM and AES-CBC assertion encryption/decryption
 - **HTTP bindings**: HTTP-POST and HTTP-Redirect with proper query-string signatures
 - **Metadata parsing**: `ParseEntityDescriptor` for configuring SP or IdP from partner metadata XML
-- **Comprehensive test suite**: 335 security tests covering signature validation, replay attacks, XML wrapping, and more
+- **Comprehensive test suite**: hundreds of security tests covering strict XML parsing, signature validation, replay attacks, XML wrapping, and more
 
 ## Installation
 
