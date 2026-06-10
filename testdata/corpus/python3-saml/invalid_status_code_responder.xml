@@ -1,0 +1,10 @@
+<samlp:Response
+xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+Consent="urn:oasis:names:tc:SAML:2.0:consent:unspecified" Destination="
+https://example.com/opensso/Consumer/metaAlias/sp"
+ID="_a71bbf22-90a9-4a96-b9ce-ea5ba30aee65"
+InResponseTo="s21203b27d38d0a07ea2c713e7a0045cf8d1e32811"
+IssueInstant="2011-08-24T16:36:30.365Z" Version="2.0"><Issuer
+xmlns="urn:oasis:names:tc:SAML:2.0:assertion">
+http://idp.example.com/adfs/services/trust</Issuer><samlp:Status><samlp:StatusCode
+Value="urn:oasis:names:tc:SAML:2.0:status:Responder"/></samlp:Status></samlp:Response>

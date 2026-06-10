@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="pfxd594347d-495f-b8d1-0ee2-41cfda14dd35" Version="2.0" IssueInstant="2015-01-02T22:48:48Z" Destination="http://localhost:9001/v1/users/authorize/saml" Consent="urn:oasis:names:tc:SAML:2.0:consent:unspecified" InResponseTo="_ed915a40-74fb-0132-5b16-48e0eb14a1c7">
+  <Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">http://example.com</Issuer>
+  <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+		<SignedInfo> <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+			<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+				<Reference URI="">
+					<Transforms>
+						<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+					</Transforms>
+					<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+					<DigestValue>Z9yIacgd7vPsGnK6X/UWCXYXEko=</DigestValue>
+				</Reference>
+		</SignedInfo>
+		<SignatureValue>WE/U93+sgEgkyXLr254WBtS3PULtypWx1YXbTFK4fAtAOOxIp5locjr3vvqUu2WV
+rrx1F6uu298QQWRlWTz6/uIQVudiMwgHB0RbFVziZzudr2ZML5J/jY4h3kFUfPSi
+1U6PdgLTq/kduB0yjbzES/9ch3UN21GmAmHErQ+FKn8=</SignatureValue>
+	</Signature>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+  <Assertion xmlns="urn:oasis:names:tc:SAML:2.0:assertion" ID="_700ac320-74ff-0132-5b14-48e0eb14a1c7" IssueInstant="2015-01-02T22:48:48Z" Version="2.0">
+    <Issuer>http://example.com</Issuer>
+    <Subject>
+      <NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">saml@user.com</NameID>
+      <SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <SubjectConfirmationData InResponseTo="_ed915a40-74fb-0132-5b16-48e0eb14a1c7" NotOnOrAfter="2038-01-02T22:51:48Z" Recipient="http://localhost:9001/v1/users/authorize/saml"/>
+      </SubjectConfirmation>
+    </Subject>
+    <Conditions NotBefore="2015-01-02T22:48:43Z" NotOnOrAfter="2038-01-02T23:48:48Z">
+      <AudienceRestriction>
+        <Audience>http://localhost:9001/</Audience>
+        <Audience>flat_world</Audience>
+      </AudienceRestriction>
+    </Conditions>
+    <AttributeStatement>
+      <Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress">
+        <AttributeValue>saml@user.com</AttributeValue>
+      </Attribute>
+    </AttributeStatement>
+    <AuthnStatement AuthnInstant="2015-01-02T22:48:48Z" SessionIndex="_700ac320-74ff-0132-5b14-48e0eb14a1c7">
+      <AuthnContext>
+        <AuthnContextClassRef>urn:federation:authentication:windows</AuthnContextClassRef>
+      </AuthnContext>
+    </AuthnStatement>
+  </Assertion>
+</samlp:Response>

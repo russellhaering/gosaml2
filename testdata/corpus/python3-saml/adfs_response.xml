@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_0263a07b-205f-479c-90fc-7495715ecbbf" Version="2.0" IssueInstant="2011-06-22T12:49:30.348Z" Destination="https://someone.example.com/endpoint" Consent="urn:oasis:names:tc:SAML:2.0:consent:unspecified" InResponseTo="_fc4a34b0-7efb-012e-caae-782bcb13bb38">
+  <Issuer xmlns="urn:oasis:names:tc:SAML:2.0:assertion">http://login.example.com/issuer</Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+  <Assertion xmlns="urn:oasis:names:tc:SAML:2.0:assertion" ID="_721b4a5a-d7e1-4861-9754-a9b197b6f9ab" IssueInstant="2011-06-22T12:49:30.348Z" Version="2.0">
+    <Issuer>http://login.example.com/issuer</Issuer>
+    <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+      <ds:SignedInfo>
+        <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+        <ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+        <ds:Reference URI="#_721b4a5a-d7e1-4861-9754-a9b197b6f9ab">
+          <ds:Transforms>
+            <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+            <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+          </ds:Transforms>
+          <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+          <ds:DigestValue>v53wqo4fYDK8UcrOUcOWg2zlJ/cHVumYS0KjrrnVuJk=</ds:DigestValue>
+        </ds:Reference>
+      </ds:SignedInfo>
+      <ds:SignatureValue>Z09pewY7zFv91hn90lx0EEnlMGNL9zUJZMxIR6qofLZOZMlTnXN5zFsf+1XPPIYZLw5lCGjjtmdNlxdv72zNFlMTNRqZ7IiIwvk5GRM3zvAWsNOY6dB4c5qje4RHq/frJGBgN/geVxVmn3LZd5ZckuhuS1s7FJAoLUcZELJ/ncgRDdgjAE+r8GtaNku4UTBRGAftl0PWmAS07lle6laSUPRBdBDNlVSzGAPOyXP16eI19bonYLhjb8uhcCtmgbrranJUTlYsXmrxohcFun+yfqTWWwix9mRQtAtAE9ngIE0VDdL/kxTt6KNoPzwkej5VxSLFAgq2u3rZMcuYGZu1HQ==</ds:SignatureValue>
+      <KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
+        <ds:X509Data>
+          <ds:X509Certificate>MIIC5DCCAcygAwIBAgIQNBTkt7qicapKNsIXMck8xTANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNBREZTIFNpZ25pbmcgLSBsb2dpbi5kcmVzb3VyY2VzLmNvbTAeFw0xMTA2MTAxODU2MDFaFw0xMjA2MDkxODU2MDFaMC4xLDAqBgNVBAMTI0FERlMgU2lnbmluZyAtIGxvZ2luLmRyZXNvdXJjZXMuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq7AMDGnBHIGwt9KPtLD0M0EXGuZnWGAmb5p2FDcFztJHOI8WYPqeRphzVSEkgXtPIh5Jx3elS6hVn7HVj2WvzID6jpB45o8iDk8PWgi14fxGWE5o1PiB8Xre1c5vs2IG5aPWID5uC6bD0XgnL95MgO9HGPPSQRFnujKNqzFQdtoBJIJawAeD/i/xs7FjFk9x1fA0EyLCnh+eaffIporb+1xxW2D6D3mRTgfHxXrWR8W4jHniggZhqdDhUxvEaiQFTbIN2D+zyB7aQwQCHSFperBc+R5FllgnGAa+sjb6g1FXbehmEGwSaxwRZIDAhjIQma5wX5yWJDxFzR4psTeFRQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBzAPC2QQ+UtvkqQY2o/joHGtnuLyfkwd764DcGDlcYKVKEaDCvnJx3gywRUODERhDhufJbwr7OoXVdhw70NtTEMugJFr29Sgxn3CiTiyPFSDGjx911abKxtJSBInvI00AjX+VlIZhoy83YYORXFcyb+Uvh2r2SZU3ACNp8M3cZR6J1EDBhPKYwEEUk8NTMmZL3vWjqLZWTyTThTrQF/lH9PClw9O29uwifiq2XzSySr3/PHxzpMRkL9c4Ei45QDmagerAURweq5pUW8C3UAUjLLVcXk/2pevZEN70Ygt5p2fAgs84OJhDRKiHGpariEmj4LsJGZsp7qFJpn1+MijRe</ds:X509Certificate>
+        </ds:X509Data>
+      </KeyInfo>
+    </ds:Signature>
+    <Subject>
+      <NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">hello@example.com</NameID>
+      <SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <SubjectConfirmationData InResponseTo="_fc4a34b0-7efb-012e-caae-782bcb13bb38" NotOnOrAfter="2011-06-22T12:54:30.348Z" Recipient="https://someone.example.com/endpoint"/>
+      </SubjectConfirmation>
+    </Subject>
+    <Conditions NotBefore="2011-06-22T12:49:30.332Z" NotOnOrAfter="2011-06-22T13:49:30.332Z">
+      <AudienceRestriction>
+        <Audience>example.com</Audience>
+      </AudienceRestriction>
+    </Conditions>
+    <AuthnStatement AuthnInstant="2011-06-22T12:49:30.112Z" SessionIndex="_721b4a5a-d7e1-4861-9754-a9b197b6f9ab">
+      <AuthnContext>
+        <AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</AuthnContextClassRef>
+      </AuthnContext>
+    </AuthnStatement>
+  </Assertion>
+</samlp:Response>
