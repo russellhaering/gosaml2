@@ -1069,17 +1069,9 @@ func TestSecurityBinding_Unsolicited_NilRequestTracker(t *testing.T) {
 	)
 
 	signed := signResponse(t, unsolicitedResp, sp)
-	resp, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(signed))
-
-	// With nil RequestTracker, validateInResponseTo returns nil immediately,
-	// effectively allowing any response.
-	if err == nil {
-		t.Logf("WARNING: With nil RequestTracker, unsolicited response is accepted. "+
-			"This means InResponseTo/replay checking is completely disabled. "+
-			"Applications SHOULD always set a RequestTracker. Response: %+v", resp)
-	} else {
-		t.Logf("Rejected despite nil RequestTracker: %v", err)
-	}
+	_, err := sp.ValidateEncodedResponse(context.Background(), encodeResponse(signed))
+	require.Error(t, err, "unsolicited response should be rejected when AllowIDPInitiated=false even without a RequestTracker")
+	require.ErrorIs(t, err, saml2.ErrReplay)
 }
 
 // Test 32: SubjectConfirmationData InResponseTo mismatch

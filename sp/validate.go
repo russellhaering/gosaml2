@@ -379,6 +379,12 @@ func (sp *ServiceProvider) ValidateDecodedLogoutRequest(request *saml2.LogoutReq
 // configured RequestTracker.
 func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *types.Response) error {
 	if sp.RequestTracker == nil {
+		if response.InResponseTo == "" && !sp.AllowIDPInitiated {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrReplay,
+				Detail: "missing InResponseTo and IdP-initiated SSO is not allowed",
+			}
+		}
 		return nil
 	}
 
@@ -386,6 +392,23 @@ func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *t
 
 	if inResponseTo == "" {
 		if sp.AllowIDPInitiated {
+			for _, assertion := range response.Assertions {
+				if assertion.Subject == nil {
+					continue
+				}
+				for i := range assertion.Subject.SubjectConfirmations {
+					sc := &assertion.Subject.SubjectConfirmations[i]
+					if sc.Method != SubjMethodBearer || sc.SubjectConfirmationData == nil {
+						continue
+					}
+					if sc.SubjectConfirmationData.InResponseTo != "" {
+						return &saml2.ValidationError{
+							Reason: saml2.ErrReplay,
+							Detail: "unsolicited response contains SubjectConfirmationData.InResponseTo",
+						}
+					}
+				}
+			}
 			return nil
 		}
 		return &saml2.ValidationError{
@@ -394,21 +417,24 @@ func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *t
 		}
 	}
 
-	if err := sp.RequestTracker.ConsumeRequest(ctx, inResponseTo); err != nil {
-		return err
-	}
-
 	for _, assertion := range response.Assertions {
 		if assertion.Subject == nil {
 			continue
 		}
-		// Any SubjectConfirmationData that names an InResponseTo must match
-		// our request: a mismatch on any confirmation is a replay signal.
 		for i := range assertion.Subject.SubjectConfirmations {
-			scd := assertion.Subject.SubjectConfirmations[i].SubjectConfirmationData
+			sc := &assertion.Subject.SubjectConfirmations[i]
+			scd := sc.SubjectConfirmationData
 			if scd == nil {
 				continue
 			}
+			if sc.Method == SubjMethodBearer && scd.InResponseTo == "" {
+				return &saml2.ValidationError{
+					Reason: saml2.ErrReplay,
+					Detail: fmt.Sprintf("SubjectConfirmationData.InResponseTo is missing for Response.InResponseTo %s", inResponseTo),
+				}
+			}
+			// Any SubjectConfirmationData that names an InResponseTo must match
+			// our request: a mismatch on any confirmation is a replay signal.
 			if scd.InResponseTo != "" && scd.InResponseTo != inResponseTo {
 				return &saml2.ValidationError{
 					Reason: saml2.ErrReplay,
@@ -416,6 +442,10 @@ func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *t
 				}
 			}
 		}
+	}
+
+	if err := sp.RequestTracker.ConsumeRequest(ctx, inResponseTo); err != nil {
+		return err
 	}
 
 	return nil

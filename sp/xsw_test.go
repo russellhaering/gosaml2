@@ -96,6 +96,7 @@ func buildLegitResponse(nameID string) string {
 <saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol"
     Destination="https://sp.example.com/acs"
     ID="_response_1"
+    InResponseTo="_request_1"
     IssueInstant="2025-01-01T00:00:00Z"
     Version="2.0">
   <saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">https://idp.example.com</saml2:Issuer>
@@ -108,7 +109,7 @@ func buildLegitResponse(nameID string) string {
     <saml2:Subject>
       <saml2:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">%s</saml2:NameID>
       <saml2:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
-        <saml2:SubjectConfirmationData NotOnOrAfter="%s" Recipient="https://sp.example.com/acs"/>
+        <saml2:SubjectConfirmationData InResponseTo="_request_1" NotOnOrAfter="%s" Recipient="https://sp.example.com/acs"/>
       </saml2:SubjectConfirmation>
     </saml2:Subject>
     <saml2:Conditions NotBefore="%s" NotOnOrAfter="%s">
@@ -266,7 +267,7 @@ func TestXSW3_UnsignedResponseSignedAssertionIntegrity(t *testing.T) {
 			`<saml2:Subject>`+
 			`<saml2:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">legit@example.com</saml2:NameID>`+
 			`<saml2:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">`+
-			`<saml2:SubjectConfirmationData NotOnOrAfter="%s" Recipient="https://sp.example.com/acs"/>`+
+			`<saml2:SubjectConfirmationData InResponseTo="_request_xsw3" NotOnOrAfter="%s" Recipient="https://sp.example.com/acs"/>`+
 			`</saml2:SubjectConfirmation>`+
 			`</saml2:Subject>`+
 			`<saml2:Conditions NotBefore="%s" NotOnOrAfter="%s">`+
@@ -291,6 +292,7 @@ func TestXSW3_UnsignedResponseSignedAssertionIntegrity(t *testing.T) {
 		`<saml2p:Response xmlns:saml2p="urn:oasis:names:tc:SAML:2.0:protocol"` +
 		` Destination="https://sp.example.com/acs"` +
 		` ID="_response_xsw3"` +
+		` InResponseTo="_request_xsw3"` +
 		` IssueInstant="2025-01-01T00:00:00Z"` +
 		` Version="2.0">` +
 		`<saml2:Issuer xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">https://idp.example.com</saml2:Issuer>` +

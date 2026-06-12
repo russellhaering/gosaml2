@@ -1075,6 +1075,7 @@ func TestTemporal_ClockSkewBoundary(t *testing.T) {
 	// Test exactly at the clock skew boundary.
 	sp, _ := securityTestSP(t)
 	sp.ClockSkew = 30 * time.Second
+	sp.AllowIDPInitiated = true
 
 	now := sp.now()
 

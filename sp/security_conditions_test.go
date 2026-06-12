@@ -615,6 +615,45 @@ func TestSecurityConditions_InResponseToMismatchResponseVsSCD(t *testing.T) {
 	require.ErrorIs(t, err, saml2.ErrReplay)
 }
 
+// Test 24b: Request-correlated responses require bearer SubjectConfirmationData.InResponseTo.
+func TestSecurityConditions_MissingSCDInResponseToRejected(t *testing.T) {
+	sp := setupSPWithTracker(t)
+
+	responseXML := buildCustomResponse(sp, func(s string) string {
+		return strings.Replace(s,
+			`<saml2:SubjectConfirmationData InResponseTo="_request_id_1"`,
+			`<saml2:SubjectConfirmationData`,
+			1)
+	})
+
+	encoded := signAndEncode(t, responseXML, sp)
+	_, err := sp.ValidateEncodedResponse(context.Background(), encoded)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrReplay)
+}
+
+// Test 24c: The unsigned-response/signed-assertion path must not let an
+// attacker bind an old assertion to a fresh Response.InResponseTo wrapper.
+func TestSecurityConditions_SignedAssertionMissingSCDInResponseToRejected(t *testing.T) {
+	sp := setupSPWithTracker(t)
+
+	responseXML := buildCustomResponse(sp, func(s string) string {
+		return strings.Replace(s,
+			`<saml2:SubjectConfirmationData InResponseTo="_request_id_1"`,
+			`<saml2:SubjectConfirmationData`,
+			1)
+	})
+
+	encoded := signAssertionAndEncode(t, responseXML, sp)
+	_, err := sp.ValidateEncodedResponse(context.Background(), encoded)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrReplay)
+
+	// The invalid response should not consume the pending request ID.
+	err = sp.RequestTracker.ConsumeRequest(context.Background(), "_request_id_1")
+	require.NoError(t, err)
+}
+
 // Test 25: InResponseTo present in SCD but empty in Response (IDP-initiated with SCD InResponseTo).
 func TestSecurityConditions_InResponseToPresentInSCDButEmptyInResponse(t *testing.T) {
 	sp, _ := securityTestSP(t)
@@ -650,12 +689,10 @@ func TestSecurityConditions_InResponseToPresentInSCDButEmptyInResponse(t *testin
 		now.Add(-5*time.Minute).Format(time.RFC3339), now.Add(5*time.Minute).Format(time.RFC3339),
 		sp.AudienceURIs[0], now.Format(time.RFC3339))
 
-	// IdP-initiated is allowed and Response has no InResponseTo, so validateInResponseTo
-	// should skip check entirely. SCD.InResponseTo is NOT checked when Response.InResponseTo
-	// is empty and IdP-initiated is allowed.
 	encoded := signAndEncode(t, responseXML, sp)
 	_, err := sp.RetrieveAssertionInfo(context.Background(), encoded)
-	require.NoError(t, err, "IDP-initiated with SCD InResponseTo but empty Response InResponseTo should pass when AllowIDPInitiated is true")
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrReplay)
 }
 
 // ============================================================================
