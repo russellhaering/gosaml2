@@ -423,3 +423,13 @@ func TestSAMLCommentInjection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "phoebe.simon@scaleft.com.evil.com", decodedResponse.Assertions[0].Subject.NameID.Value, "The full, canonacalized NameID should be returned.")
 }
+
+func TestNameIDFormat(t *testing.T) {
+	_, el, err := parseResponse([]byte(rawResponse), 0)
+	require.NoError(t, err)
+	decodedResponse := &types.Response{}
+	err = xmlUnmarshalElement(el, decodedResponse)
+	require.NoError(t, err)
+	require.Equal(t, "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress", decodedResponse.Assertions[0].Subject.NameID.Format)
+	require.Equal(t, "phoebe.simon@scaleft.com", decodedResponse.Assertions[0].Subject.NameID.Value)
+}
