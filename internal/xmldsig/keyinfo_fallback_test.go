@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/assert"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 // When a signature carries no KeyInfo, the verifier tries every trusted

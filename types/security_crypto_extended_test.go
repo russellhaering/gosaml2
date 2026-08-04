@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 // ---------------------------------------------------------------------------

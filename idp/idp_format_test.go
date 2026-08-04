@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/sp"
-	"github.com/stretchr/testify/require"
 )
 
 // idpFormatTestCase defines a test case exercising SAML response parsing for

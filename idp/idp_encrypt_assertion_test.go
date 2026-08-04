@@ -24,9 +24,9 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 // TestEncryptionRoundtrip_GCM tests that an assertion encrypted with AES-256-GCM

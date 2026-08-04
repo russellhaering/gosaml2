@@ -22,7 +22,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 // This suite pins the interop-safe guarantees of AES-CBC decryption:

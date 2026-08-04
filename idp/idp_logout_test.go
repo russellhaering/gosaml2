@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 func buildTestLogoutRequestXML(id, issuer, destination, nameID, sessionIndex string) string {

@@ -23,8 +23,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 // Strict mode (PingFederate-style): an EncryptedAssertion is only ever decrypted

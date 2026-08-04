@@ -35,9 +35,9 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 var cert tls.Certificate

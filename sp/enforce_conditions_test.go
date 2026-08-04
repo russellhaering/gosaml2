@@ -22,7 +22,7 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 // This suite exhaustively exercises the consolidated Conditions/Audience

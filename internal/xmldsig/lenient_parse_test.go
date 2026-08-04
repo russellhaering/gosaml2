@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
-	"github.com/stretchr/testify/require"
 )
 
 // lenientParse is a TEST-ONLY loader for documents the strict parser

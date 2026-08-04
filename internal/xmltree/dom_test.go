@@ -18,8 +18,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/assert"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 func TestDOM_BuildAndSerialize(t *testing.T) {

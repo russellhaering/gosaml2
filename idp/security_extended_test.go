@@ -31,8 +31,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/sp"
-	"github.com/stretchr/testify/require"
 )
 
 // signRedirectParamsIdP signs a redirect binding query string using the given

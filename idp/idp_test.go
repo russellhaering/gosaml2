@@ -24,8 +24,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 var testTime = time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)

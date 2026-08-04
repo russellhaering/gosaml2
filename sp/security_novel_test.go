@@ -35,10 +35,10 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================

@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSign(t *testing.T) {

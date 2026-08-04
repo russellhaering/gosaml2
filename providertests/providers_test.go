@@ -19,8 +19,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/sp"
-	"github.com/stretchr/testify/require"
 )
 
 func fakeClock(t time.Time) func() time.Time {

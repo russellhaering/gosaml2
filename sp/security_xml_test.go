@@ -27,8 +27,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 // samlResponseTemplate builds a complete SAML response XML string with optional

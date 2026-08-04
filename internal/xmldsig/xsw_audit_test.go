@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/assert"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================

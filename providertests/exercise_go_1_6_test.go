@@ -20,8 +20,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/sp"
-	"github.com/stretchr/testify/require"
 )
 
 func ExerciseProviderTestScenarios(t *testing.T, scenarios []ProviderTestScenario) {

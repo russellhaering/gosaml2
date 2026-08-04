@@ -27,8 +27,8 @@ import (
 	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRedirect(t *testing.T) {

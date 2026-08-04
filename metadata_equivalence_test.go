@@ -21,9 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/types"
-	"github.com/stretchr/testify/require"
 )
 
 // The metadata extractor (types/metadata_extract.go) replaces encoding/xml

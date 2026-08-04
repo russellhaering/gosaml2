@@ -25,8 +25,8 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/assert"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 // The corpus under testdata/corpus (see its PROVENANCE.md) is the

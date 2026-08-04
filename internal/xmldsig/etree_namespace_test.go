@@ -3,7 +3,7 @@ package xmldsig
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 )
 
 func TestDefaultNSContextDefaultPrefix(t *testing.T) {
