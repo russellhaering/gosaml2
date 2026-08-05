@@ -74,6 +74,13 @@ type SAMLServiceProvider struct {
 	AllowMissingAttributes  bool
 	Clock                   *dsig.Clock
 
+	// ClockSkew is the tolerance applied to time-based validation of
+	// assertions (the Conditions NotBefore and NotOnOrAfter bounds, and the
+	// SubjectConfirmationData NotOnOrAfter bound) to accommodate clock drift
+	// between the identity provider and this service provider. The zero value
+	// applies no tolerance.
+	ClockSkew time.Duration
+
 	// Required encryption key and default signing key.
 	// Deprecated: Use SetSPKeyStore instead of setting or reading this field.
 	SPKeyStore dsig.X509KeyStore
