@@ -16,11 +16,13 @@ package saml2
 
 import (
 	"bytes"
+	"compress/flate"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"io/ioutil"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,7 +171,7 @@ func TestDecodeColonsInLocalNames(t *testing.T) {
 		t.Skip()
 	}
 
-	_, _, err := parseResponse([]byte(`<x::Root/>`), 0)
+	_, _, err := parseResponse([]byte(`<x::Root/>`), 0, 0)
 	require.Error(t, err)
 }
 
@@ -180,7 +182,7 @@ func TestDecodeDoubleColonInjectionAttackResponse(t *testing.T) {
 		t.Skip()
 	}
 
-	_, _, err := parseResponse([]byte(doubleColonAssertionInjectionAttackResponse), 0)
+	_, _, err := parseResponse([]byte(doubleColonAssertionInjectionAttackResponse), 0, 0)
 	require.Error(t, err)
 }
 
@@ -226,4 +228,62 @@ func TestCompressionBombInput(t *testing.T) {
 
 	_, err = sp.RetrieveAssertionInfo(string(bs))
 	require.Error(t, err, "error validating response: deflated response exceeds maximum size of 2048 bytes")
+}
+
+// tokenBombXML builds a small, well-formed document consisting of n
+// interleaved character-data runs and self-closing elements, which is the
+// pattern that maximizes XML token count relative to byte size.
+func tokenBombXML(n int) string {
+	var b strings.Builder
+	b.WriteString("<Root>")
+	for i := 0; i < n; i++ {
+		b.WriteString("x<a/>")
+	}
+	b.WriteString("</Root>")
+	return b.String()
+}
+
+func deflateBytes(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	fw, err := flate.NewWriter(&buf, flate.DefaultCompression)
+	require.NoError(t, err)
+	_, err = fw.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, fw.Close())
+	return buf.Bytes()
+}
+
+func TestParseResponseTokenLimitRejectsTokenBomb(t *testing.T) {
+	// 20000 repetitions puts the token upper bound well above the default
+	// of 50000, while the deflated payload itself is tiny.
+	compressed := deflateBytes(t, []byte(tokenBombXML(20000)))
+
+	_, _, err := parseResponse(compressed, 0, 0)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "too many XML tokens")
+}
+
+func TestParseResponseTokenLimitAllowsSmallDocument(t *testing.T) {
+	compressed := deflateBytes(t, []byte(tokenBombXML(10)))
+
+	doc, el, err := parseResponse(compressed, 0, 0)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.NotNil(t, el)
+}
+
+func TestParseResponseTokenLimitHonoursExplicitValue(t *testing.T) {
+	// This document's token upper bound comfortably fits under the default
+	// of 50000, but is rejected once a much smaller explicit limit is set.
+	compressed := deflateBytes(t, []byte(tokenBombXML(10)))
+
+	_, _, err := parseResponse(compressed, 0, 10)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "too many XML tokens")
+
+	// A zero value falls back to the default, under which the same document
+	// parses successfully.
+	_, _, err = parseResponse(compressed, 0, 0)
+	require.NoError(t, err)
 }
