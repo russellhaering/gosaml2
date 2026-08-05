@@ -78,6 +78,13 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 		}
 	}
 
+	for _, processor := range sp.AuthNRequestProcessors {
+		err := processor.Process(authnRequest)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	doc := etree.NewDocument()
 
 	// Only POST binding includes <Signature> in <AuthnRequest> (includeSig)
@@ -254,7 +261,7 @@ func (sp *SAMLServiceProvider) buildAuthBodyPostFromDocument(relayState string, 
 	return rv.Bytes(), nil
 }
 
-//BuildAuthBodyPost builds the POST body to be sent to IDP.
+// BuildAuthBodyPost builds the POST body to be sent to IDP.
 func (sp *SAMLServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, error) {
 	var doc *etree.Document
 	var err error
@@ -272,8 +279,8 @@ func (sp *SAMLServiceProvider) BuildAuthBodyPost(relayState string) ([]byte, err
 	return sp.buildAuthBodyPostFromDocument(relayState, doc)
 }
 
-//BuildAuthBodyPostFromDocument builds the POST body to be sent to IDP.
-//It takes the AuthnRequest xml as input.
+// BuildAuthBodyPostFromDocument builds the POST body to be sent to IDP.
+// It takes the AuthnRequest xml as input.
 func (sp *SAMLServiceProvider) BuildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildAuthBodyPostFromDocument(relayState, doc)
 }
@@ -382,8 +389,8 @@ func (sp *SAMLServiceProvider) BuildLogoutRequestDocument(nameID string, session
 	return sp.buildLogoutRequest(true, nameID, sessionIndex)
 }
 
-//BuildLogoutBodyPostFromDocument builds the POST body to be sent to IDP.
-//It takes the LogoutRequest xml as input.
+// BuildLogoutBodyPostFromDocument builds the POST body to be sent to IDP.
+// It takes the LogoutRequest xml as input.
 func (sp *SAMLServiceProvider) BuildLogoutBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	return sp.buildLogoutBodyPostFromDocument(relayState, doc)
 }
@@ -554,4 +561,17 @@ func signatureInputString(samlRequest, relayState, sigAlg string) string {
 		buf.WriteString(url.QueryEscape(k) + "=" + url.QueryEscape(v))
 	}
 	return buf.String()
+}
+
+type AddIdpScoping struct {
+	ProviderId string
+	Name       string
+}
+
+func (a *AddIdpScoping) Process(doc *etree.Element) error {
+	idpList := doc.CreateElement("samlp:Scoping").CreateElement("samlp:IDPList")
+	idpEntry := idpList.CreateElement("samlp:IDPEntry")
+	idpEntry.CreateAttr("ProviderID", a.ProviderId)
+	idpEntry.CreateAttr("Name", a.Name)
+	return nil
 }
