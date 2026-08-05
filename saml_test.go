@@ -240,6 +240,7 @@ func testSAMLServiceProvider(t *testing.T, sp *SAMLServiceProvider) {
 	require.Nil(t, assertionInfo.WarningInfo.ProxyRestriction)
 
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.NameID)
+	require.Equal(t, "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress", assertionInfo.NameIDFormat)
 	require.Equal(t, "phoebe.simon@scaleft.com", assertionInfo.Values.Get("Email"))
 	require.Equal(t, "Phoebe", assertionInfo.Values.Get("FirstName"))
 	require.Equal(t, "Simon", assertionInfo.Values.Get("LastName"))
@@ -425,7 +426,7 @@ func TestSAMLCommentInjection(t *testing.T) {
 }
 
 func TestNameIDFormat(t *testing.T) {
-	_, el, err := parseResponse([]byte(rawResponse), 0)
+	_, el, err := parseResponse([]byte(rawResponse), 0, 0)
 	require.NoError(t, err)
 	decodedResponse := &types.Response{}
 	err = xmlUnmarshalElement(el, decodedResponse)

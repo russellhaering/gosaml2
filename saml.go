@@ -384,6 +384,7 @@ type WarningInfo struct {
 
 type AssertionInfo struct {
 	NameID                     string
+	NameIDFormat               string
 	Values                     Values
 	WarningInfo                *WarningInfo
 	SessionIndex               string
