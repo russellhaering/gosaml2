@@ -54,15 +54,17 @@ var pingFedScenarioWarnings = map[int]scenarioWarnings{}
 var pingFedAtTimes = map[int]string{}
 
 func TestPingFedCasesLocally(t *testing.T) {
-	sp := &saml2.SAMLServiceProvider{
-		IdentityProviderSSOURL:      "https://saml.test.nope:9031/eid/sxpmrhbkzn", // not required for these tests
-		IdentityProviderIssuer:      "https://saml.test.nope:9031/eid/sxpmrhbkzn",
-		AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/hp24dqnpvq",
-		AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/hp24dqnpvq",
-		IDPCertificateStore:         LoadCertificateStore("./testdata/pingfed/idp.signing.cert"),
-		SPKeyStore:                  LoadKeyStore("./testdata/pingfed/sp.encryption.cert", "./testdata/pingfed/sp.encryption.key"),
-		SPSigningKeyStore:           LoadKeyStore("./testdata/pingfed/sp.signing.cert", "./testdata/pingfed/sp.signing.key"),
-		ValidateEncryptionCert:      true,
+	newSP := func() *saml2.SAMLServiceProvider {
+		return &saml2.SAMLServiceProvider{
+			IdentityProviderSSOURL:      "https://saml.test.nope:9031/eid/sxpmrhbkzn", // not required for these tests
+			IdentityProviderIssuer:      "https://saml.test.nope:9031/eid/sxpmrhbkzn",
+			AssertionConsumerServiceURL: "https://saml.test.nope/session/sso/saml/acs/hp24dqnpvq",
+			AudienceURI:                 "https://saml.test.nope/session/sso/saml/spentityid/hp24dqnpvq",
+			IDPCertificateStore:         LoadCertificateStore("./testdata/pingfed/idp.signing.cert"),
+			SPKeyStore:                  LoadKeyStore("./testdata/pingfed/sp.encryption.cert", "./testdata/pingfed/sp.encryption.key"),
+			SPSigningKeyStore:           LoadKeyStore("./testdata/pingfed/sp.signing.cert", "./testdata/pingfed/sp.signing.key"),
+			ValidateEncryptionCert:      true,
+		}
 	}
 
 	scenarios := []ProviderTestScenario{}
@@ -71,7 +73,7 @@ func TestPingFedCasesLocally(t *testing.T) {
 		scenarios = append(scenarios, ProviderTestScenario{
 			ScenarioName:     fmt.Sprintf("Scenario_%02d", idx),
 			Response:         response,
-			ServiceProvider:  spAtTime(sp, getAtTime(idx, pingFedAtTimes), response),
+			ServiceProvider:  spAtTime(newSP, getAtTime(idx, pingFedAtTimes), response),
 			CheckError:       scenarioErrorChecker(idx, pingFedScenarioErrors),
 			CheckWarningInfo: scenarioWarningChecker(idx, pingFedScenarioWarnings),
 		})

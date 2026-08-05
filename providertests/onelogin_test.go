@@ -188,15 +188,17 @@ var oneLoginAtTimes = map[int]string{
 }
 
 func TestOneLoginCasesLocally(t *testing.T) {
-	sp := &saml2.SAMLServiceProvider{
-		IdentityProviderSSOURL:      "https://saml.idp.nope/h9gkjzvb3e", // not required for these tests
-		IdentityProviderIssuer:      "https://saml.idp.nope/h9gkjzvb3e",
-		AssertionConsumerServiceURL: "https://saml.sp.nope/session/sso/saml/acs/rq5jwkvb8z",
-		AudienceURI:                 "https://saml.sp.nope/session/sso/saml/spentityid/rq5jwkvb8z",
-		IDPCertificateStore:         LoadCertificateStore("./testdata/onelogin/idp.signing.cert"),
-		SPKeyStore:                  LoadKeyStore("./testdata/onelogin/sp.encryption.cert", "./testdata/onelogin/sp.encryption.key"),
-		SPSigningKeyStore:           LoadKeyStore("./testdata/onelogin/sp.signing.cert", "./testdata/onelogin/sp.signing.key"),
-		ValidateEncryptionCert:      true,
+	newSP := func() *saml2.SAMLServiceProvider {
+		return &saml2.SAMLServiceProvider{
+			IdentityProviderSSOURL:      "https://saml.idp.nope/h9gkjzvb3e", // not required for these tests
+			IdentityProviderIssuer:      "https://saml.idp.nope/h9gkjzvb3e",
+			AssertionConsumerServiceURL: "https://saml.sp.nope/session/sso/saml/acs/rq5jwkvb8z",
+			AudienceURI:                 "https://saml.sp.nope/session/sso/saml/spentityid/rq5jwkvb8z",
+			IDPCertificateStore:         LoadCertificateStore("./testdata/onelogin/idp.signing.cert"),
+			SPKeyStore:                  LoadKeyStore("./testdata/onelogin/sp.encryption.cert", "./testdata/onelogin/sp.encryption.key"),
+			SPSigningKeyStore:           LoadKeyStore("./testdata/onelogin/sp.signing.cert", "./testdata/onelogin/sp.signing.key"),
+			ValidateEncryptionCert:      true,
+		}
 	}
 
 	scenarios := []ProviderTestScenario{}
@@ -205,7 +207,7 @@ func TestOneLoginCasesLocally(t *testing.T) {
 		scenarios = append(scenarios, ProviderTestScenario{
 			ScenarioName:     fmt.Sprintf("Scenario_%02d", idx),
 			Response:         response,
-			ServiceProvider:  spAtTime(sp, getAtTime(idx, oneLoginAtTimes), response),
+			ServiceProvider:  spAtTime(newSP, getAtTime(idx, oneLoginAtTimes), response),
 			CheckError:       scenarioErrorChecker(idx, oneLoginScenarioErrors),
 			CheckWarningInfo: scenarioWarningChecker(idx, oneLoginScenarioWarnings),
 		})

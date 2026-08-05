@@ -136,7 +136,7 @@ func getAtTime(idx int, scenarioAtTimes map[int]string) (atTime time.Time) {
 	return // zero time
 }
 
-func spAtTime(template *saml2.SAMLServiceProvider, atTime time.Time, rawResp string) *saml2.SAMLServiceProvider {
+func spAtTime(newSP func() *saml2.SAMLServiceProvider, atTime time.Time, rawResp string) *saml2.SAMLServiceProvider {
 	resp := &types.Response{}
 	if rawResp == "" {
 		panic(fmt.Errorf("empty rawResp"))
@@ -150,8 +150,7 @@ func spAtTime(template *saml2.SAMLServiceProvider, atTime time.Time, rawResp str
 		panic(fmt.Errorf("cannot parse Response XML: %v", err))
 	}
 
-	var sp saml2.SAMLServiceProvider
-	sp = *template // copy most fields template, we only set the clock below
+	sp := newSP() // fresh instance per scenario, we only set the clock below
 	if atTime.IsZero() {
 		// Prefer more official Assertion IssueInstant over Response IssueIntant
 		// (Assertion will be signed, either individually or as part of Response)
@@ -164,5 +163,5 @@ func spAtTime(template *saml2.SAMLServiceProvider, atTime time.Time, rawResp str
 		}
 	}
 	sp.Clock = dsig.NewFakeClock(clockwork.NewFakeClockAt(atTime))
-	return &sp
+	return sp
 }
