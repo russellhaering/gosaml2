@@ -416,7 +416,7 @@ func TestSAMLCommentInjection(t *testing.T) {
 	*/
 
 	// To show that we are not vulnerable, we want to prove that we get the canonicalized value using our parser
-	_, el, err := parseResponse([]byte(commentInjectionAttackResponse), 0)
+	_, el, err := parseResponse([]byte(commentInjectionAttackResponse), 0, 0)
 	require.NoError(t, err)
 	decodedResponse := &types.Response{}
 	err = xmlUnmarshalElement(el, decodedResponse)
