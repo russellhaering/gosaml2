@@ -26,6 +26,8 @@ import (
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	"github.com/russellhaering/gosaml2/v2/sp"
 )
 
@@ -36,6 +38,23 @@ func buildTestAuthnRequestXML(id, issuer, destination, acsURL string) string {
 
 func encodeAuthnRequestPOST(xmlStr string) string {
 	return base64.StdEncoding.EncodeToString([]byte(xmlStr))
+}
+
+func signAuthnRequestPOST(t *testing.T, xmlStr string, keyStore *saml2.KeyStore) string {
+	t.Helper()
+	doc := xmltree.NewDocument()
+	require.NoError(t, doc.ReadFromBytes([]byte(xmlStr)))
+
+	cert, err := x509.ParseCertificate(keyStore.Cert)
+	require.NoError(t, err)
+	signer := &dsig.Signer{Key: keyStore.Signer, Certs: []*x509.Certificate{cert}}
+	signed, err := signer.SignEnveloped(doc.Root())
+	require.NoError(t, err)
+	doc.SetRoot(signed)
+
+	raw, err := doc.WriteToBytes()
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(raw)
 }
 
 func encodeAuthnRequestRedirect(xmlStr string) string {
@@ -133,6 +152,42 @@ func TestValidateEncodedAuthnRequestPOST_InvalidBase64(t *testing.T) {
 	_, err := idp.ValidateEncodedAuthnRequestPOST(context.Background(), "not-base64!!!")
 	require.Error(t, err)
 	require.ErrorIs(t, err, saml2.ErrMalformed)
+}
+
+func TestValidateEncodedAuthnRequestPOST_RequireSignature(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	spKeyStore := testKeyStore(t, testTime)
+	spCert, err := x509.ParseCertificate(spKeyStore.Cert)
+	require.NoError(t, err)
+	spConfig := idp.ServiceProviders["https://sp.test/metadata"]
+	spConfig.RequireSignedAuthnRequests = true
+	spConfig.SigningCertificates = []*x509.Certificate{spCert}
+
+	xmlStr := buildTestAuthnRequestXML("_req-post-signed", "https://sp.test/metadata", "https://idp.test/sso", "https://sp.test/acs")
+	info, err := idp.ValidateEncodedAuthnRequestPOST(context.Background(), signAuthnRequestPOST(t, xmlStr, spKeyStore))
+	require.NoError(t, err)
+	require.Equal(t, "_req-post-signed", info.ID)
+}
+
+func TestValidateEncodedAuthnRequestPOST_RequireSignatureRejectsUnsigned(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	idp.ServiceProviders["https://sp.test/metadata"].RequireSignedAuthnRequests = true
+
+	xmlStr := buildTestAuthnRequestXML("_req-post-unsigned", "https://sp.test/metadata", "https://idp.test/sso", "https://sp.test/acs")
+	_, err := idp.ValidateEncodedAuthnRequestPOST(context.Background(), encodeAuthnRequestPOST(xmlStr))
+	require.ErrorIs(t, err, saml2.ErrMissingSignature)
+}
+
+func TestValidateEncodedAuthnRequestPOST_RejectsWrongSignature(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	trustedKeyStore := testKeyStore(t, testTime)
+	trustedCert, err := x509.ParseCertificate(trustedKeyStore.Cert)
+	require.NoError(t, err)
+	idp.ServiceProviders["https://sp.test/metadata"].SigningCertificates = []*x509.Certificate{trustedCert}
+
+	xmlStr := buildTestAuthnRequestXML("_req-post-invalid", "https://sp.test/metadata", "https://idp.test/sso", "https://sp.test/acs")
+	_, err = idp.ValidateEncodedAuthnRequestPOST(context.Background(), signAuthnRequestPOST(t, xmlStr, testKeyStore(t, testTime)))
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
 }
 
 func TestValidateEncodedAuthnRequestRedirect(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 
@@ -32,7 +33,7 @@ import (
 // ValidateEncodedAuthnRequestPOST decodes and validates a base64-encoded
 // AuthnRequest received via the HTTP-POST binding. It resolves the SP from
 // the request's Issuer, validates attributes, and resolves the ACS URL.
-func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, encodedRequest string) (*AuthnRequestInfo, error) {
+func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(ctx context.Context, encodedRequest string) (*AuthnRequestInfo, error) {
 	raw, err := base64.StdEncoding.DecodeString(encodedRequest)
 	if err != nil {
 		return nil, &saml2.ValidationError{
@@ -41,18 +42,39 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 		}
 	}
 
-	req, err := idp.decodeAuthnRequest(raw)
+	root, err := idp.decodeAuthnRequestElement(raw)
 	if err != nil {
 		return nil, err
 	}
+	req, err := receivedAuthnRequestFromElement(root)
+	if err != nil {
+		return nil, &saml2.ValidationError{
+			Reason: saml2.ErrMalformed,
+			Detail: fmt.Sprintf("XML unmarshal error: %v", err),
+		}
+	}
 
-	sp, err := idp.lookupSP(req.Issuer)
+	sp, err := idp.lookupSPContext(ctx, req.Issuer)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := idp.validateAuthnRequestAttributes(req); err != nil {
 		return nil, err
+	}
+
+	if sp.RequireSignedAuthnRequests || hasEnvelopedSignature(root) {
+		verifiedRoot, err := idp.verifyPOSTSignature(sp, root)
+		if err != nil {
+			return nil, err
+		}
+		req, err = receivedAuthnRequestFromElement(verifiedRoot)
+		if err != nil {
+			return nil, &saml2.ValidationError{
+				Reason: saml2.ErrMalformed,
+				Detail: fmt.Sprintf("verified XML unmarshal error: %v", err),
+			}
+		}
 	}
 
 	acsURL, err := idp.resolveACSURL(req, sp)
@@ -72,7 +94,7 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 // received via the HTTP-Redirect binding. The samlRequest, relayState, sigAlg,
 // and signature parameters come from the query string. It verifies the redirect
 // signature if the SP requires signed requests or a signature is present.
-func (idp *IdentityProvider) ValidateEncodedAuthnRequestRedirect(_ context.Context, samlRequest, relayState, sigAlg, signature string) (*AuthnRequestInfo, error) {
+func (idp *IdentityProvider) ValidateEncodedAuthnRequestRedirect(ctx context.Context, samlRequest, relayState, sigAlg, signature string) (*AuthnRequestInfo, error) {
 	raw, err := idp.decodeRedirectRequest(samlRequest)
 	if err != nil {
 		return nil, err
@@ -83,7 +105,7 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestRedirect(_ context.Conte
 		return nil, err
 	}
 
-	sp, err := idp.lookupSP(req.Issuer)
+	sp, err := idp.lookupSPContext(ctx, req.Issuer)
 	if err != nil {
 		return nil, err
 	}
@@ -155,15 +177,12 @@ func (idp *IdentityProvider) decodeRedirectRequest(samlRequest string) ([]byte, 
 }
 
 func (idp *IdentityProvider) decodeAuthnRequest(raw []byte) (*ReceivedAuthnRequest, error) {
-	doc, err := xmltree.Parse(raw)
+	root, err := idp.decodeAuthnRequestElement(raw)
 	if err != nil {
-		return nil, &saml2.ValidationError{
-			Reason: saml2.ErrMalformed,
-			Detail: fmt.Sprintf("XML validation failed: %v", err),
-		}
+		return nil, err
 	}
 
-	req, err := receivedAuthnRequestFromElement(doc.Root())
+	req, err := receivedAuthnRequestFromElement(root)
 	if err != nil {
 		return nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
@@ -172,6 +191,17 @@ func (idp *IdentityProvider) decodeAuthnRequest(raw []byte) (*ReceivedAuthnReque
 	}
 
 	return req, nil
+}
+
+func (idp *IdentityProvider) decodeAuthnRequestElement(raw []byte) (*xmltree.Element, error) {
+	doc, err := xmltree.Parse(raw)
+	if err != nil {
+		return nil, &saml2.ValidationError{
+			Reason: saml2.ErrMalformed,
+			Detail: fmt.Sprintf("XML validation failed: %v", err),
+		}
+	}
+	return doc.Root(), nil
 }
 
 func (idp *IdentityProvider) validateAuthnRequestAttributes(req *ReceivedAuthnRequest) error {
@@ -208,10 +238,8 @@ func (idp *IdentityProvider) validateAuthnRequestAttributes(req *ReceivedAuthnRe
 
 func (idp *IdentityProvider) resolveACSURL(req *ReceivedAuthnRequest, sp *SPConfig) (string, error) {
 	if req.AssertionConsumerServiceURL != "" {
-		for _, allowed := range sp.ACSURLs {
-			if req.AssertionConsumerServiceURL == allowed {
-				return req.AssertionConsumerServiceURL, nil
-			}
+		if sp.hasACSURL(req.AssertionConsumerServiceURL) {
+			return req.AssertionConsumerServiceURL, nil
 		}
 		return "", &saml2.ValidationError{
 			Reason: saml2.ErrBadACSURL,
@@ -289,4 +317,49 @@ func (idp *IdentityProvider) verifyRedirectSignature(sp *SPConfig, samlRequest, 
 		Reason: saml2.ErrBadSignature,
 		Detail: "redirect signature verification failed with all configured certificates",
 	}
+}
+
+func (idp *IdentityProvider) verifyPOSTSignature(sp *SPConfig, root *xmltree.Element) (*xmltree.Element, error) {
+	verifier := &dsig.Verifier{
+		TrustedCerts: sp.SigningCertificates,
+		Clock:        idp.Clock,
+		AllowSHA1:    idp.AllowSHA1,
+	}
+	result, err := verifier.Verify(root)
+	if err == nil {
+		return result.Element, nil
+	}
+
+	reason := saml2.ErrBadSignature
+	if errors.Is(err, dsig.ErrMissingSignature) {
+		reason = saml2.ErrMissingSignature
+	}
+	return nil, &saml2.ValidationError{
+		Reason: reason,
+		Detail: fmt.Sprintf("POST AuthnRequest signature verification failed: %v", err),
+	}
+}
+
+func hasEnvelopedSignature(root *xmltree.Element) bool {
+	const xmlSignatureNamespace = "http://www.w3.org/2000/09/xmldsig#"
+
+	parentContext, err := dsig.NSBuildParentContext(root)
+	if err != nil {
+		return false
+	}
+	rootContext, err := parentContext.SubContext(root)
+	if err != nil {
+		return false
+	}
+	for _, child := range root.ChildElements() {
+		childContext, err := rootContext.SubContext(child)
+		if err != nil {
+			continue
+		}
+		namespace, err := childContext.LookupPrefix(child.Space)
+		if err == nil && namespace == xmlSignatureNamespace && child.Tag == "Signature" {
+			return true
+		}
+	}
+	return false
 }
