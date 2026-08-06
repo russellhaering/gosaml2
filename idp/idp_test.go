@@ -15,10 +15,12 @@
 package idp
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/xml"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -27,6 +29,17 @@ import (
 	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
 	"github.com/russellhaering/gosaml2/v2/types"
 )
+
+type testServiceProviderResolver struct {
+	sp      *SPConfig
+	err     error
+	seenCtx context.Context
+}
+
+func (r *testServiceProviderResolver) ResolveServiceProvider(ctx context.Context, _ string) (*SPConfig, error) {
+	r.seenCtx = ctx
+	return r.sp, r.err
+}
 
 var testTime = time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 
@@ -143,6 +156,35 @@ func TestIdentityProvider_LookupSP_NoProviders(t *testing.T) {
 	idp := &IdentityProvider{}
 	_, err := idp.lookupSP("anything")
 	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrUnknownSP)
+}
+
+func TestIdentityProvider_LookupSP_Resolver(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	resolver := &testServiceProviderResolver{sp: &SPConfig{EntityID: "https://dynamic.test/metadata"}}
+	idp.ServiceProviderResolver = resolver
+
+	ctx := context.WithValue(context.Background(), "test-key", "test-value")
+	sp, err := idp.lookupSPContext(ctx, "https://dynamic.test/metadata")
+	require.NoError(t, err)
+	require.Equal(t, "https://dynamic.test/metadata", sp.EntityID)
+	require.Equal(t, "test-value", resolver.seenCtx.Value("test-key"))
+}
+
+func TestIdentityProvider_LookupSP_ResolverError(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	resolverErr := errors.New("database unavailable")
+	idp.ServiceProviderResolver = &testServiceProviderResolver{err: resolverErr}
+
+	_, err := idp.lookupSPContext(context.Background(), "https://sp.test/metadata")
+	require.ErrorIs(t, err, resolverErr)
+}
+
+func TestIdentityProvider_LookupSP_ResolverReturnsNoMatch(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	idp.ServiceProviderResolver = &testServiceProviderResolver{sp: &SPConfig{EntityID: "https://other.test/metadata"}}
+
+	_, err := idp.lookupSPContext(context.Background(), "https://sp.test/metadata")
 	require.ErrorIs(t, err, saml2.ErrUnknownSP)
 }
 

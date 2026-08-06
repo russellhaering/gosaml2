@@ -15,6 +15,7 @@
 package idp
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 
@@ -40,7 +41,14 @@ type AssertionParams struct {
 // including a signed assertion with the provided parameters. It returns the
 // document, the resolved ACS URL, and any error.
 func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *AssertionParams) (*xmltree.Document, string, error) {
-	sp, err := idp.lookupSP(spEntityID)
+	return idp.BuildResponseDocumentContext(context.Background(), spEntityID, params)
+}
+
+// BuildResponseDocumentContext builds a SAML Response XML document for the
+// given SP using the Service Provider resolved with ctx. A supplied Recipient
+// must be a currently registered ACS URL for the resolved Service Provider.
+func (idp *IdentityProvider) BuildResponseDocumentContext(ctx context.Context, spEntityID string, params *AssertionParams) (*xmltree.Document, string, error) {
+	sp, err := idp.lookupSPContext(ctx, spEntityID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -53,6 +61,12 @@ func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *As
 		return nil, "", &saml2.ValidationError{
 			Reason: saml2.ErrBadACSURL,
 			Detail: "no ACS URL specified and none configured for SP",
+		}
+	}
+	if !sp.hasACSURL(acsURL) {
+		return nil, "", &saml2.ValidationError{
+			Reason: saml2.ErrBadACSURL,
+			Detail: fmt.Sprintf("ACS URL %s is not registered for SP %s", acsURL, sp.EntityID),
 		}
 	}
 
@@ -95,7 +109,13 @@ func (idp *IdentityProvider) BuildResponseDocument(spEntityID string, params *As
 // POST form targeting the SP's ACS URL. This is the typical way to deliver a
 // SAML response via the HTTP-POST binding.
 func (idp *IdentityProvider) BuildResponseBodyPost(spEntityID string, params *AssertionParams, relayState string) ([]byte, error) {
-	doc, acsURL, err := idp.BuildResponseDocument(spEntityID, params)
+	return idp.BuildResponseBodyPostContext(context.Background(), spEntityID, params, relayState)
+}
+
+// BuildResponseBodyPostContext builds a SAML Response using the Service
+// Provider resolved with ctx and returns an auto-submit HTTP-POST form.
+func (idp *IdentityProvider) BuildResponseBodyPostContext(ctx context.Context, spEntityID string, params *AssertionParams, relayState string) ([]byte, error) {
+	doc, acsURL, err := idp.BuildResponseDocumentContext(ctx, spEntityID, params)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +157,15 @@ func (idp *IdentityProvider) BuildErrorResponseDocument(spEntityID, statusCode, 
 	doc := xmltree.NewDocument()
 	doc.SetRoot(responseEl)
 	return doc, nil
+}
+
+func (sp *SPConfig) hasACSURL(acsURL string) bool {
+	for _, allowed := range sp.ACSURLs {
+		if acsURL == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func (idp *IdentityProvider) buildAssertion(sp *SPConfig, params *AssertionParams, acsURL string) *xmltree.Element {

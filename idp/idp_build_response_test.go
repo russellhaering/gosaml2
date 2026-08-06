@@ -81,6 +81,29 @@ func TestBuildResponseDocument_UnknownSP(t *testing.T) {
 	require.ErrorIs(t, err, saml2.ErrUnknownSP)
 }
 
+func TestBuildResponseDocumentContext_ResolverRevalidatesACS(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	sp := &SPConfig{
+		EntityID: "https://dynamic.test/metadata",
+		ACSURLs:  []string{"https://dynamic.test/acs"},
+	}
+	resolver := &testServiceProviderResolver{sp: sp}
+	idp.ServiceProviderResolver = resolver
+	params := &AssertionParams{
+		NameID:       "user@example.com",
+		InResponseTo: "_req123",
+		Recipient:    "https://dynamic.test/acs",
+	}
+
+	_, acsURL, err := idp.BuildResponseDocumentContext(context.Background(), sp.EntityID, params)
+	require.NoError(t, err)
+	require.Equal(t, "https://dynamic.test/acs", acsURL)
+
+	sp.ACSURLs = nil
+	_, _, err = idp.BuildResponseDocumentContext(context.Background(), sp.EntityID, params)
+	require.ErrorIs(t, err, saml2.ErrBadACSURL)
+}
+
 func TestBuildResponseBodyPost(t *testing.T) {
 	idp, _ := testIdentityProvider(t)
 
