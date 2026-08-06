@@ -293,6 +293,16 @@ func TestIdentityProvider_Metadata_CustomNameIDFormats(t *testing.T) {
 	require.Equal(t, saml2.NameIdFormatPersistent, md.IDPSSODescriptor.NameIDFormats[1].Value)
 }
 
+func TestIdentityProvider_Metadata_WantAuthnRequestsSigned(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	wantSigned := false
+	idp.WantAuthnRequestsSigned = &wantSigned
+
+	md, err := idp.Metadata()
+	require.NoError(t, err)
+	require.False(t, md.IDPSSODescriptor.WantAuthnRequestsSigned)
+}
+
 func TestIdentityProvider_Metadata_Roundtrip(t *testing.T) {
 	idp, _ := testIdentityProvider(t)
 
