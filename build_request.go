@@ -19,9 +19,9 @@ import (
 	"compress/flate"
 	"encoding/base64"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/beevik/etree"
 	"github.com/russellhaering/gosaml2/uuid"
@@ -197,6 +197,18 @@ func (sp *SAMLServiceProvider) BuildAuthURLRedirect(relayState string, doc *etre
 	return sp.buildAuthURLFromDocument(relayState, BindingHttpRedirect, doc)
 }
 
+// htmlEscaper matches the escaping done in [html/template] for text and quoted
+// attributes, which is slightly more than what [html.EscapeString] does.
+var htmlEscaper = strings.NewReplacer(
+	"\x00", "\uFFFD",
+	`"`, "&#34;",
+	`&`, "&amp;",
+	`'`, "&#39;",
+	`+`, "&#43;",
+	`<`, "&lt;",
+	`>`, "&gt;",
+)
+
 func (sp *SAMLServiceProvider) buildAuthBodyPostFromDocument(relayState string, doc *etree.Document) ([]byte, error) {
 	reqBuf, err := doc.WriteToBytes()
 	if err != nil {
@@ -205,51 +217,24 @@ func (sp *SAMLServiceProvider) buildAuthBodyPostFromDocument(relayState string, 
 
 	encodedReqBuf := base64.StdEncoding.EncodeToString(reqBuf)
 
-	var tmpl *template.Template
-	var rv bytes.Buffer
-
+	rv := new(bytes.Buffer)
+	rv.WriteString(`<form method="POST" action="`)
+	htmlEscaper.WriteString(rv, sp.IdentityProviderSSOURL)
+	rv.WriteString(`" id="SAMLRequestForm">` +
+		`<input type="hidden" name="SAMLRequest" value="`)
+	htmlEscaper.WriteString(rv, encodedReqBuf)
+	rv.WriteString(`" />`)
 	if relayState != "" {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input type="hidden" name="RelayState" value="{{.RelayState}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-			RelayState  string
-		}{
-			URL:         sp.IdentityProviderSSOURL,
-			SAMLRequest: encodedReqBuf,
-			RelayState:  relayState,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	} else {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-		}{
-			URL:         sp.IdentityProviderSSOURL,
-			SAMLRequest: encodedReqBuf,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
+		rv.WriteString(`<input type="hidden" name="RelayState" value="`)
+		htmlEscaper.WriteString(rv, relayState)
+		rv.WriteString(`" />`)
 	}
+	rv.WriteString(`` +
+		`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
+		`</form>` +
+		`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
+		`document.getElementById('SAMLRequestForm').submit();</script>`,
+	)
 
 	return rv.Bytes(), nil
 }
@@ -395,51 +380,25 @@ func (sp *SAMLServiceProvider) buildLogoutBodyPostFromDocument(relayState string
 	}
 
 	encodedReqBuf := base64.StdEncoding.EncodeToString(reqBuf)
-	var tmpl *template.Template
-	var rv bytes.Buffer
 
+	rv := new(bytes.Buffer)
+	rv.WriteString(`<form method="POST" action="`)
+	htmlEscaper.WriteString(rv, sp.IdentityProviderSLOURL)
+	rv.WriteString(`" id="SAMLRequestForm">` +
+		`<input type="hidden" name="SAMLRequest" value="`)
+	htmlEscaper.WriteString(rv, encodedReqBuf)
+	rv.WriteString(`" />`)
 	if relayState != "" {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input type="hidden" name="RelayState" value="{{.RelayState}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-			RelayState  string
-		}{
-			URL:         sp.IdentityProviderSLOURL,
-			SAMLRequest: encodedReqBuf,
-			RelayState:  relayState,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
-	} else {
-		tmpl = template.Must(template.New("saml-post-form").Parse(`` +
-			`<form method="POST" action="{{.URL}}" id="SAMLRequestForm">` +
-			`<input type="hidden" name="SAMLRequest" value="{{.SAMLRequest}}" />` +
-			`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
-			`</form>` +
-			`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
-			`document.getElementById('SAMLRequestForm').submit();</script>`))
-
-		data := struct {
-			URL         string
-			SAMLRequest string
-		}{
-			URL:         sp.IdentityProviderSLOURL,
-			SAMLRequest: encodedReqBuf,
-		}
-		if err = tmpl.Execute(&rv, data); err != nil {
-			return nil, err
-		}
+		rv.WriteString(`<input type="hidden" name="RelayState" value="`)
+		htmlEscaper.WriteString(rv, relayState)
+		rv.WriteString(`" />`)
 	}
+	rv.WriteString(`` +
+		`<input id="SAMLSubmitButton" type="submit" value="Submit" />` +
+		`</form>` +
+		`<script>document.getElementById('SAMLSubmitButton').style.visibility="hidden";` +
+		`document.getElementById('SAMLRequestForm').submit();</script>`,
+	)
 
 	return rv.Bytes(), nil
 }
