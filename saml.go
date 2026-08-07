@@ -37,6 +37,10 @@ func (serr ErrSaml) Error() string {
 	return "SAML error"
 }
 
+func (serr ErrSaml) Unwrap() error {
+	return serr.System
+}
+
 type SAMLServiceProvider struct {
 	IdentityProviderSSOURL     string
 	IdentityProviderSSOBinding string
