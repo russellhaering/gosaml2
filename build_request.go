@@ -42,7 +42,11 @@ func (sp *SAMLServiceProvider) buildAuthnRequest(includeSig bool) (*etree.Docume
 
 	authnRequest.CreateAttr("ID", "_"+arId.String())
 	authnRequest.CreateAttr("Version", "2.0")
-	authnRequest.CreateAttr("ProtocolBinding", "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")
+	if len(sp.IdentityProviderSSOBinding) == 0 {
+		authnRequest.CreateAttr("ProtocolBinding", BindingHttpPost)
+	} else {
+		authnRequest.CreateAttr("ProtocolBinding", sp.IdentityProviderSSOBinding)
+	}
 	authnRequest.CreateAttr("AssertionConsumerServiceURL", sp.AssertionConsumerServiceURL)
 	authnRequest.CreateAttr("IssueInstant", sp.Clock.Now().UTC().Format(issueInstantFormat))
 	authnRequest.CreateAttr("Destination", sp.IdentityProviderSSOURL)
