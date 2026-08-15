@@ -56,6 +56,11 @@ func (idp *IdentityProvider) Metadata() (*types.EntityDescriptor, error) {
 		formats[i] = types.NameIDFormat{Value: f}
 	}
 
+	wantAuthnRequestsSigned := true
+	if idp.WantAuthnRequestsSigned != nil {
+		wantAuthnRequestsSigned = *idp.WantAuthnRequestsSigned
+	}
+
 	ssoServices := []types.SingleSignOnService{
 		{Binding: saml2.BindingHttpPost, Location: idp.SSOURL},
 		{Binding: saml2.BindingHttpRedirect, Location: idp.SSOURL},
@@ -66,7 +71,7 @@ func (idp *IdentityProvider) Metadata() (*types.EntityDescriptor, error) {
 		EntityID:   idp.EntityID,
 		IDPSSODescriptor: &types.IDPSSODescriptor{
 			ProtocolSupportEnumeration: saml2.SAMLProtocolNamespace,
-			WantAuthnRequestsSigned:    true,
+			WantAuthnRequestsSigned:    wantAuthnRequestsSigned,
 			KeyDescriptors:             keyDescriptors,
 			NameIDFormats:              formats,
 			SingleSignOnServices:       ssoServices,

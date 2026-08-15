@@ -15,6 +15,7 @@
 package idp
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
@@ -29,26 +30,39 @@ import (
 
 // IdentityProvider represents a SAML 2.0 Identity Provider.
 type IdentityProvider struct {
-	EntityID                    string
-	SSOURL                      string
-	SLOURL                      string
-	SigningKeyStore             *saml2.KeyStore
-	SignResponses               bool
-	SignAssertions              bool
-	SignatureAlgorithm          string
-	SignatureCanonicalizer      dsig.Canonicalizer
-	ServiceProviders            map[string]*SPConfig
-	ClockSkew                   time.Duration
-	AllowSHA1                   bool
-	AssertionLifetime           time.Duration
-	SessionLifetime             time.Duration
-	NameIDFormats               []string
-	Clock                       func() time.Time
-	MetadataValidDuration       time.Duration
+	EntityID               string
+	SSOURL                 string
+	SLOURL                 string
+	SigningKeyStore        *saml2.KeyStore
+	SignResponses          bool
+	SignAssertions         bool
+	SignatureAlgorithm     string
+	SignatureCanonicalizer dsig.Canonicalizer
+	// ServiceProviderResolver resolves Service Provider configuration by Entity ID.
+	// When set, it takes precedence over ServiceProviders.
+	ServiceProviderResolver ServiceProviderResolver
+	ServiceProviders        map[string]*SPConfig
+	ClockSkew               time.Duration
+	AllowSHA1               bool
+	AssertionLifetime       time.Duration
+	SessionLifetime         time.Duration
+	NameIDFormats           []string
+	Clock                   func() time.Time
+	MetadataValidDuration   time.Duration
+	// WantAuthnRequestsSigned controls the corresponding IdP metadata flag.
+	// A nil value preserves the historical default of true.
+	WantAuthnRequestsSigned     *bool
 	MaximumDecompressedBodySize int64
 
 	signerMu sync.RWMutex
 	signer   *dsig.Signer
+}
+
+// ServiceProviderResolver resolves Service Provider configuration for an Identity Provider.
+// It enables applications to load Service Providers from a database or other dynamic source.
+// Resolvers should return saml2.ErrUnknownSP for unknown or disabled Service Providers.
+type ServiceProviderResolver interface {
+	ResolveServiceProvider(ctx context.Context, entityID string) (*SPConfig, error)
 }
 
 // SPConfig holds the configuration for a known Service Provider.
@@ -163,6 +177,24 @@ func (idp *IdentityProvider) signElement(el *xmltree.Element) (*xmltree.Element,
 }
 
 func (idp *IdentityProvider) lookupSP(entityID string) (*SPConfig, error) {
+	return idp.lookupSPContext(context.Background(), entityID)
+}
+
+func (idp *IdentityProvider) lookupSPContext(ctx context.Context, entityID string) (*SPConfig, error) {
+	if idp.ServiceProviderResolver != nil {
+		sp, err := idp.ServiceProviderResolver.ResolveServiceProvider(ctx, entityID)
+		if err != nil {
+			return nil, err
+		}
+		if sp == nil || sp.EntityID != entityID {
+			return nil, &saml2.ValidationError{
+				Reason: saml2.ErrUnknownSP,
+				Detail: fmt.Sprintf("resolver returned no matching service provider for entity ID: %s", entityID),
+			}
+		}
+		return sp, nil
+	}
+
 	if idp.ServiceProviders == nil {
 		return nil, &saml2.ValidationError{
 			Reason: saml2.ErrUnknownSP,
