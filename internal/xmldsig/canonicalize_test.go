@@ -1,6 +1,7 @@
 package xmldsig
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -191,4 +192,39 @@ func TestC14N10RecPreservesXmlnsEmptyWhenNeeded(t *testing.T) {
 	// correctly strips redundant empty default namespace declarations.
 	expected := `<Child></Child>`
 	require.Equal(t, expected, string(canonicalized))
+}
+
+func TestC14NAllocations(t *testing.T) {
+	canonicalizer := MakeC14N10RecCanonicalizer()
+
+	// For each depth, attempt to ensure that the number of allocations stays
+	// linear with the number of elements.
+	prevDepth, prevAllocs := 0, 0.0
+	for _, depth := range []int{12, 24, 48, 96} {
+		input := &strings.Builder{}
+		input.WriteString(`<Root xmlns="http://example.com">`)
+		for i := range depth {
+			fmt.Fprintf(input, `<e%d>`, i)
+		}
+		for i := depth - 1; i >= 0; i-- {
+			fmt.Fprintf(input, `</e%d>`, i)
+		}
+		input.WriteString(`</Root>`)
+
+		doc := xmltree.NewDocument()
+		err := doc.ReadFromString(input.String())
+		require.NoError(t, err)
+
+		root := doc.Root()
+		allocs := testing.AllocsPerRun(3, func() {
+			_, err = canonicalizer.Canonicalize(root)
+		})
+		require.NoError(t, err)
+
+		if prevAllocs > 0 && allocs/prevAllocs >= 3.0 {
+			t.Fatalf("allocations grew %.2fx (%.0f -> %.0f) when depth doubled from %d to %d, expected roughly linear growth",
+				allocs/prevAllocs, prevAllocs, allocs, prevDepth, depth)
+		}
+		prevDepth, prevAllocs = depth, allocs
+	}
 }
