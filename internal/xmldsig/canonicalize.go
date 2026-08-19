@@ -159,16 +159,18 @@ const nsSpace = "xmlns"
 // TODO(russell_h): This is very similar to excCanonicalPrep - perhaps they should
 // be unified into one parameterized function?
 func canonicalPrep(el *xmltree.Element, strip bool, comments bool) *xmltree.Element {
-	return canonicalPrepInner(el, make(map[string]string), strip, comments)
+	// Create a dedicated copy of the element that canonicalPrepInner can modify.
+	ne := el.Copy()
+	canonicalPrepInner(ne, make(map[string]string), strip, comments)
+	return ne
 }
 
-func canonicalPrepInner(el *xmltree.Element, seenSoFar map[string]string, strip bool, comments bool) *xmltree.Element {
+func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, strip bool, comments bool) {
 	_seenSoFar := make(map[string]string)
 	for k, v := range seenSoFar {
 		_seenSoFar[k] = v
 	}
 
-	ne := el.Copy()
 	sort.Sort(SortedAttrs(ne.Attr))
 	n := 0
 	for _, attr := range ne.Attr {
@@ -206,14 +208,12 @@ func canonicalPrepInner(el *xmltree.Element, seenSoFar map[string]string, strip 
 		}
 	}
 
-	for i, token := range ne.Child {
+	for _, token := range ne.Child {
 		childElement, ok := token.(*xmltree.Element)
 		if ok {
-			ne.Child[i] = canonicalPrepInner(childElement, _seenSoFar, strip, comments)
+			canonicalPrepInner(childElement, _seenSoFar, strip, comments)
 		}
 	}
-
-	return ne
 }
 
 func canonicalSerialize(el *xmltree.Element) ([]byte, error) {
