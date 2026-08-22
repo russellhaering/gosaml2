@@ -114,13 +114,22 @@ func (sp *ServiceProvider) getDecryptCert() (*tls.Certificate, error) {
 
 // hasEncryptedAssertion reports whether el contains any saml:EncryptedAssertion
 // element anywhere in its subtree.
-func hasEncryptedAssertion(el *xmltree.Element) bool {
+//
+// The traversal error is returned rather than discarded: the namespace-aware
+// walk is bounded, and a document large enough to exhaust that budget before
+// reaching an EncryptedAssertion would otherwise report "no encrypted
+// assertion" and blind the caller's guard. This check gates attacker-supplied
+// ciphertext, so it fails closed.
+func hasEncryptedAssertion(el *xmltree.Element) (bool, error) {
 	found := false
-	_ = dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, func(_ dsig.NSContext, _ *xmltree.Element) error {
+	err := dsig.NSFindIterate(el, saml2.SAMLAssertionNamespace, saml2.EncryptedAssertionTag, func(_ dsig.NSContext, _ *xmltree.Element) error {
 		found = true
 		return dsig.ErrTraversalHalted
 	})
-	return found
+	if err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 func (sp *ServiceProvider) decryptAssertions(el *xmltree.Element) error {
@@ -291,7 +300,11 @@ func (sp *ServiceProvider) ValidateEncodedResponse(ctx context.Context, encodedR
 	// would expose a CBC padding-oracle surface and enable XML Signature
 	// Wrapping on the decrypted content. Reject any encrypted assertion that
 	// arrives without a verified response signature.
-	if hasEncryptedAssertion(unverifiedResponse) {
+	encrypted, err := hasEncryptedAssertion(unverifiedResponse)
+	if err != nil {
+		return nil, fmt.Errorf("unable to scan response for encrypted assertions: %v", err)
+	}
+	if encrypted {
 		return nil, &saml2.ValidationError{Reason: saml2.ErrUnsignedEncryptedAssertion}
 	}
 
