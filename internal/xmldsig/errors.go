@@ -30,4 +30,8 @@ var (
 	// ErrMalformedSignature indicates that the signature element has an
 	// unexpected structure.
 	ErrMalformedSignature = errors.New("dsig: signature element has unexpected structure")
+
+	// ErrCanonicalizationLimit indicates that canonicalization would have to
+	// process more elements than its traversal limit allows.
+	ErrCanonicalizationLimit = errors.New("dsig: canonicalization element limit exceeded")
 )

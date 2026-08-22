@@ -64,13 +64,17 @@ func transformExcC14n(ctx, declared NSContext, el *xmltree.Element, inclusiveNam
 
 	el.Attr = filteredAttrs
 
-	declared = declared.Copy()
-
 	// Declare all visibly utilized prefixes that are in-scope but haven't
 	// been declared in the canonicalized form yet. These might have been
 	// declared on this element but then filtered out above, or they might
 	// have been declared on an ancestor (before canonicalization) which
 	// didn't visibly utilize and thus had them removed.
+	//
+	// declared is copied lazily, on the first prefix this element actually
+	// emits: copying it for every element would make the per-element cost
+	// proportional to the number of ancestor declarations, which the
+	// element-count limit does not bound.
+	declaredCopied := false
 	for prefix := range visiblyUtilizedPrefixes {
 		// Skip redundant declarations - they have to already have the same
 		// value.
@@ -83,6 +87,11 @@ func transformExcC14n(ctx, declared NSContext, el *xmltree.Element, inclusiveNam
 		namespace, err := scope.LookupPrefix(prefix)
 		if err != nil {
 			return err
+		}
+
+		if !declaredCopied {
+			declared = declared.Copy()
+			declaredCopied = true
 		}
 
 		el.Attr = append(el.Attr, declared.declare(prefix, namespace))

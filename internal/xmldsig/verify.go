@@ -424,9 +424,15 @@ func (v *Verifier) parseSignatureElement(parentCtx NSContext, sigEl *xmltree.Ele
 			return nil, err
 		}
 	case CanonicalXML11AlgorithmId, CanonicalXML10RecAlgorithmId:
-		detachedSignedInfo = canonicalPrep(detachedSignedInfo, true, false)
+		detachedSignedInfo, err = canonicalPrep(detachedSignedInfo, true, false)
+		if err != nil {
+			return nil, err
+		}
 	case CanonicalXML11WithCommentsAlgorithmId, CanonicalXML10WithCommentsAlgorithmId:
-		detachedSignedInfo = canonicalPrep(detachedSignedInfo, true, true)
+		detachedSignedInfo, err = canonicalPrep(detachedSignedInfo, true, true)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("%w: invalid CanonicalizationMethod: %s", ErrMalformedSignature, sig.c14nMethod)
 	}

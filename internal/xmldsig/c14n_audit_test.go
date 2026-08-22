@@ -141,14 +141,16 @@ func TestC14NAudit_CanonicalPrepStripParameterIgnored(t *testing.T) {
 	require.NoError(t, doc.ReadFromString(xml))
 
 	// strip=true (used by C14N11)
-	resStrip := canonicalPrep(doc.Root().Copy(), true, false)
+	resStrip, err := canonicalPrep(doc.Root().Copy(), true, false)
+	require.NoError(t, err)
 	bytesStrip, err := canonicalSerialize(resStrip)
 	require.NoError(t, err)
 
 	// strip=false (used by NullCanonicalizer)
 	doc2 := xmltree.NewDocument()
 	require.NoError(t, doc2.ReadFromString(xml))
-	resNoStrip := canonicalPrep(doc2.Root().Copy(), false, false)
+	resNoStrip, err := canonicalPrep(doc2.Root().Copy(), false, false)
+	require.NoError(t, err)
 	bytesNoStrip, err := canonicalSerialize(resNoStrip)
 	require.NoError(t, err)
 
@@ -983,7 +985,8 @@ func TestC14NAudit_CanonicalPrepDefaultNamespaceHandling(t *testing.T) {
 			doc := xmltree.NewDocument()
 			require.NoError(t, doc.ReadFromString(tc.xml))
 
-			result := canonicalPrep(doc.Root(), true, false)
+			result, err := canonicalPrep(doc.Root(), true, false)
+			require.NoError(t, err)
 			resBytes, err := canonicalSerialize(result)
 			require.NoError(t, err)
 			resStr := string(resBytes)
