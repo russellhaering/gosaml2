@@ -36,14 +36,34 @@ import (
 	"github.com/russellhaering/gosaml2/v2/types"
 )
 
+// idpMetadataURL is where this demo reads its IdP metadata from.
+//
+// The certificates in this document become the only trust anchors used to
+// verify signatures on incoming Responses and Assertions, and its SSO Location
+// becomes the URL users are sent to in order to log in. Substituting it is
+// therefore a complete authentication bypass: an attacker who can rewrite the
+// response inserts their own certificate and then mints assertions for any
+// identity.
+//
+// gosaml2 does not verify metadata signatures, so the transport is what
+// establishes authenticity. It must be HTTPS with certificate verification (as
+// here), or a local operator-controlled file. Never plain HTTP: an on-path
+// attacker or DNS spoofing is then enough to take over the SP.
+const idpMetadataURL = "https://idp.oktadev.com/metadata"
+
 func main() {
-	// Step 1: Fetch IdP metadata. In production, this XML would typically
-	// be loaded from a file or configuration store.
-	res, err := http.Get("http://idp.oktadev.com/metadata")
+	// Step 1: Fetch IdP metadata over an authenticated channel. In production
+	// this XML would typically be loaded from a file or configuration store --
+	// see the note on idpMetadataURL about why the source must be trustworthy.
+	res, err := http.Get(idpMetadataURL)
 	if err != nil {
 		log.Fatalf("Error fetching IdP metadata: %v", err)
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		log.Fatalf("Error fetching IdP metadata: unexpected status %s", res.Status)
+	}
 
 	rawMetadata, err := io.ReadAll(res.Body)
 	if err != nil {
