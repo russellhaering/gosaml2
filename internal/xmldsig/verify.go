@@ -254,6 +254,37 @@ func findChildByTag(el *xmltree.Element, tag string) *xmltree.Element {
 	return nil
 }
 
+// referencesElement reports whether a Reference URI selects the element whose
+// ID attribute is idAttr. An empty URI means the whole document, which always
+// selects it; otherwise the URI must be a same-document "#id" match.
+func referencesElement(refURI, idAttr string) bool {
+	if refURI == "" {
+		return true
+	}
+	return len(refURI) > 1 && refURI[0] == '#' && refURI[1:] == idAttr
+}
+
+// peekReferenceURI reads SignedInfo/Reference/@URI from a ds:Signature without
+// canonicalizing anything. ok is false when the URI cannot be located, in which
+// case the caller must not treat the signature as non-matching.
+func peekReferenceURI(sigEl *xmltree.Element) (refURI string, ok bool) {
+	signedInfoEl := findChildByTag(sigEl, signedInfoTag)
+	if signedInfoEl == nil {
+		return "", false
+	}
+	refEl := findChildByTag(signedInfoEl, referenceTag)
+	if refEl == nil {
+		return "", false
+	}
+	uri := refEl.SelectAttrValue(uriAttr, "")
+	if uri == "" {
+		// Either absent or genuinely empty; both must fall through to the
+		// full parse rather than be skipped.
+		return "", false
+	}
+	return uri, true
+}
+
 // findSignature searches only direct children of el for a ds:Signature.
 func (v *Verifier) findSignature(el *xmltree.Element) (*parsedSignature, error) {
 	idAttr := el.SelectAttrValue(v.idAttribute(), "")
@@ -288,6 +319,17 @@ func (v *Verifier) findSignature(el *xmltree.Element) (*parsedSignature, error) 
 			return nil, err
 		}
 
+		// Cheap pre-filter before the expensive step. Parsing a signature
+		// canonicalizes its SignedInfo, and a signature whose Reference URI
+		// names some other element can never be selected below -- so a message
+		// full of decoy signatures would otherwise buy an unauthenticated
+		// sender one full canonicalization each. Peek at the Reference URI
+		// first and skip those. An unreadable or empty URI is not skipped, so
+		// ambiguity costs work rather than dropping a real signature.
+		if refURI, ok := peekReferenceURI(child); ok && !referencesElement(refURI, idAttr) {
+			continue
+		}
+
 		// Parse the signature element
 		sig, err := v.parseSignatureElement(elCtx, child)
 		if err != nil {
@@ -295,7 +337,7 @@ func (v *Verifier) findSignature(el *xmltree.Element) (*parsedSignature, error) 
 		}
 
 		// Check if this signature references our element
-		if sig.refURI == "" || (len(sig.refURI) > 1 && sig.refURI[0] == '#' && sig.refURI[1:] == idAttr) {
+		if referencesElement(sig.refURI, idAttr) {
 			if found != nil {
 				return nil, fmt.Errorf("%w: multiple signatures reference the same element", ErrMalformedSignature)
 			}
@@ -648,11 +690,12 @@ func (v *Verifier) transform(el *xmltree.Element, origSig *parsedSignature, veri
 func (v *Verifier) verifyDigest(el *xmltree.Element, origSig *parsedSignature, verifiedSig *parsedSignature) (*xmltree.Element, error) {
 	idAttr := el.SelectAttrValue(v.idAttribute(), "")
 
-	// Verify the reference URI matches
-	if verifiedSig.refURI != "" && !(len(verifiedSig.refURI) > 1 && verifiedSig.refURI[0] == '#' && verifiedSig.refURI[1:] == idAttr) {
-		if verifiedSig.refURI != "" {
-			return nil, fmt.Errorf("%w: reference URI does not match element", ErrMalformedSignature)
-		}
+	// Verify the reference URI matches. This repeats the check findSignature
+	// made against the unverified Signature, but now against the URI recovered
+	// from the canonical bytes the signature actually covered -- and via the
+	// same predicate, so the two cannot disagree.
+	if !referencesElement(verifiedSig.refURI, idAttr) {
+		return nil, fmt.Errorf("%w: reference URI does not match element", ErrMalformedSignature)
 	}
 
 	digestAlgorithmId := verifiedSig.digestMethod

@@ -1,9 +1,71 @@
 package xmldsig
 
-import xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
+import (
+	"sort"
+
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
+)
+
+// SortAttrs sorts attrs in place into the canonical C14N attribute order.
+//
+// This is the entry point production canonicalization uses. It resolves every
+// namespace prefix once up front, so the comparator is O(1) rather than
+// scanning the attribute list on each comparison. Sorting an element's
+// attributes is therefore O(n log n); routing this through SortedAttrs
+// instead makes it O(n² log n), which is remotely reachable during
+// pre-authentication canonicalization of an attacker-supplied SignedInfo.
+func SortAttrs(attrs []xmltree.Attr) {
+	sort.Sort(attrSorter{attrs: attrs, uris: prefixURIs(attrs)})
+}
+
+// prefixURIs maps each namespace prefix declared in attrs to its URI. The
+// parser rejects duplicate attributes, and canonicalization emits at most one
+// declaration per prefix, so a prefix appears at most once.
+func prefixURIs(attrs []xmltree.Attr) map[string]string {
+	var uris map[string]string
+	for _, attr := range attrs {
+		if attr.Space == xmlnsPrefix {
+			if uris == nil {
+				uris = make(map[string]string, len(attrs))
+			}
+			if _, ok := uris[attr.Key]; !ok {
+				uris[attr.Key] = attr.Value
+			}
+		}
+	}
+	return uris
+}
+
+// attrSorter sorts an attribute list using a precomputed prefix->URI map.
+type attrSorter struct {
+	attrs []xmltree.Attr
+	uris  map[string]string
+}
+
+func (s attrSorter) Len() int      { return len(s.attrs) }
+func (s attrSorter) Swap(i, j int) { s.attrs[i], s.attrs[j] = s.attrs[j], s.attrs[i] }
+
+func (s attrSorter) Less(i, j int) bool {
+	return lessAttr(s.attrs[i], s.attrs[j], s.resolvePrefix)
+}
+
+// resolvePrefix mirrors SortedAttrs.resolvePrefix, including its fallback of
+// returning the prefix itself when the declaration lives on an ancestor.
+func (s attrSorter) resolvePrefix(prefix string) string {
+	if uri, ok := s.uris[prefix]; ok {
+		return uri
+	}
+	return prefix
+}
 
 // SortedAttrs provides sorting capabilities, compatible with XML C14N, on top
-// of an []xmltree.Attr
+// of an []xmltree.Attr.
+//
+// Deprecated for production use: its Less resolves namespace prefixes by
+// rescanning the attribute list, making a sort quadratic in the number of
+// attributes. Call SortAttrs instead. This type is retained because it
+// documents the comparator's contract directly and is exercised as such by
+// the canonicalization audit tests.
 type SortedAttrs []xmltree.Attr
 
 func (a SortedAttrs) Len() int {
@@ -21,62 +83,63 @@ func (a SortedAttrs) Swap(i, j int) {
 //  3. Unprefixed attributes, sorted by local name.
 //  4. namespace-qualified attributes, sorted first by namespace URI then by
 //     local name.
-//
-// The namespace URI for a prefixed attribute is resolved by scanning the same
-// attribute list for the corresponding xmlns:prefix declaration. This works
-// because namespace declarations are already present on the element (or have
-// been attached during exclusive-c14n processing) before sorting occurs.
 func (a SortedAttrs) Less(i, j int) bool {
+	return lessAttr(a[i], a[j], a.resolvePrefix)
+}
+
+// lessAttr implements the canonical attribute ordering. resolve maps a
+// namespace prefix to its URI; both SortedAttrs and attrSorter share this
+// comparison so the two orderings cannot drift apart.
+func lessAttr(x, y xmltree.Attr, resolve func(string) string) bool {
 	// --- 1. Default namespace declaration (xmlns="...") ---
 
-	// If attr j is a default namespace declaration, attr i may
+	// If attr y is a default namespace declaration, attr x may
 	// not be strictly "less" than it.
-	if a[j].Space == defaultPrefix && a[j].Key == xmlnsPrefix {
+	if y.Space == defaultPrefix && y.Key == xmlnsPrefix {
 		return false
 	}
 
-	// If attr i is a default namespace declaration, it comes before everything.
-	if a[i].Space == defaultPrefix && a[i].Key == xmlnsPrefix {
+	// If attr x is a default namespace declaration, it comes before everything.
+	if x.Space == defaultPrefix && x.Key == xmlnsPrefix {
 		return true
 	}
 
 	// --- 2. namespace prefix declarations (xmlns:prefix) sorted by prefix ---
 
-	if a[i].Space == xmlnsPrefix {
-		if a[j].Space == xmlnsPrefix {
-			return a[i].Key < a[j].Key
+	if x.Space == xmlnsPrefix {
+		if y.Space == xmlnsPrefix {
+			return x.Key < y.Key
 		}
 		return true
 	}
 
-	if a[j].Space == xmlnsPrefix {
+	if y.Space == xmlnsPrefix {
 		return false
 	}
 
 	// --- 3. Unprefixed attributes sorted by local name ---
 
-	if a[i].Space == defaultPrefix {
-		if a[j].Space == defaultPrefix {
-			return a[i].Key < a[j].Key
+	if x.Space == defaultPrefix {
+		if y.Space == defaultPrefix {
+			return x.Key < y.Key
 		}
 		return true
 	}
 
-	if a[j].Space == defaultPrefix {
+	if y.Space == defaultPrefix {
 		return false
 	}
 
 	// --- 4. namespace-qualified attributes, sorted by namespace URI then local name ---
 
-	// Resolve namespace URIs by scanning for matching xmlns:prefix declarations.
-	leftURI := a.resolvePrefix(a[i].Space)
-	rightURI := a.resolvePrefix(a[j].Space)
+	leftURI := resolve(x.Space)
+	rightURI := resolve(y.Space)
 
 	if leftURI != rightURI {
 		return leftURI < rightURI
 	}
 
-	return a[i].Key < a[j].Key
+	return x.Key < y.Key
 }
 
 // resolvePrefix finds the namespace URI for a prefix by scanning the attribute

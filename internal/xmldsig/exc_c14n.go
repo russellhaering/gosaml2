@@ -1,7 +1,6 @@
 package xmldsig
 
 import (
-	"sort"
 	"strings"
 
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
@@ -89,7 +88,7 @@ func transformExcC14n(ctx, declared NSContext, el *xmltree.Element, inclusiveNam
 		el.Attr = append(el.Attr, declared.declare(prefix, namespace))
 	}
 
-	sort.Sort(SortedAttrs(el.Attr))
+	SortAttrs(el.Attr)
 
 	if !comments {
 		c := 0
