@@ -100,14 +100,14 @@ func main() {
 
 	// Step 4: Configure the Service Provider.
 	s := &sp.ServiceProvider{
-		IDPSSOURL:        metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
-		IDPEntityID:      metadata.EntityID,
-		EntityID:         "http://example.com/saml/acs/example",
-		ACSURL:           "http://localhost:8080/v1/_saml_callback",
+		IDPSSOURL:         metadata.IDPSSODescriptor.SingleSignOnServices[0].Location,
+		IDPEntityID:       metadata.EntityID,
+		EntityID:          "http://example.com/saml/acs/example",
+		ACSURL:            "http://localhost:8080/v1/_saml_callback",
 		SignAuthnRequests: true,
-		AudienceURIs:     []string{"http://example.com/saml/acs/example"},
-		IDPCertificates:  idpCerts,
-		SPKeyStore:       randomKeyStore,
+		AudienceURIs:      []string{"http://example.com/saml/acs/example"},
+		IDPCertificates:   idpCerts,
+		SPKeyStore:        randomKeyStore,
 		// RequestTracker enables InResponseTo validation to prevent replay
 		// attacks. Entries expire after 5 minutes.
 		RequestTracker: sp.NewMemoryRequestTracker(5 * time.Minute),
