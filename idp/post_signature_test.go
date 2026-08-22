@@ -387,3 +387,132 @@ func TestLogoutOptInStillRejectsBadSignature(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, saml2.ErrBadSignature)
 }
+
+// --- logout message freshness ----------------------------------------------
+
+// signedLogoutRedirect builds a signed redirect LogoutRequest with the given
+// IssueInstant / NotOnOrAfter attributes.
+func signedLogoutRedirect(t *testing.T, idp *IdentityProvider, key *rsa.PrivateKey, issueInstant, notOnOrAfter string) (string, string, string) {
+	t.Helper()
+	extra := ""
+	if notOnOrAfter != "" {
+		extra = fmt.Sprintf(` NotOnOrAfter="%s"`, notOnOrAfter)
+	}
+	xmlStr := fmt.Sprintf(`<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_lo1" Version="2.0" IssueInstant="%s"%s Destination="%s"><saml:Issuer>%s</saml:Issuer><saml:NameID>victim@example.com</saml:NameID></samlp:LogoutRequest>`,
+		issueInstant, extra, idp.SLOURL, postTestSPEntityID)
+	msg := encodeAuthnRequestRedirect(xmlStr)
+	sigAlg, sig := signRedirectQuery(t, key, "SAMLRequest", msg, "")
+	return msg, sigAlg, sig
+}
+
+// TestIdPLogoutRequestStaleIssueInstantRejected is the regression test for the
+// IdP accepting a captured signed LogoutRequest indefinitely. The redirect
+// binding carries the whole signed message in a URL, so captures leak through
+// browser history, proxy logs and Referer headers.
+func TestIdPLogoutRequestStaleIssueInstantRejected(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	stale := testTime.Add(-24 * time.Hour).Format(time.RFC3339)
+	msg, sigAlg, sig := signedLogoutRedirect(t, idp, ks.Signer.(*rsa.PrivateKey), stale, "")
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrExpired)
+}
+
+// TestIdPLogoutRequestFreshAccepted confirms the bound is a window.
+func TestIdPLogoutRequestFreshAccepted(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	msg, sigAlg, sig := signedLogoutRedirect(t, idp, ks.Signer.(*rsa.PrivateKey),
+		testTime.Format(time.RFC3339), "")
+
+	req, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.NoError(t, err)
+	require.Equal(t, "_lo1", req.ID)
+}
+
+// TestIdPLogoutRequestFutureIssueInstantRejected covers the other direction.
+func TestIdPLogoutRequestFutureIssueInstantRejected(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	future := testTime.Add(24 * time.Hour).Format(time.RFC3339)
+	msg, sigAlg, sig := signedLogoutRedirect(t, idp, ks.Signer.(*rsa.PrivateKey), future, "")
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrNotYetValid)
+}
+
+// TestIdPLogoutRequestNotOnOrAfterEnforced is the regression test for
+// ReceivedLogoutRequest not modelling NotOnOrAfter at all: an SP that supplied
+// the attribute could not have it honoured.
+func TestIdPLogoutRequestNotOnOrAfterEnforced(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	// Fresh IssueInstant, but already expired by its own NotOnOrAfter.
+	msg, sigAlg, sig := signedLogoutRedirect(t, idp, ks.Signer.(*rsa.PrivateKey),
+		testTime.Format(time.RFC3339), testTime.Add(-time.Hour).Format(time.RFC3339))
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrExpired)
+}
+
+// TestIdPLogoutRequestNotOnOrAfterInFutureAccepted confirms a live expiry passes
+// and is surfaced on the struct.
+func TestIdPLogoutRequestNotOnOrAfterInFutureAccepted(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	notOnOrAfter := testTime.Add(time.Hour).Format(time.RFC3339)
+	msg, sigAlg, sig := signedLogoutRedirect(t, idp, ks.Signer.(*rsa.PrivateKey),
+		testTime.Format(time.RFC3339), notOnOrAfter)
+
+	req, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.NoError(t, err)
+	require.Equal(t, notOnOrAfter, req.NotOnOrAfter)
+}
+
+// TestIdPLogoutRequestMissingIssueInstantRejected: IssueInstant is mandatory on
+// SAML protocol messages, and an absent one must not read as unbounded.
+func TestIdPLogoutRequestMissingIssueInstantRejected(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	idp.ServiceProviders[postTestSPEntityID].AllowUnsignedLogoutRequests = true
+
+	xmlStr := fmt.Sprintf(`<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_lo1" Version="2.0" Destination="%s"><saml:Issuer>%s</saml:Issuer><saml:NameID>victim@example.com</saml:NameID></samlp:LogoutRequest>`,
+		idp.SLOURL, postTestSPEntityID)
+
+	_, _, err := idp.ValidateEncodedLogoutRequestPOST(context.Background(),
+		base64.StdEncoding.EncodeToString([]byte(xmlStr)))
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrMissingElement)
+}
+
+// TestIdPLogoutRequestMaxAgeConfigurable confirms the window is tunable.
+func TestIdPLogoutRequestMaxAgeConfigurable(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	idp.ServiceProviders[postTestSPEntityID].AllowUnsignedLogoutRequests = true
+	idp.ClockSkew = time.Second
+
+	xmlStr := fmt.Sprintf(`<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_lo1" Version="2.0" IssueInstant="%s" Destination="%s"><saml:Issuer>%s</saml:Issuer><saml:NameID>victim@example.com</saml:NameID></samlp:LogoutRequest>`,
+		testTime.Add(-time.Hour).Format(time.RFC3339), idp.SLOURL, postTestSPEntityID)
+	encoded := base64.StdEncoding.EncodeToString([]byte(xmlStr))
+
+	idp.MaxIssueInstantAge = 5 * time.Minute
+	_, _, err := idp.ValidateEncodedLogoutRequestPOST(context.Background(), encoded)
+	require.ErrorIs(t, err, saml2.ErrExpired)
+
+	idp.MaxIssueInstantAge = 24 * time.Hour
+	_, _, err = idp.ValidateEncodedLogoutRequestPOST(context.Background(), encoded)
+	require.NoError(t, err)
+}

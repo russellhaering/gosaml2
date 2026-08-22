@@ -72,6 +72,7 @@ func receivedLogoutRequestFromElement(el *xmltree.Element) (*ReceivedLogoutReque
 		ID:           el.SelectAttrValue("ID", ""),
 		Version:      el.SelectAttrValue("Version", ""),
 		IssueInstant: el.SelectAttrValue("IssueInstant", ""),
+		NotOnOrAfter: el.SelectAttrValue("NotOnOrAfter", ""),
 		Destination:  el.SelectAttrValue("Destination", ""),
 	}
 	issuer, err := el.SingleElement("Issuer")
