@@ -117,9 +117,10 @@ func TestEncryptedAssertion(t *testing.T) {
 			Signer: tlsCert.PrivateKey.(crypto.Signer),
 			Cert:   tlsCert.Certificate[0],
 		},
-		IDPCertificates:   []*x509.Certificate{idpCertParsed},
-		Clock:             func() time.Time { return fakeTime },
-		AllowIDPInitiated: true,
+		IDPCertificates:                 []*x509.Certificate{idpCertParsed},
+		Clock:                           func() time.Time { return fakeTime },
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
 	}
 
 	bs, err := ioutil.ReadFile("../testdata/saml.post")
@@ -178,10 +179,11 @@ func TestCompressedResponse(t *testing.T) {
 			Signer: cert.PrivateKey.(crypto.Signer),
 			Cert:   cert.Certificate[0],
 		},
-		IDPCertificates:   []*x509.Certificate{idpCertParsed},
-		Clock:             func() time.Time { return fakeTime },
-		AllowSHA1:         true,
-		AllowIDPInitiated: true,
+		IDPCertificates:                 []*x509.Certificate{idpCertParsed},
+		Clock:                           func() time.Time { return fakeTime },
+		AllowSHA1:                       true,
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
 	}
 
 	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))

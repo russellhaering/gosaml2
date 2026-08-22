@@ -147,15 +147,16 @@ func TestResponseRoundtrip(t *testing.T) {
 	}
 
 	spInst := &sp.ServiceProvider{
-		EntityID:          "https://sp.test/metadata",
-		ACSURL:            "https://sp.test/acs",
-		IDPEntityID:       "https://idp.test/metadata",
-		IDPSSOURL:         "https://idp.test/sso",
-		IDPCertificates:   []*x509.Certificate{idpCert},
-		SPKeyStore:        spKS,
-		AudienceURIs:      []string{"https://sp.test/metadata"},
-		AllowIDPInitiated: true,
-		Clock:             func() time.Time { return testTime },
+		EntityID:                        "https://sp.test/metadata",
+		ACSURL:                          "https://sp.test/acs",
+		IDPEntityID:                     "https://idp.test/metadata",
+		IDPSSOURL:                       "https://idp.test/sso",
+		IDPCertificates:                 []*x509.Certificate{idpCert},
+		SPKeyStore:                      spKS,
+		AudienceURIs:                    []string{"https://sp.test/metadata"},
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           func() time.Time { return testTime },
 	}
 
 	params := &AssertionParams{
@@ -233,15 +234,16 @@ func TestResponseRoundtrip_SignedAssertions(t *testing.T) {
 	}
 
 	spInst := &sp.ServiceProvider{
-		EntityID:          "https://sp.test/metadata",
-		ACSURL:            "https://sp.test/acs",
-		IDPEntityID:       "https://idp.test/metadata",
-		IDPSSOURL:         "https://idp.test/sso",
-		IDPCertificates:   []*x509.Certificate{idpCert},
-		SPKeyStore:        spKS,
-		AudienceURIs:      []string{"https://sp.test/metadata"},
-		AllowIDPInitiated: true,
-		Clock:             func() time.Time { return testTime },
+		EntityID:                        "https://sp.test/metadata",
+		ACSURL:                          "https://sp.test/acs",
+		IDPEntityID:                     "https://idp.test/metadata",
+		IDPSSOURL:                       "https://idp.test/sso",
+		IDPCertificates:                 []*x509.Certificate{idpCert},
+		SPKeyStore:                      spKS,
+		AudienceURIs:                    []string{"https://sp.test/metadata"},
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           func() time.Time { return testTime },
 	}
 
 	params := &AssertionParams{
@@ -292,15 +294,16 @@ func TestResponseRoundtrip_BothSigned(t *testing.T) {
 	}
 
 	spInst := &sp.ServiceProvider{
-		EntityID:          "https://sp.test/metadata",
-		ACSURL:            "https://sp.test/acs",
-		IDPEntityID:       "https://idp.test/metadata",
-		IDPSSOURL:         "https://idp.test/sso",
-		IDPCertificates:   []*x509.Certificate{idpCert},
-		SPKeyStore:        spKS,
-		AudienceURIs:      []string{"https://sp.test/metadata"},
-		AllowIDPInitiated: true,
-		Clock:             func() time.Time { return testTime },
+		EntityID:                        "https://sp.test/metadata",
+		ACSURL:                          "https://sp.test/acs",
+		IDPEntityID:                     "https://idp.test/metadata",
+		IDPSSOURL:                       "https://idp.test/sso",
+		IDPCertificates:                 []*x509.Certificate{idpCert},
+		SPKeyStore:                      spKS,
+		AudienceURIs:                    []string{"https://sp.test/metadata"},
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           func() time.Time { return testTime },
 	}
 
 	params := &AssertionParams{

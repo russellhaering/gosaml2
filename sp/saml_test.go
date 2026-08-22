@@ -166,15 +166,21 @@ func getServiceProvider(t *testing.T, _cert []byte) *ServiceProvider {
 	fakeTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	return &ServiceProvider{
-		IDPSSOURL:         "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
-		IDPEntityID:       "http://www.okta.com/exk5zt0r12Edi4rD20h7",
-		ACSURL:            "http://localhost:8080/v1/_saml_callback",
-		SignAuthnRequests: true,
-		AudienceURIs:      []string{"123"},
-		IDPCertificates:   []*x509.Certificate{cert, cert0},
-		NameIDFormat:      saml2.NameIdFormatPersistent,
-		EntityID:          "http://localhost:8080",
-		Clock:             func() time.Time { return fakeTime },
+		// This fixture-based round trip validates the same captured responses
+		// more than once and asserts that a OneTimeUse assertion is accepted
+		// with OneTimeUse surfaced as advisory info, so it opts out of replay
+		// protection explicitly. Enforcement with a cache configured is covered
+		// by assertion_replay_test.go.
+		InsecureAllowIDPInitiatedReplay: true,
+		IDPSSOURL:                       "https://dev-116807.oktapreview.com/app/scaleftdev116807_scaleft_1/exk5zt0r12Edi4rD20h7/sso/saml",
+		IDPEntityID:                     "http://www.okta.com/exk5zt0r12Edi4rD20h7",
+		ACSURL:                          "http://localhost:8080/v1/_saml_callback",
+		SignAuthnRequests:               true,
+		AudienceURIs:                    []string{"123"},
+		IDPCertificates:                 []*x509.Certificate{cert, cert0},
+		NameIDFormat:                    saml2.NameIdFormatPersistent,
+		EntityID:                        "http://localhost:8080",
+		Clock:                           func() time.Time { return fakeTime },
 	}
 }
 

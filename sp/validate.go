@@ -386,48 +386,74 @@ func (sp *ServiceProvider) ValidateDecodedLogoutRequest(request *saml2.LogoutReq
 	return nil
 }
 
-// validateInResponseTo checks the InResponseTo attribute against the
-// configured RequestTracker.
+// validateInResponseTo enforces the correlation between a response and the
+// request it claims to answer, and consumes the single-use identifiers that
+// keep a captured response from being replayed.
+//
+// The Response envelope is not necessarily signed -- in the common
+// assertion-signed deployment it is entirely attacker-controlled -- so its
+// InResponseTo is cross-checked against the signed
+// SubjectConfirmationData.InResponseTo. That comparison needs no RequestTracker
+// and runs unconditionally: gating it on one let an attacker satisfy
+// AllowIDPInitiated=false by inventing an envelope InResponseTo, and let a
+// signed assertion bound to one request be presented as the answer to another.
 func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *types.Response) error {
-	if sp.RequestTracker == nil {
-		if response.InResponseTo == "" && !sp.AllowIDPInitiated {
+	inResponseTo := response.InResponseTo
+
+	if inResponseTo == "" {
+		if !sp.AllowIDPInitiated {
 			return &saml2.ValidationError{
 				Reason: saml2.ErrReplay,
 				Detail: "missing InResponseTo and IdP-initiated SSO is not allowed",
 			}
 		}
-		return nil
+		// An unsolicited response answers no request, so no bearer
+		// confirmation may claim to.
+		if err := sp.checkUnsolicitedConfirmations(response); err != nil {
+			return err
+		}
+		return sp.consumeAssertions(ctx, response)
 	}
 
-	inResponseTo := response.InResponseTo
+	if err := sp.checkSolicitedConfirmations(response, inResponseTo); err != nil {
+		return err
+	}
 
-	if inResponseTo == "" {
-		if sp.AllowIDPInitiated {
-			for _, assertion := range response.Assertions {
-				if assertion.Subject == nil {
-					continue
-				}
-				for i := range assertion.Subject.SubjectConfirmations {
-					sc := &assertion.Subject.SubjectConfirmations[i]
-					if sc.Method != SubjMethodBearer || sc.SubjectConfirmationData == nil {
-						continue
-					}
-					if sc.SubjectConfirmationData.InResponseTo != "" {
-						return &saml2.ValidationError{
-							Reason: saml2.ErrReplay,
-							Detail: "unsolicited response contains SubjectConfirmationData.InResponseTo",
-						}
-					}
+	if sp.RequestTracker != nil {
+		if err := sp.RequestTracker.ConsumeRequest(ctx, inResponseTo); err != nil {
+			return err
+		}
+	}
+
+	return sp.consumeAssertions(ctx, response)
+}
+
+// checkUnsolicitedConfirmations rejects a bearer confirmation that names an
+// InResponseTo when the response claims to be unsolicited.
+func (sp *ServiceProvider) checkUnsolicitedConfirmations(response *types.Response) error {
+	for _, assertion := range response.Assertions {
+		if assertion.Subject == nil {
+			continue
+		}
+		for i := range assertion.Subject.SubjectConfirmations {
+			sc := &assertion.Subject.SubjectConfirmations[i]
+			if sc.Method != SubjMethodBearer || sc.SubjectConfirmationData == nil {
+				continue
+			}
+			if sc.SubjectConfirmationData.InResponseTo != "" {
+				return &saml2.ValidationError{
+					Reason: saml2.ErrReplay,
+					Detail: "unsolicited response contains SubjectConfirmationData.InResponseTo",
 				}
 			}
-			return nil
-		}
-		return &saml2.ValidationError{
-			Reason: saml2.ErrReplay,
-			Detail: "missing InResponseTo and IdP-initiated SSO is not allowed",
 		}
 	}
+	return nil
+}
 
+// checkSolicitedConfirmations requires every bearer confirmation to name the
+// request the response claims to answer.
+func (sp *ServiceProvider) checkSolicitedConfirmations(response *types.Response, inResponseTo string) error {
 	for _, assertion := range response.Assertions {
 		if assertion.Subject == nil {
 			continue
@@ -454,9 +480,73 @@ func (sp *ServiceProvider) validateInResponseTo(ctx context.Context, response *t
 			}
 		}
 	}
+	return nil
+}
 
-	if err := sp.RequestTracker.ConsumeRequest(ctx, inResponseTo); err != nil {
-		return err
+// consumeAssertions records each assertion as used, so a captured response
+// cannot be presented twice.
+//
+// Consuming the request ID only bounds solicited flows. An unsolicited response
+// has no request ID to consume, so without an assertion cache a captured
+// IdP-initiated response mints a fresh session on every submission until its
+// validity window closes. A cache is therefore required when AllowIDPInitiated
+// is enabled, and to honour saml:OneTimeUse.
+func (sp *ServiceProvider) consumeAssertions(ctx context.Context, response *types.Response) error {
+	if sp.AssertionReplayCache == nil {
+		if sp.InsecureAllowIDPInitiatedReplay {
+			return nil
+		}
+
+		if sp.AllowIDPInitiated {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrReplay,
+				Detail: "AllowIDPInitiated requires an AssertionReplayCache: an unsolicited " +
+					"response has no request ID to consume, so replay can only be prevented by " +
+					"recording assertion IDs (set AssertionReplayCache, or " +
+					"InsecureAllowIDPInitiatedReplay to accept replay)",
+			}
+		}
+
+		// A solicited response is already single-use: the RequestTracker
+		// consumed the request ID it answers. Only complain about OneTimeUse
+		// when nothing else bounds reuse.
+		if response.InResponseTo != "" && sp.RequestTracker != nil {
+			return nil
+		}
+		for _, assertion := range response.Assertions {
+			if assertion.Conditions != nil && assertion.Conditions.OneTimeUse != nil {
+				return &saml2.ValidationError{
+					Reason: saml2.ErrReplay,
+					Detail: "assertion carries a OneTimeUse condition but nothing bounds reuse: " +
+						"configure an AssertionReplayCache (or a RequestTracker for solicited flows)",
+				}
+			}
+		}
+		return nil
+	}
+
+	skew := sp.clockSkew()
+	for _, assertion := range response.Assertions {
+		if assertion.ID == "" {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrMissingElement,
+				Detail: "assertion has no ID attribute to track for replay",
+			}
+		}
+
+		// Bound retention by the assertion's own validity window: past that it
+		// is rejected on its Conditions regardless. validateAssertionConditions
+		// has already required NotOnOrAfter to be present and parseable.
+		expiresAt := sp.now().Add(skew)
+		if assertion.Conditions != nil && assertion.Conditions.NotOnOrAfter != "" {
+			if notOnOrAfter, err := time.Parse(time.RFC3339, assertion.Conditions.NotOnOrAfter); err == nil {
+				expiresAt = notOnOrAfter.Add(skew)
+			}
+		}
+
+		if err := sp.AssertionReplayCache.ConsumeAssertion(ctx, assertion.ID, expiresAt); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -537,6 +537,7 @@ func TestReplay_IDPInitiated_Allowed(t *testing.T) {
 	sp, _ := securityTestSP(t)
 	sp.RequestTracker = NewMemoryRequestTracker(5 * time.Minute)
 	sp.AllowIDPInitiated = true
+	sp.AssertionReplayCache = NewMemoryAssertionReplayCache()
 
 	now := sp.now()
 	idpInitiatedResp := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
@@ -1076,6 +1077,7 @@ func TestTemporal_ClockSkewBoundary(t *testing.T) {
 	sp, _ := securityTestSP(t)
 	sp.ClockSkew = 30 * time.Second
 	sp.AllowIDPInitiated = true
+	sp.AssertionReplayCache = NewMemoryAssertionReplayCache()
 
 	now := sp.now()
 

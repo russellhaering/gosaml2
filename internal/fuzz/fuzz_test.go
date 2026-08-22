@@ -38,11 +38,11 @@ import (
 	"testing"
 	"time"
 
-	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	saml2 "github.com/russellhaering/gosaml2/v2"
+	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
+	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 	spkg "github.com/russellhaering/gosaml2/v2/sp"
 	"github.com/russellhaering/gosaml2/v2/types"
-	dsig "github.com/russellhaering/gosaml2/v2/internal/xmldsig"
 )
 
 // fuzzKeyMaterial holds pre-generated cryptographic material for fuzz tests
@@ -201,10 +201,11 @@ func fuzzSP(km *fuzzKeyMaterial) *spkg.ServiceProvider {
 			Signer: km.rsaKey,
 			Cert:   km.rsaCertDER,
 		},
-		AudienceURIs:     []string{"https://sp.example.com"},
-		Clock:            func() time.Time { return km.fakeTime },
-		ClockSkew:        60 * time.Second,
-		AllowIDPInitiated: true,
+		AudienceURIs:                    []string{"https://sp.example.com"},
+		Clock:                           func() time.Time { return km.fakeTime },
+		ClockSkew:                       60 * time.Second,
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
 	}
 }
 
@@ -300,14 +301,14 @@ func FuzzBuildRequest(f *testing.F) {
 		}
 
 		sp := &spkg.ServiceProvider{
-			IDPSSOURL:        "https://idp.example.com/sso",
-			IDPEntityID:      "https://idp.example.com/",
-			ACSURL:           "https://sp.example.com/acs",
-			AudienceURIs:     []string{"https://sp.example.com/audience"},
-			EntityID:         "https://sp.example.com",
+			IDPSSOURL:         "https://idp.example.com/sso",
+			IDPEntityID:       "https://idp.example.com/",
+			ACSURL:            "https://sp.example.com/acs",
+			AudienceURIs:      []string{"https://sp.example.com/audience"},
+			EntityID:          "https://sp.example.com",
 			SignAuthnRequests: idValue%2 == 0,
-			ForceAuthn:       idValue%3 == 0,
-			IsPassive:        idValue%5 == 0,
+			ForceAuthn:        idValue%3 == 0,
+			IsPassive:         idValue%5 == 0,
 		}
 
 		_, _ = sp.BuildAuthURL(relayState)
@@ -793,11 +794,11 @@ func FuzzMetadataConfigureRoundTrip(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, entityID, acsURL, sloURL string, signRequests, wantEnc bool) {
 		sp := &spkg.ServiceProvider{
-			EntityID:         entityID,
-			ACSURL:           acsURL,
-			SLOURL:           sloURL,
+			EntityID:          entityID,
+			ACSURL:            acsURL,
+			SLOURL:            sloURL,
 			SignAuthnRequests: signRequests,
-			Clock:            func() time.Time { return km.fakeTime },
+			Clock:             func() time.Time { return km.fakeTime },
 		}
 
 		if signRequests {
@@ -877,13 +878,13 @@ func FuzzBuildLogoutRequest(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, nameID, sessionIndex, relayState string, sign bool) {
 		sp := &spkg.ServiceProvider{
-			EntityID:         "https://sp.example.com",
-			ACSURL:           "https://sp.example.com/acs",
-			SLOURL:           "https://sp.example.com/slo",
-			IDPEntityID:      "https://idp.example.com/",
-			IDPSLOURL:        "https://idp.example.com/slo",
+			EntityID:          "https://sp.example.com",
+			ACSURL:            "https://sp.example.com/acs",
+			SLOURL:            "https://sp.example.com/slo",
+			IDPEntityID:       "https://idp.example.com/",
+			IDPSLOURL:         "https://idp.example.com/slo",
 			SignAuthnRequests: sign,
-			Clock:            func() time.Time { return km.fakeTime },
+			Clock:             func() time.Time { return km.fakeTime },
 		}
 
 		if sign {
@@ -1007,6 +1008,7 @@ func FuzzValidateEncodedResponseWithEncryption(f *testing.F) {
 		Clock:                           func() time.Time { return km.fakeTime },
 		ClockSkew:                       60 * time.Second,
 		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
 	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
