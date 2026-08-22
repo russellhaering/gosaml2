@@ -51,7 +51,31 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestPOST(_ context.Context,
 		}
 	}
 
-	return idp.decodeAndValidateLogoutRequest(raw)
+	el, req, sp, err := idp.decodeAndValidateLogoutRequest(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	verified, err := idp.verifyPOSTSignature(sp, el)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if verified != nil {
+		// Re-read everything from the bytes that were actually signed.
+		_, req, _, err = idp.validateLogoutRequestElement(verified)
+		if err != nil {
+			return nil, nil, err
+		}
+		if req.Issuer != sp.EntityID {
+			return nil, nil, &saml2.ValidationError{
+				Reason: saml2.ErrBadIssuer,
+				Detail: fmt.Sprintf("signed LogoutRequest Issuer %s does not match signing SP %s", req.Issuer, sp.EntityID),
+			}
+		}
+	}
+
+	return req, sp, nil
 }
 
 // ValidateEncodedLogoutRequestRedirect decodes and validates a LogoutRequest
@@ -63,7 +87,7 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestRedirect(_ context.Cont
 		return nil, nil, err
 	}
 
-	req, sp, err := idp.decodeAndValidateLogoutRequest(raw)
+	_, req, sp, err := idp.decodeAndValidateLogoutRequest(raw)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -83,46 +107,52 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestRedirect(_ context.Cont
 	return req, sp, nil
 }
 
-func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*ReceivedLogoutRequest, *SPConfig, error) {
+func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*xmltree.Element, *ReceivedLogoutRequest, *SPConfig, error) {
 	doc, err := xmltree.Parse(raw)
 	if err != nil {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML validation failed: %v", err),
 		}
 	}
 
-	req, err := receivedLogoutRequestFromElement(doc.Root())
+	return idp.validateLogoutRequestElement(doc.Root())
+}
+
+// validateLogoutRequestElement extracts and validates a LogoutRequest from an
+// already parsed element, resolving the issuing SP.
+func (idp *IdentityProvider) validateLogoutRequestElement(el *xmltree.Element) (*xmltree.Element, *ReceivedLogoutRequest, *SPConfig, error) {
+	req, err := receivedLogoutRequestFromElement(el)
 	if err != nil {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML unmarshal error: %v", err),
 		}
 	}
 
 	if req.ID == "" {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMissingElement,
 			Detail: "LogoutRequest missing ID attribute",
 		}
 	}
 
 	if req.Version != "2.0" {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrBadVersion,
 			Detail: fmt.Sprintf("expected 2.0, got %s", req.Version),
 		}
 	}
 
 	if req.Issuer == "" {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: "LogoutRequest missing Issuer",
 		}
 	}
 
 	if req.Destination != "" && req.Destination != idp.SLOURL {
-		return nil, nil, &saml2.ValidationError{
+		return nil, nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrBadDestination,
 			Detail: fmt.Sprintf("expected %s, got %s", idp.SLOURL, req.Destination),
 		}
@@ -130,10 +160,10 @@ func (idp *IdentityProvider) decodeAndValidateLogoutRequest(raw []byte) (*Receiv
 
 	sp, err := idp.lookupSP(req.Issuer)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return req, sp, nil
+	return el, req, sp, nil
 }
 
 // BuildLogoutResponseDocument builds a signed LogoutResponse XML document.
