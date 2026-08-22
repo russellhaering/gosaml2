@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
@@ -31,9 +32,14 @@ type ReceivedLogoutRequest struct {
 	ID           string   `xml:"ID,attr"`
 	Version      string   `xml:"Version,attr"`
 	IssueInstant string   `xml:"IssueInstant,attr"`
-	Destination  string   `xml:"Destination,attr,omitempty"`
-	Issuer       string   `xml:"Issuer"`
-	NameID       struct {
+
+	// NotOnOrAfter is the request's own expiry. It was previously not modelled
+	// at all, so an SP that supplied it could not have it honoured.
+	NotOnOrAfter string `xml:"NotOnOrAfter,attr,omitempty"`
+
+	Destination string `xml:"Destination,attr,omitempty"`
+	Issuer      string `xml:"Issuer"`
+	NameID      struct {
 		Format string `xml:"Format,attr,omitempty"`
 		Value  string `xml:",chardata"`
 	} `xml:"NameID"`
@@ -162,12 +168,77 @@ func (idp *IdentityProvider) validateLogoutRequestElement(el *xmltree.Element) (
 		}
 	}
 
+	if err := idp.validateLogoutRequestFreshness(req); err != nil {
+		return nil, nil, nil, err
+	}
+
 	sp, err := idp.lookupSP(req.Issuer)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return el, req, sp, nil
+}
+
+// validateLogoutRequestFreshness bounds a LogoutRequest's age and honours its
+// NotOnOrAfter. A LogoutRequest carries no mandatory expiry, so without an age
+// bound a captured signed request -- the redirect binding puts the whole thing
+// in a URL, which persists in history, logs and Referer headers -- stays
+// verifiable forever and can terminate the named principal's session at any
+// later time.
+func (idp *IdentityProvider) validateLogoutRequestFreshness(req *ReceivedLogoutRequest) error {
+	now := idp.now()
+	skew := idp.clockSkew()
+
+	if req.IssueInstant == "" {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrMissingElement,
+			Detail: "LogoutRequest missing IssueInstant",
+		}
+	}
+
+	issueInstant, err := time.Parse(time.RFC3339, req.IssueInstant)
+	if err != nil {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrMalformed,
+			Detail: fmt.Sprintf("cannot parse LogoutRequest.IssueInstant %q as time", req.IssueInstant),
+		}
+	}
+
+	if now.Add(skew).Before(issueInstant) {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrNotYetValid,
+			Detail: fmt.Sprintf("LogoutRequest.IssueInstant %s is in the future (now %s)",
+				req.IssueInstant, now.Format(time.RFC3339)),
+		}
+	}
+
+	if issueInstant.Add(idp.maxIssueInstantAge() + skew).Before(now) {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrExpired,
+			Detail: fmt.Sprintf("LogoutRequest.IssueInstant %s is older than %s (now %s)",
+				req.IssueInstant, idp.maxIssueInstantAge(), now.Format(time.RFC3339)),
+		}
+	}
+
+	if req.NotOnOrAfter != "" {
+		notOnOrAfter, err := time.Parse(time.RFC3339, req.NotOnOrAfter)
+		if err != nil {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrMalformed,
+				Detail: fmt.Sprintf("cannot parse LogoutRequest.NotOnOrAfter %q as time", req.NotOnOrAfter),
+			}
+		}
+		if now.Add(-skew).After(notOnOrAfter) {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrExpired,
+				Detail: fmt.Sprintf("LogoutRequest.NotOnOrAfter %s, now %s",
+					req.NotOnOrAfter, now.Format(time.RFC3339)),
+			}
+		}
+	}
+
+	return nil
 }
 
 // BuildLogoutResponseDocument builds a signed LogoutResponse XML document.

@@ -67,9 +67,17 @@ type ServiceProvider struct {
 	SignAuthnRequestsCanonicalizer dsig.Canonicalizer
 
 	// Validation
-	ClockSkew      time.Duration
-	AudienceURIs   []string
-	RequestTracker RequestTracker
+	ClockSkew time.Duration
+
+	// MaxIssueInstantAge bounds how old a logout message's IssueInstant may be
+	// before it is rejected, defaulting to 5 minutes. Logout messages are
+	// short-lived by design, and the redirect binding carries the whole signed
+	// message in a URL, where it persists in browser history, proxy and server
+	// logs, and can leak via Referer. Without an upper bound on age such a
+	// capture stays verifiable forever.
+	MaxIssueInstantAge time.Duration
+	AudienceURIs       []string
+	RequestTracker     RequestTracker
 
 	// AssertionReplayCache records accepted assertion IDs so a bearer assertion
 	// authenticates at most once. RequestTracker only bounds solicited flows, by
@@ -197,6 +205,15 @@ func (sp *ServiceProvider) now() time.Time {
 		return sp.Clock()
 	}
 	return time.Now()
+}
+
+// maxIssueInstantAge returns the configured logout message lifetime,
+// defaulting to 5 minutes.
+func (sp *ServiceProvider) maxIssueInstantAge() time.Duration {
+	if sp.MaxIssueInstantAge != 0 {
+		return sp.MaxIssueInstantAge
+	}
+	return 5 * time.Minute
 }
 
 // clockSkew returns the configured clock skew, defaulting to 60s.

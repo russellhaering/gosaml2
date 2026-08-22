@@ -29,16 +29,20 @@ import (
 
 // IdentityProvider represents a SAML 2.0 Identity Provider.
 type IdentityProvider struct {
-	EntityID                    string
-	SSOURL                      string
-	SLOURL                      string
-	SigningKeyStore             *saml2.KeyStore
-	SignResponses               bool
-	SignAssertions              bool
-	SignatureAlgorithm          string
-	SignatureCanonicalizer      dsig.Canonicalizer
-	ServiceProviders            map[string]*SPConfig
-	ClockSkew                   time.Duration
+	EntityID               string
+	SSOURL                 string
+	SLOURL                 string
+	SigningKeyStore        *saml2.KeyStore
+	SignResponses          bool
+	SignAssertions         bool
+	SignatureAlgorithm     string
+	SignatureCanonicalizer dsig.Canonicalizer
+	ServiceProviders       map[string]*SPConfig
+	ClockSkew              time.Duration
+
+	// MaxIssueInstantAge bounds how old a LogoutRequest's IssueInstant may be
+	// before it is rejected, defaulting to 5 minutes.
+	MaxIssueInstantAge          time.Duration
 	AllowSHA1                   bool
 	AssertionLifetime           time.Duration
 	SessionLifetime             time.Duration
@@ -92,6 +96,15 @@ func (idp *IdentityProvider) clockSkew() time.Duration {
 		return idp.ClockSkew
 	}
 	return 60 * time.Second
+}
+
+// maxIssueInstantAge returns the configured LogoutRequest lifetime, defaulting
+// to 5 minutes.
+func (idp *IdentityProvider) maxIssueInstantAge() time.Duration {
+	if idp.MaxIssueInstantAge != 0 {
+		return idp.MaxIssueInstantAge
+	}
+	return 5 * time.Minute
 }
 
 func (idp *IdentityProvider) assertionLifetime() time.Duration {

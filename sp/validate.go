@@ -303,12 +303,49 @@ func (sp *ServiceProvider) validateBearerConfirmation(sc *types.SubjectConfirmat
 	return nil
 }
 
+// validateIssueInstant bounds how far a message's IssueInstant may be from now.
+// Logout messages carry no mandatory expiry, so without this a captured signed
+// message stays acceptable indefinitely.
+func (sp *ServiceProvider) validateIssueInstant(kind string, issueInstant time.Time) error {
+	if issueInstant.IsZero() {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrMissingElement,
+			Detail: fmt.Sprintf("%s missing IssueInstant", kind),
+		}
+	}
+
+	now := sp.now()
+	skew := sp.clockSkew()
+
+	if now.Add(skew).Before(issueInstant) {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrNotYetValid,
+			Detail: fmt.Sprintf("%s IssueInstant %s is in the future (now %s)",
+				kind, issueInstant.Format(time.RFC3339), now.Format(time.RFC3339)),
+		}
+	}
+
+	if issueInstant.Add(sp.maxIssueInstantAge() + skew).Before(now) {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrExpired,
+			Detail: fmt.Sprintf("%s IssueInstant %s is older than %s (now %s)",
+				kind, issueInstant.Format(time.RFC3339), sp.maxIssueInstantAge(), now.Format(time.RFC3339)),
+		}
+	}
+
+	return nil
+}
+
 // ValidateDecodedLogoutResponse validates a previously decoded and
 // signature-verified LogoutResponse, checking issuer, status, destination,
 // and version.
 func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutResponse) error {
 	err := sp.validateLogoutResponseAttributes(response)
 	if err != nil {
+		return err
+	}
+
+	if err := sp.validateIssueInstant("LogoutResponse", response.IssueInstant); err != nil {
 		return err
 	}
 
@@ -350,6 +387,10 @@ func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutR
 func (sp *ServiceProvider) ValidateDecodedLogoutRequest(request *saml2.LogoutRequest) error {
 	err := sp.validateLogoutRequestAttributes(request)
 	if err != nil {
+		return err
+	}
+
+	if err := sp.validateIssueInstant("LogoutRequest", request.IssueInstant); err != nil {
 		return err
 	}
 
