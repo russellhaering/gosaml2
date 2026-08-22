@@ -89,7 +89,31 @@ func (ctx NSContext) declare(prefix, namespace string) xmltree.Attr {
 	}
 }
 
+// declaresNamespace reports whether el carries any namespace declaration.
+func declaresNamespace(el *xmltree.Element) bool {
+	for _, attr := range el.Attr {
+		if attr.Space == xmlnsPrefix || (attr.Space == defaultPrefix && attr.Key == xmlnsPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// SubContext returns the namespace scope in effect inside el.
+//
+// An element that declares nothing shares its parent's prefix map rather than
+// copying it. Copying unconditionally makes the per-element cost proportional
+// to the number of in-scope ancestor declarations, so a document with a deep
+// chain of declarations followed by many cheap elements costs
+// declarations*elements -- and the traversal limit bounds the element count,
+// not the per-element cost. Sharing is safe because a context is only ever
+// mutated (via declare) immediately after being copied, which below happens
+// only when el actually declares something.
 func (ctx NSContext) SubContext(el *xmltree.Element) (NSContext, error) {
+	if !declaresNamespace(el) {
+		return ctx, nil
+	}
+
 	// The subcontext should inherit existing declared prefixes
 	newCtx := ctx.Copy()
 

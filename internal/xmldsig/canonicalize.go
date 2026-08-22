@@ -24,7 +24,11 @@ func (c *NullCanonicalizer) Algorithm() AlgorithmID {
 }
 
 func (c *NullCanonicalizer) Canonicalize(el *xmltree.Element) ([]byte, error) {
-	return canonicalSerialize(canonicalPrep(el, false, true))
+	prepped, err := canonicalPrep(el, false, true)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalSerialize(prepped)
 }
 
 type c14N10ExclusiveCanonicalizer struct {
@@ -87,7 +91,11 @@ func MakeC14N11WithCommentsCanonicalizer() Canonicalizer {
 
 // Canonicalize transforms the input Element into a serialized XML document in canonical form.
 func (c *c14N11Canonicalizer) Canonicalize(el *xmltree.Element) ([]byte, error) {
-	return canonicalSerialize(canonicalPrep(el, true, c.comments))
+	prepped, err := canonicalPrep(el, true, c.comments)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalSerialize(prepped)
 }
 
 func (c *c14N11Canonicalizer) Algorithm() AlgorithmID {
@@ -120,7 +128,11 @@ func (c *c14N10RecCanonicalizer) Canonicalize(inputXML *xmltree.Element) ([]byte
 	parentNamespaceAttributes, parentXmlAttributes := getParentNamespaceAndXmlAttributes(inputXML)
 	inputXMLCopy := inputXML.Copy()
 	enhanceNamespaceAttributes(inputXMLCopy, parentNamespaceAttributes, parentXmlAttributes)
-	return canonicalSerialize(canonicalPrep(inputXMLCopy, true, c.comments))
+	prepped, err := canonicalPrep(inputXMLCopy, true, c.comments)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalSerialize(prepped)
 }
 
 func (c *c14N10RecCanonicalizer) Algorithm() AlgorithmID {
@@ -157,20 +169,55 @@ const nsSpace = "xmlns"
 //
 // TODO(russell_h): This is very similar to excCanonicalPrep - perhaps they should
 // be unified into one parameterized function?
-func canonicalPrep(el *xmltree.Element, strip bool, comments bool) *xmltree.Element {
+func canonicalPrep(el *xmltree.Element, strip bool, comments bool) (*xmltree.Element, error) {
 	// Create a dedicated copy of the element that canonicalPrepInner can modify.
 	ne := el.Copy()
-	canonicalPrepInner(ne, make(map[string]string), strip, comments)
-	return ne
+	budget := canonicalPrepElementLimit
+	if err := canonicalPrepInner(ne, make(map[string]string), &budget, strip, comments); err != nil {
+		return nil, err
+	}
+	return ne, nil
 }
 
-func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, strip bool, comments bool) {
-	_seenSoFar := make(map[string]string)
-	for k, v := range seenSoFar {
-		_seenSoFar[k] = v
+// canonicalPrepElementLimit bounds how many elements inclusive canonicalization
+// will process. Exclusive canonicalization is bounded by NSContext.CheckLimit
+// at the same count, and both run on attacker-supplied XML before any signature
+// is verified -- the CanonicalizationMethod that selects between them is itself
+// attacker-controlled, so an unbounded inclusive path is simply the one an
+// attacker picks.
+const canonicalPrepElementLimit = 1000
+
+// canonicalPrepInner rewrites ne in place into inclusive canonical form.
+//
+// seenSoFar maps a namespace declaration to the value already in scope, and is
+// shared across the whole traversal rather than copied per element: copying it
+// at every element makes the per-element cost proportional to the number of
+// ancestor declarations, so a deep chain of declarations followed by many cheap
+// leaves costs declarations*leaves. Declarations this element adds are undone
+// on the way back out, which keeps the shared map equivalent to a per-element
+// copy without the copying.
+func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, budget *int, strip bool, comments bool) error {
+	if *budget <= 0 {
+		return ErrCanonicalizationLimit
 	}
+	*budget--
 
 	SortAttrs(ne.Attr)
+
+	// Declarations this element introduces, newest last, so they can be
+	// unwound in reverse once its subtree is done.
+	type shadowed struct {
+		key     string
+		prevURI string
+		prevOK  bool
+	}
+	var undo []shadowed
+	declare := func(key, value string) {
+		prev, ok := seenSoFar[key]
+		undo = append(undo, shadowed{key: key, prevURI: prev, prevOK: ok})
+		seenSoFar[key] = value
+	}
+
 	n := 0
 	for _, attr := range ne.Attr {
 		if attr.Space != nsSpace && !(attr.Space == "" && attr.Key == nsSpace) {
@@ -181,16 +228,16 @@ func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, strip 
 
 		if attr.Space == nsSpace {
 			key := attr.Space + ":" + attr.Key
-			if uri, seen := _seenSoFar[key]; !seen || attr.Value != uri {
+			if uri, seen := seenSoFar[key]; !seen || attr.Value != uri {
 				ne.Attr[n] = attr
 				n++
-				_seenSoFar[key] = attr.Value
+				declare(key, attr.Value)
 			}
 		} else {
-			if uri, seen := _seenSoFar[nsSpace]; (!seen && attr.Value != "") || attr.Value != uri {
+			if uri, seen := seenSoFar[nsSpace]; (!seen && attr.Value != "") || attr.Value != uri {
 				ne.Attr[n] = attr
 				n++
-				_seenSoFar[nsSpace] = attr.Value
+				declare(nsSpace, attr.Value)
 			}
 		}
 	}
@@ -210,9 +257,22 @@ func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, strip 
 	for _, token := range ne.Child {
 		childElement, ok := token.(*xmltree.Element)
 		if ok {
-			canonicalPrepInner(childElement, _seenSoFar, strip, comments)
+			if err := canonicalPrepInner(childElement, seenSoFar, budget, strip, comments); err != nil {
+				return err
+			}
 		}
 	}
+
+	for i := len(undo) - 1; i >= 0; i-- {
+		u := undo[i]
+		if u.prevOK {
+			seenSoFar[u.key] = u.prevURI
+		} else {
+			delete(seenSoFar, u.key)
+		}
+	}
+
+	return nil
 }
 
 func canonicalSerialize(el *xmltree.Element) ([]byte, error) {

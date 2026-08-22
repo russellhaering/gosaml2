@@ -72,7 +72,7 @@ func TestInputValidation_DeeplyNestedXML_CanonicalPrep(t *testing.T) {
 			}
 			close(done)
 		}()
-		_ = canonicalPrep(root, true, false)
+		_, _ = canonicalPrep(root, true, false)
 	}()
 
 	select {
@@ -1122,7 +1122,7 @@ func TestInputValidation_CanonicalPrep_LargeNumberOfSiblings(t *testing.T) {
 	done := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
-		_ = canonicalPrep(root, true, false)
+		_, _ = canonicalPrep(root, true, false)
 		done <- time.Since(start)
 	}()
 
