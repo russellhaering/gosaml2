@@ -73,6 +73,17 @@ func (sp *ServiceProvider) validateAssertionConditions(assertion *types.Assertio
 	}
 
 	if len(sp.AudienceURIs) > 0 {
+		// An assertion with no AudienceRestriction at all is not scoped to any
+		// service provider. Treating that as "no restriction to check" would
+		// let an assertion the IdP never bound to this SP satisfy a configured
+		// audience policy, so require at least one restriction to be present.
+		if len(conditions.AudienceRestrictions) == 0 {
+			return &saml2.ValidationError{
+				Reason: saml2.ErrAudienceMismatch,
+				Detail: "assertion has no AudienceRestriction",
+			}
+		}
+
 		for _, audienceRestriction := range conditions.AudienceRestrictions {
 			matched := false
 

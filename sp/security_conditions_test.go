@@ -433,8 +433,13 @@ func TestSecurityConditions_EmptyAudienceRestriction(t *testing.T) {
 	require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
 }
 
-// Test 16: No AudienceRestriction elements at all - should skip audience check.
-func TestSecurityConditions_NoAudienceRestrictionSkipsCheck(t *testing.T) {
+// Test 16: No AudienceRestriction elements at all. An assertion with no
+// AudienceRestriction is not scoped to any SP, so with AudienceURIs configured
+// it must be rejected rather than treated as "nothing to check" -- otherwise an
+// assertion the IdP never bound to this SP satisfies the audience policy. This
+// also keeps it consistent with Test 15, which rejects an empty
+// <AudienceRestriction/>.
+func TestSecurityConditions_NoAudienceRestrictionRejected(t *testing.T) {
 	sp := setupSPWithTracker(t)
 
 	responseXML := buildCustomResponse(sp, func(s string) string {
@@ -447,7 +452,8 @@ func TestSecurityConditions_NoAudienceRestrictionSkipsCheck(t *testing.T) {
 
 	encoded := signAndEncode(t, responseXML, sp)
 	_, err := sp.RetrieveAssertionInfo(context.Background(), encoded)
-	require.NoError(t, err, "No AudienceRestriction elements should skip audience validation")
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
 }
 
 // Test 17: SP has empty AudienceURIs slice - should skip audience validation.
