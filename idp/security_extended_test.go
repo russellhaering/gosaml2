@@ -101,15 +101,16 @@ func TestSecurityIdP_WrongACSURLRejectedBySP(t *testing.T) {
 
 	// SP expects responses at its own ACS URL
 	spInst := &sp.ServiceProvider{
-		EntityID:          "https://sp.test/metadata",
-		ACSURL:            "https://sp.test/acs",
-		IDPEntityID:       "https://idp.test/metadata",
-		IDPSSOURL:         "https://idp.test/sso",
-		IDPCertificates:   []*x509.Certificate{idpCert},
-		SPKeyStore:        spKS,
-		AudienceURIs:      []string{"https://sp.test/metadata"},
-		AllowIDPInitiated: true,
-		Clock:             func() time.Time { return testTime },
+		EntityID:                        "https://sp.test/metadata",
+		ACSURL:                          "https://sp.test/acs",
+		IDPEntityID:                     "https://idp.test/metadata",
+		IDPSSOURL:                       "https://idp.test/sso",
+		IDPCertificates:                 []*x509.Certificate{idpCert},
+		SPKeyStore:                      spKS,
+		AudienceURIs:                    []string{"https://sp.test/metadata"},
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           func() time.Time { return testTime },
 	}
 
 	// Build response where the Recipient is the evil ACS URL. Because
@@ -264,14 +265,15 @@ func TestSecurityIdP_EmptyIDPEntityIDSkipsIssuerCheck(t *testing.T) {
 
 	// SP with empty IDPEntityID - skips issuer check
 	spInst := &sp.ServiceProvider{
-		EntityID:          "https://sp.test/metadata",
-		ACSURL:            "https://sp.test/acs",
-		IDPEntityID:       "", // intentionally empty
-		IDPCertificates:   []*x509.Certificate{idpCert},
-		SPKeyStore:        spKS,
-		AudienceURIs:      []string{"https://sp.test/metadata"},
-		AllowIDPInitiated: true,
-		Clock:             func() time.Time { return testTime },
+		EntityID:                        "https://sp.test/metadata",
+		ACSURL:                          "https://sp.test/acs",
+		IDPEntityID:                     "", // intentionally empty
+		IDPCertificates:                 []*x509.Certificate{idpCert},
+		SPKeyStore:                      spKS,
+		AudienceURIs:                    []string{"https://sp.test/metadata"},
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           func() time.Time { return testTime },
 	}
 
 	params := &AssertionParams{

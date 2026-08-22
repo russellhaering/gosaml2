@@ -665,6 +665,7 @@ func TestSecurityConditions_InResponseToPresentInSCDButEmptyInResponse(t *testin
 	sp, _ := securityTestSP(t)
 	sp.RequestTracker = NewMemoryRequestTracker(5 * time.Minute)
 	sp.AllowIDPInitiated = true
+	sp.AssertionReplayCache = NewMemoryAssertionReplayCache()
 	now := sp.now()
 
 	// Response has no InResponseTo, but SCD has one

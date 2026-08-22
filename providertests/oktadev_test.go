@@ -41,14 +41,15 @@ var oktaScenarioErrors = map[int]string{
 
 func TestOktaDevCasesLocally(t *testing.T) {
 	serviceProv := &sp.ServiceProvider{
-		IDPSSOURL:         "http://example.com/saml/acs/example",
-		IDPEntityID:       "http://example.com/saml/acs/example",
-		ACSURL:            "http://dba9a5fc.ngrok.io/v1/_saml_callback",
-		AudienceURIs:      []string{"http://example.com/saml/acs/example"},
-		IDPCertificates:   LoadCertificates("./testdata/saml.oktadev.com/oktadev.pem"),
-		AllowSHA1:         true,
-		AllowIDPInitiated: true,
-		Clock:             fakeClock(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC)),
+		IDPSSOURL:                       "http://example.com/saml/acs/example",
+		IDPEntityID:                     "http://example.com/saml/acs/example",
+		ACSURL:                          "http://dba9a5fc.ngrok.io/v1/_saml_callback",
+		AudienceURIs:                    []string{"http://example.com/saml/acs/example"},
+		IDPCertificates:                 LoadCertificates("./testdata/saml.oktadev.com/oktadev.pem"),
+		AllowSHA1:                       true,
+		AllowIDPInitiated:               true,
+		InsecureAllowIDPInitiatedReplay: true,
+		Clock:                           fakeClock(time.Date(2017, 4, 4, 17, 54, 0, 0, time.UTC)),
 	}
 
 	scenarios := []ProviderTestScenario{}

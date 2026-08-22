@@ -119,6 +119,7 @@ func TestValidateResponses(t *testing.T) {
 				InsecureSkipSignatureValidation: false,
 				AllowSHA1:                       true,
 				AllowIDPInitiated:               true,
+				InsecureAllowIDPInitiatedReplay: true,
 				Clock:                           fakeClock(time.Date(2017, 3, 8, 7, 51, 0, 0, time.UTC)),
 			},
 		},

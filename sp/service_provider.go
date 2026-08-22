@@ -49,6 +49,14 @@ type ServiceProvider struct {
 
 	// Security
 	InsecureSkipSignatureValidation bool
+
+	// InsecureAllowIDPInitiatedReplay accepts IdP-initiated responses without an
+	// AssertionReplayCache, and ignores saml:OneTimeUse when nothing else bounds
+	// reuse. A captured unsolicited response can then be replayed for as long as
+	// its assertion is valid, each replay minting a fresh session. Configure
+	// AssertionReplayCache instead; this exists for deployments that knowingly
+	// accept that risk.
+	InsecureAllowIDPInitiatedReplay bool
 	AllowSHA1                       bool
 	ValidateEncryptionCert          bool
 	AllowIDPInitiated               bool
@@ -62,6 +70,14 @@ type ServiceProvider struct {
 	ClockSkew      time.Duration
 	AudienceURIs   []string
 	RequestTracker RequestTracker
+
+	// AssertionReplayCache records accepted assertion IDs so a bearer assertion
+	// authenticates at most once. RequestTracker only bounds solicited flows, by
+	// consuming the request ID a response answers; an unsolicited
+	// (IdP-initiated) response has no request ID, so replay can only be
+	// prevented by remembering assertion IDs. Required when AllowIDPInitiated is
+	// set, and to honour saml:OneTimeUse.
+	AssertionReplayCache AssertionReplayCache
 
 	// Request building
 	RequestedAuthnContext *saml2.RequestedAuthnContext
