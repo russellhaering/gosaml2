@@ -19,7 +19,9 @@ import (
 	"compress/flate"
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -54,7 +56,7 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 		return nil, err
 	}
 
-	verified, err := idp.verifyPOSTSignature(sp, el)
+	verified, err := idp.verifyPOSTSignature(sp, el, sp.RequireSignedAuthnRequests)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +102,9 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 // verification path; without one, RequireSignedAuthnRequests was enforced on
 // the Redirect binding only and a peer could strip the signature simply by
 // switching bindings.
-func (idp *IdentityProvider) verifyPOSTSignature(sp *SPConfig, el *xmltree.Element) (*xmltree.Element, error) {
+func (idp *IdentityProvider) verifyPOSTSignature(sp *SPConfig, el *xmltree.Element, required bool) (*xmltree.Element, error) {
 	if len(sp.SigningCertificates) == 0 {
-		if sp.RequireSignedAuthnRequests {
+		if required {
 			return nil, &saml2.ValidationError{
 				Reason: saml2.ErrBadSignature,
 				Detail: "SP is required to sign requests but has no signing certificates configured",
@@ -120,7 +122,7 @@ func (idp *IdentityProvider) verifyPOSTSignature(sp *SPConfig, el *xmltree.Eleme
 
 	result, err := verifier.Verify(el)
 	if missing, err := saml2.IsSignatureMissing(err); missing {
-		if sp.RequireSignedAuthnRequests {
+		if required {
 			return nil, &saml2.ValidationError{
 				Reason: saml2.ErrMissingSignature,
 				Detail: "SP is required to sign requests but no signature was provided",
@@ -345,23 +347,68 @@ func (idp *IdentityProvider) verifyRedirectSignature(sp *SPConfig, samlRequest, 
 		}
 	}
 
+	// The SigAlg URI names both a hash and a key family. Bind to the declared
+	// family so a signature is only ever checked against a certificate of the
+	// matching key type, as the SP-side redirect verifier does.
+	expectedKeyType := saml2.SignatureAlgorithmKeyType(sigAlg)
+	if expectedKeyType == x509.UnknownPublicKeyAlgorithm {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrBadSignature,
+			Detail: fmt.Sprintf("unsupported or unrecognized signature algorithm: %s", sigAlg),
+		}
+	}
+
 	input := saml2.SignatureInputString(samlRequest, relayState, sigAlg)
 
 	h := hash.New()
 	h.Write([]byte(input))
 	digest := h.Sum(nil)
 
+	now := idp.now()
+
+	var lastErr error
 	for _, cert := range sp.SigningCertificates {
+		if cert.PublicKeyAlgorithm != expectedKeyType {
+			lastErr = fmt.Errorf("certificate key type %v does not match signature algorithm %s",
+				cert.PublicKeyAlgorithm, sigAlg)
+			continue
+		}
+
+		// Reject certificates outside their validity window. Every other
+		// certificate-based verification path in the library enforces this
+		// (sp.verifyRedirectSignature and dsig.Verifier), and without it a
+		// retired SP signing key keeps producing acceptable requests forever,
+		// so expiry stops being a way to revoke one.
+		if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+			lastErr = fmt.Errorf("SP certificate is not valid at this time (notBefore=%s, notAfter=%s)",
+				cert.NotBefore, cert.NotAfter)
+			continue
+		}
+
 		switch pub := cert.PublicKey.(type) {
 		case *rsa.PublicKey:
 			if err := rsa.VerifyPKCS1v15(pub, hash, digest, sigBytes); err == nil {
 				return nil
 			}
+			lastErr = fmt.Errorf("RSA signature verification failed")
+
+		case *ecdsa.PublicKey:
+			if ecdsa.VerifyASN1(pub, digest, sigBytes) {
+				return nil
+			}
+			lastErr = fmt.Errorf("ECDSA signature verification failed")
+
+		default:
+			lastErr = fmt.Errorf("unsupported public key type: %T", pub)
 		}
 	}
 
+	detail := "redirect signature verification failed with all configured certificates"
+	if lastErr != nil {
+		detail = fmt.Sprintf("%s: %v", detail, lastErr)
+	}
 	return &saml2.ValidationError{
 		Reason: saml2.ErrBadSignature,
-		Detail: "redirect signature verification failed with all configured certificates",
+		Detail: detail,
 	}
 }
