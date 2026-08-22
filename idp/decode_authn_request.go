@@ -41,14 +41,36 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 		}
 	}
 
-	req, err := idp.decodeAuthnRequest(raw)
+	el, req, err := idp.decodeAuthnRequest(raw)
 	if err != nil {
 		return nil, err
 	}
 
+	// The Issuer is needed to find the SP whose certificates verify the
+	// signature, so it is necessarily read before verification. Everything
+	// used for an access decision is re-read from the verified element below.
 	sp, err := idp.lookupSP(req.Issuer)
 	if err != nil {
 		return nil, err
+	}
+
+	verified, err := idp.verifyPOSTSignature(sp, el)
+	if err != nil {
+		return nil, err
+	}
+
+	if verified != nil {
+		if _, req, err = idp.decodeAuthnRequestElement(verified); err != nil {
+			return nil, err
+		}
+		// A signature only vouches for the SP that produced it: reject a
+		// message whose signed Issuer is not the one whose key signed it.
+		if req.Issuer != sp.EntityID {
+			return nil, &saml2.ValidationError{
+				Reason: saml2.ErrBadIssuer,
+				Detail: fmt.Sprintf("signed AuthnRequest Issuer %s does not match signing SP %s", req.Issuer, sp.EntityID),
+			}
+		}
 	}
 
 	if err := idp.validateAuthnRequestAttributes(req); err != nil {
@@ -68,6 +90,53 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestPOST(_ context.Context, 
 	}, nil
 }
 
+// verifyPOSTSignature verifies the enveloped XML signature on a POST-binding
+// message from sp. It returns the element reconstructed from the bytes that
+// were actually signed, or nil when the message is legitimately unsigned
+// (the SP does not require signed requests and carries no signature).
+//
+// The HTTP-POST binding carries an enveloped XML-DSig signature rather than
+// the HTTP-Redirect binding's signed query string, so it needs its own
+// verification path; without one, RequireSignedAuthnRequests was enforced on
+// the Redirect binding only and a peer could strip the signature simply by
+// switching bindings.
+func (idp *IdentityProvider) verifyPOSTSignature(sp *SPConfig, el *xmltree.Element) (*xmltree.Element, error) {
+	if len(sp.SigningCertificates) == 0 {
+		if sp.RequireSignedAuthnRequests {
+			return nil, &saml2.ValidationError{
+				Reason: saml2.ErrBadSignature,
+				Detail: "SP is required to sign requests but has no signing certificates configured",
+			}
+		}
+		// Nothing to verify against, and nothing required.
+		return nil, nil
+	}
+
+	verifier := &dsig.Verifier{
+		TrustedCerts: sp.SigningCertificates,
+		AllowSHA1:    idp.AllowSHA1,
+		Clock:        idp.now,
+	}
+
+	result, err := verifier.Verify(el)
+	if missing, err := saml2.IsSignatureMissing(err); missing {
+		if sp.RequireSignedAuthnRequests {
+			return nil, &saml2.ValidationError{
+				Reason: saml2.ErrMissingSignature,
+				Detail: "SP is required to sign requests but no signature was provided",
+			}
+		}
+		return nil, nil
+	} else if err != nil {
+		return nil, &saml2.ValidationError{
+			Reason: saml2.ErrBadSignature,
+			Detail: err.Error(),
+		}
+	}
+
+	return result.Element, nil
+}
+
 // ValidateEncodedAuthnRequestRedirect decodes and validates an AuthnRequest
 // received via the HTTP-Redirect binding. The samlRequest, relayState, sigAlg,
 // and signature parameters come from the query string. It verifies the redirect
@@ -78,7 +147,7 @@ func (idp *IdentityProvider) ValidateEncodedAuthnRequestRedirect(_ context.Conte
 		return nil, err
 	}
 
-	req, err := idp.decodeAuthnRequest(raw)
+	_, req, err := idp.decodeAuthnRequest(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -154,24 +223,30 @@ func (idp *IdentityProvider) decodeRedirectRequest(samlRequest string) ([]byte, 
 	return raw, nil
 }
 
-func (idp *IdentityProvider) decodeAuthnRequest(raw []byte) (*ReceivedAuthnRequest, error) {
+func (idp *IdentityProvider) decodeAuthnRequest(raw []byte) (*xmltree.Element, *ReceivedAuthnRequest, error) {
 	doc, err := xmltree.Parse(raw)
 	if err != nil {
-		return nil, &saml2.ValidationError{
+		return nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML validation failed: %v", err),
 		}
 	}
 
-	req, err := receivedAuthnRequestFromElement(doc.Root())
+	return idp.decodeAuthnRequestElement(doc.Root())
+}
+
+// decodeAuthnRequestElement extracts a ReceivedAuthnRequest from an already
+// parsed element.
+func (idp *IdentityProvider) decodeAuthnRequestElement(el *xmltree.Element) (*xmltree.Element, *ReceivedAuthnRequest, error) {
+	req, err := receivedAuthnRequestFromElement(el)
 	if err != nil {
-		return nil, &saml2.ValidationError{
+		return nil, nil, &saml2.ValidationError{
 			Reason: saml2.ErrMalformed,
 			Detail: fmt.Sprintf("XML unmarshal error: %v", err),
 		}
 	}
 
-	return req, nil
+	return el, req, nil
 }
 
 func (idp *IdentityProvider) validateAuthnRequestAttributes(req *ReceivedAuthnRequest) error {
