@@ -41,8 +41,8 @@ func main() {
 
 	// Step 2: Configure the Identity Provider with a known SP.
 	identity := &idp.IdentityProvider{
-		EntityID:       "http://localhost:9090/metadata",
-		SSOURL:         "http://localhost:9090/sso",
+		EntityID:        "http://localhost:9090/metadata",
+		SSOURL:          "http://localhost:9090/sso",
 		SigningKeyStore: signingKey,
 		SignResponses:   true,
 		SignAssertions:  true,
