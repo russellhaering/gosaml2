@@ -2,7 +2,6 @@ package xmldsig
 
 import (
 	"bytes"
-	"sort"
 
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
@@ -171,7 +170,7 @@ func canonicalPrepInner(ne *xmltree.Element, seenSoFar map[string]string, strip 
 		_seenSoFar[k] = v
 	}
 
-	sort.Sort(SortedAttrs(ne.Attr))
+	SortAttrs(ne.Attr)
 	n := 0
 	for _, attr := range ne.Attr {
 		if attr.Space != nsSpace && !(attr.Space == "" && attr.Key == nsSpace) {

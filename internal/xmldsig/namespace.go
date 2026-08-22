@@ -3,7 +3,6 @@ package xmldsig
 import (
 	"errors"
 	"fmt"
-	"sort"
 
 	xmltree "github.com/russellhaering/gosaml2/v2/internal/xmltree"
 )
@@ -234,7 +233,7 @@ func NSDetach(ctx NSContext, el *xmltree.Element) (*xmltree.Element, error) {
 		}
 	}
 
-	sort.Sort(SortedAttrs(attrs))
+	SortAttrs(attrs)
 
 	el.Attr = attrs
 
