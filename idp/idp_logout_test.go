@@ -31,6 +31,10 @@ func buildTestLogoutRequestXML(id, issuer, destination, nameID, sessionIndex str
 
 func TestValidateEncodedLogoutRequestPOST(t *testing.T) {
 	idp, _ := testIdentityProvider(t)
+	// This case covers decoding and field extraction, not the signature
+	// requirement, so it opts out of it explicitly. The default (signature
+	// required) is covered in post_signature_test.go.
+	idp.ServiceProviders["https://sp.test/metadata"].AllowUnsignedLogoutRequests = true
 
 	xmlStr := buildTestLogoutRequestXML("_logout123", "https://sp.test/metadata", "https://idp.test/slo", "user@example.com", "_session456")
 	encoded := base64.StdEncoding.EncodeToString([]byte(xmlStr))
@@ -76,6 +80,8 @@ func TestValidateEncodedLogoutRequestPOST_InvalidBase64(t *testing.T) {
 
 func TestValidateEncodedLogoutRequestRedirect(t *testing.T) {
 	idp, _ := testIdentityProvider(t)
+	// As above: decoding coverage, not the signature requirement.
+	idp.ServiceProviders["https://sp.test/metadata"].AllowUnsignedLogoutRequests = true
 
 	xmlStr := buildTestLogoutRequestXML("_logout789", "https://sp.test/metadata", "https://idp.test/slo", "user@example.com", "_session456")
 	encoded := encodeAuthnRequestRedirect(xmlStr) // reuse DEFLATE+base64 encoding

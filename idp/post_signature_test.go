@@ -15,12 +15,19 @@
 package idp
 
 import (
+	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"math/big"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	saml2 "github.com/russellhaering/gosaml2/v2"
 	"github.com/russellhaering/gosaml2/v2/internal/testutil/require"
@@ -171,4 +178,212 @@ func TestLogoutRequestPOSTAcceptsValidSignature(t *testing.T) {
 	require.Equal(t, "_logout1", req.ID)
 	require.Equal(t, "victim@example.com", req.NameID.Value)
 	require.Equal(t, postTestSPEntityID, spc.EntityID)
+}
+
+// --- certificate validity on the redirect binding --------------------------
+
+// certKeyStore builds a key whose certificate is valid over [from, to).
+func certKeyStore(t *testing.T, from, to time.Time) (*saml2.KeyStore, *x509.Certificate) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(11),
+		NotBefore:             from,
+		NotAfter:              to,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return &saml2.KeyStore{Signer: key, Cert: der}, cert
+}
+
+// signRedirectQuery signs the redirect-binding query string for paramName.
+func signRedirectQuery(t *testing.T, key *rsa.PrivateKey, paramName, msg, relayState string) (string, string) {
+	t.Helper()
+	sigAlg := saml2.SignatureMethodIdentifier(key, crypto.SHA256)
+	var buf bytes.Buffer
+	buf.WriteString(url.QueryEscape(paramName) + "=" + url.QueryEscape(msg))
+	if relayState != "" {
+		buf.WriteString("&" + url.QueryEscape("RelayState") + "=" + url.QueryEscape(relayState))
+	}
+	buf.WriteString("&" + url.QueryEscape("SigAlg") + "=" + url.QueryEscape(sigAlg))
+	h := crypto.SHA256.New()
+	h.Write(buf.Bytes())
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, h.Sum(nil))
+	require.NoError(t, err)
+	return sigAlg, base64.StdEncoding.EncodeToString(sig)
+}
+
+// TestRedirectRejectsExpiredSPCertificate is the regression test for the IdP
+// redirect verifier skipping the certificate validity window. Every other
+// certificate-based verification path in the library enforces it, so without
+// this a retired SP signing key stays usable forever and expiry cannot revoke.
+func TestRedirectRejectsExpiredSPCertificate(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-2000*24*time.Hour), testTime.Add(-1000*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.RequireSignedAuthnRequests = true
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	xmlStr := buildTestAuthnRequestXML("_req1", postTestSPEntityID, idp.SSOURL, "https://sp.test/acs")
+	msg := encodeAuthnRequestRedirect(xmlStr)
+	sigAlg, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	_, err := idp.ValidateEncodedAuthnRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
+}
+
+// TestRedirectRejectsNotYetValidSPCertificate covers the other end of the window.
+func TestRedirectRejectsNotYetValidSPCertificate(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(1000*24*time.Hour), testTime.Add(2000*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.RequireSignedAuthnRequests = true
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	xmlStr := buildTestAuthnRequestXML("_req1", postTestSPEntityID, idp.SSOURL, "https://sp.test/acs")
+	msg := encodeAuthnRequestRedirect(xmlStr)
+	sigAlg, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	_, err := idp.ValidateEncodedAuthnRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
+}
+
+// TestRedirectAcceptsCurrentSPCertificate confirms the validity check did not
+// simply break the redirect binding.
+func TestRedirectAcceptsCurrentSPCertificate(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.RequireSignedAuthnRequests = true
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	xmlStr := buildTestAuthnRequestXML("_req1", postTestSPEntityID, idp.SSOURL, "https://sp.test/acs")
+	msg := encodeAuthnRequestRedirect(xmlStr)
+	sigAlg, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	info, err := idp.ValidateEncodedAuthnRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.NoError(t, err)
+	require.Equal(t, "_req1", info.ID)
+}
+
+// TestRedirectExpiredCertificateRejectedOnLogout covers the SLO path, where an
+// expired key would otherwise forge session termination.
+func TestRedirectExpiredCertificateRejectedOnLogout(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-2000*24*time.Hour), testTime.Add(-1000*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	msg := encodeAuthnRequestRedirect(postTestLogoutRequestXML(idp, "victim@example.com"))
+	sigAlg, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
+}
+
+// TestRedirectRejectsKeyTypeMismatch pins the SigAlg-to-key-family binding, so
+// a signature is only ever checked against a matching certificate.
+func TestRedirectRejectsKeyTypeMismatch(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.RequireSignedAuthnRequests = true
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	xmlStr := buildTestAuthnRequestXML("_req1", postTestSPEntityID, idp.SSOURL, "https://sp.test/acs")
+	msg := encodeAuthnRequestRedirect(xmlStr)
+	_, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	// Claim ECDSA while presenting an RSA signature against an RSA certificate.
+	_, err := idp.ValidateEncodedAuthnRequestRedirect(context.Background(), msg, "",
+		"http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256", sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
+}
+
+// --- logout signatures required by default ---------------------------------
+
+// TestLogoutRedirectRequiresSignatureByDefault is the regression test for
+// signature stripping on the redirect SLO binding: verification used to be
+// gated on the AuthnRequest signing flag, so with its default of false an
+// attacker just omitted SigAlg/Signature.
+func TestLogoutRedirectRequiresSignatureByDefault(t *testing.T) {
+	idp, _ := signingTestIdP(t)
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	require.False(t, spc.RequireSignedAuthnRequests)
+	require.False(t, spc.AllowUnsignedLogoutRequests)
+
+	msg := encodeAuthnRequestRedirect(postTestLogoutRequestXML(idp, "victim@example.com"))
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", "", "")
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrMissingSignature)
+}
+
+// TestLogoutPOSTRequiresSignatureByDefault is the same for the POST binding:
+// the requirement must not depend on the AuthnRequest signing flag either.
+func TestLogoutPOSTRequiresSignatureByDefault(t *testing.T) {
+	idp, _ := signingTestIdP(t)
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	require.False(t, spc.RequireSignedAuthnRequests)
+
+	encoded := base64.StdEncoding.EncodeToString([]byte(postTestLogoutRequestXML(idp, "victim@example.com")))
+
+	_, _, err := idp.ValidateEncodedLogoutRequestPOST(context.Background(), encoded)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrMissingSignature)
+}
+
+// TestLogoutRedirectAcceptsValidSignature confirms the signed redirect path works.
+func TestLogoutRedirectAcceptsValidSignature(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	ks, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	idp.ServiceProviders[postTestSPEntityID].SigningCertificates = []*x509.Certificate{cert}
+
+	msg := encodeAuthnRequestRedirect(postTestLogoutRequestXML(idp, "victim@example.com"))
+	sigAlg, sig := signRedirectQuery(t, ks.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "relay1")
+
+	req, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "relay1", sigAlg, sig)
+	require.NoError(t, err)
+	require.Equal(t, "_logout1", req.ID)
+}
+
+// TestLogoutUnsignedAllowedOnlyWithExplicitOptIn documents the escape hatch.
+func TestLogoutUnsignedAllowedOnlyWithExplicitOptIn(t *testing.T) {
+	idp, _ := signingTestIdP(t)
+	idp.ServiceProviders[postTestSPEntityID].AllowUnsignedLogoutRequests = true
+
+	msg := encodeAuthnRequestRedirect(postTestLogoutRequestXML(idp, "victim@example.com"))
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", "", "")
+	require.NoError(t, err)
+
+	encoded := base64.StdEncoding.EncodeToString([]byte(postTestLogoutRequestXML(idp, "victim@example.com")))
+	_, _, err = idp.ValidateEncodedLogoutRequestPOST(context.Background(), encoded)
+	require.NoError(t, err)
+}
+
+// TestLogoutOptInStillRejectsBadSignature confirms the opt-out only permits an
+// ABSENT signature, not an invalid one.
+func TestLogoutOptInStillRejectsBadSignature(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+	_, cert := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	otherKS, _ := certKeyStore(t, testTime.Add(-time.Hour), testTime.Add(365*24*time.Hour))
+	spc := idp.ServiceProviders[postTestSPEntityID]
+	spc.AllowUnsignedLogoutRequests = true
+	spc.SigningCertificates = []*x509.Certificate{cert}
+
+	msg := encodeAuthnRequestRedirect(postTestLogoutRequestXML(idp, "victim@example.com"))
+	sigAlg, sig := signRedirectQuery(t, otherKS.Signer.(*rsa.PrivateKey), "SAMLRequest", msg, "")
+
+	_, _, err := idp.ValidateEncodedLogoutRequestRedirect(context.Background(), msg, "", sigAlg, sig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrBadSignature)
 }

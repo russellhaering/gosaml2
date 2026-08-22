@@ -56,7 +56,7 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestPOST(_ context.Context,
 		return nil, nil, err
 	}
 
-	verified, err := idp.verifyPOSTSignature(sp, el)
+	verified, err := idp.verifyPOSTSignature(sp, el, !sp.AllowUnsignedLogoutRequests)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -92,11 +92,15 @@ func (idp *IdentityProvider) ValidateEncodedLogoutRequestRedirect(_ context.Cont
 		return nil, nil, err
 	}
 
-	if sp.RequireSignedAuthnRequests || signature != "" {
+	// A LogoutRequest requires a signature regardless of the AuthnRequest
+	// signing flag. Gating on that flag let an attacker strip SigAlg/Signature
+	// and have a forged session-terminating message accepted in the default
+	// configuration.
+	if !sp.AllowUnsignedLogoutRequests || signature != "" {
 		if signature == "" {
 			return nil, nil, &saml2.ValidationError{
 				Reason: saml2.ErrMissingSignature,
-				Detail: "SP is required to sign requests but no signature was provided",
+				Detail: "LogoutRequests must be signed but no signature was provided",
 			}
 		}
 		if err := idp.verifyRedirectSignature(sp, samlRequest, relayState, sigAlg, signature); err != nil {

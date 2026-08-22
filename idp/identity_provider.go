@@ -61,6 +61,14 @@ type SPConfig struct {
 	EncryptAssertions          bool
 	EncryptionAlgorithm        string
 	RequireSignedAuthnRequests bool
+
+	// AllowUnsignedLogoutRequests permits LogoutRequests from this SP to be
+	// accepted without a valid signature. It defaults to false: unlike
+	// AuthnRequests, which SAML does not require to be signed, LogoutRequests
+	// are session-terminating messages that the SAML Single Logout profile
+	// expects to be signed on front-channel bindings, so a signature is
+	// required unless this is explicitly set.
+	AllowUnsignedLogoutRequests bool
 }
 
 // AuthnRequestInfo contains the parsed and validated AuthnRequest data.
