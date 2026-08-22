@@ -13,8 +13,8 @@ type Canonicalizer = dsig.Canonicalizer
 var (
 	MakeC14N10ExclusiveCanonicalizerWithPrefixList             = dsig.MakeC14N10ExclusiveCanonicalizerWithPrefixList
 	MakeC14N10ExclusiveWithCommentsCanonicalizerWithPrefixList = dsig.MakeC14N10ExclusiveWithCommentsCanonicalizerWithPrefixList
-	MakeC14N11Canonicalizer                                   = dsig.MakeC14N11Canonicalizer
-	MakeC14N11WithCommentsCanonicalizer                       = dsig.MakeC14N11WithCommentsCanonicalizer
-	MakeC14N10RecCanonicalizer                                = dsig.MakeC14N10RecCanonicalizer
-	MakeC14N10WithCommentsCanonicalizer                       = dsig.MakeC14N10WithCommentsCanonicalizer
+	MakeC14N11Canonicalizer                                    = dsig.MakeC14N11Canonicalizer
+	MakeC14N11WithCommentsCanonicalizer                        = dsig.MakeC14N11WithCommentsCanonicalizer
+	MakeC14N10RecCanonicalizer                                 = dsig.MakeC14N10RecCanonicalizer
+	MakeC14N10WithCommentsCanonicalizer                        = dsig.MakeC14N10WithCommentsCanonicalizer
 )
