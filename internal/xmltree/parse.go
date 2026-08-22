@@ -89,6 +89,7 @@ func parse(data []byte, allowComments bool) (*Document, error) {
 		data:          normalizeLineEndings(string(data)),
 		allowComments: allowComments,
 		nsStack:       []nsBinding{{prefix: "xml", uri: xmlNamespaceURI}},
+		nsMap:         map[string]string{"xml": xmlNamespaceURI},
 	}
 	root, err := p.parseDocument()
 	if err != nil {
@@ -125,9 +126,15 @@ func normalizeLineEndings(s string) string {
 	return sb.String()
 }
 
+// nsBinding records a namespace declaration and the binding it shadowed, so
+// popping an element's frame can restore the enclosing scope without
+// rebuilding it.
 type nsBinding struct {
 	prefix string
 	uri    string
+
+	prevURI string // binding this declaration shadowed
+	prevOK  bool   // whether a shadowed binding existed
 }
 
 type parser struct {
@@ -136,10 +143,40 @@ type parser struct {
 	allowComments bool
 	nodeCount     int
 
-	// nsStack holds in-scope namespace bindings; frames records the stack
-	// length at each element start so bindings pop with their element.
+	// nsStack holds in-scope namespace bindings in declaration order and
+	// frames records the stack length at each element start, so bindings pop
+	// with their element. nsMap is the same scope indexed by prefix: prefix
+	// resolution happens once per element name and once per prefixed
+	// attribute, so it must not be a scan of the whole stack. The stack can
+	// legitimately hold maxDepth*maxAttrs bindings, which would otherwise let
+	// a document of stacked declarations plus many prefixed leaves cost
+	// bindings*lookups.
 	nsStack []nsBinding
+	nsMap   map[string]string
 	frames  []int
+}
+
+// pushNS declares prefix in the current frame, remembering any binding it
+// shadows so popFrame can restore it.
+func (p *parser) pushNS(prefix, uri string) {
+	prev, ok := p.nsMap[prefix]
+	p.nsStack = append(p.nsStack, nsBinding{prefix: prefix, uri: uri, prevURI: prev, prevOK: ok})
+	p.nsMap[prefix] = uri
+}
+
+// popFrame unwinds every binding declared at or above stack length n,
+// restoring what each shadowed. Unwinding in reverse order is what makes this
+// correct when one element redeclares a prefix that an ancestor also bound.
+func (p *parser) popFrame(n int) {
+	for i := len(p.nsStack) - 1; i >= n; i-- {
+		b := p.nsStack[i]
+		if b.prevOK {
+			p.nsMap[b.prefix] = b.prevURI
+		} else {
+			delete(p.nsMap, b.prefix)
+		}
+	}
+	p.nsStack = p.nsStack[:n]
 }
 
 func (p *parser) errf(format string, args ...any) *ParseError {
@@ -363,7 +400,7 @@ func (p *parser) parseElement(depth int) (*Element, error) {
 	// attributes live until the element is closed.
 	p.frames = append(p.frames, len(p.nsStack))
 	defer func() {
-		p.nsStack = p.nsStack[:p.frames[len(p.frames)-1]]
+		p.popFrame(p.frames[len(p.frames)-1])
 		p.frames = p.frames[:len(p.frames)-1]
 	}()
 
@@ -487,7 +524,7 @@ func (p *parser) parseAttributes(el *Element) (bool, error) {
 			if err := p.checkNamespaceURI("", value); err != nil {
 				return false, err
 			}
-			p.nsStack = append(p.nsStack, nsBinding{prefix: "", uri: value})
+			p.pushNS("", value)
 		case space == "xmlns":
 			if local == "xmlns" {
 				return false, p.errf("the xmlns prefix cannot be declared")
@@ -498,7 +535,7 @@ func (p *parser) parseAttributes(el *Element) (bool, error) {
 			if err := p.checkNamespaceURI(local, value); err != nil {
 				return false, err
 			}
-			p.nsStack = append(p.nsStack, nsBinding{prefix: local, uri: value})
+			p.pushNS(local, value)
 		}
 
 		el.Attr = append(el.Attr, Attr{Space: space, Key: local, Value: value})
@@ -524,12 +561,8 @@ func (p *parser) checkNamespaceURI(prefix, uri string) error {
 
 // lookupPrefix resolves a namespace prefix against the current scope.
 func (p *parser) lookupPrefix(prefix string) (string, bool) {
-	for i := len(p.nsStack) - 1; i >= 0; i-- {
-		if p.nsStack[i].prefix == prefix {
-			return p.nsStack[i].uri, true
-		}
-	}
-	return "", false
+	uri, ok := p.nsMap[prefix]
+	return uri, ok
 }
 
 // checkNamespaces verifies, with the element's own declarations in scope,
