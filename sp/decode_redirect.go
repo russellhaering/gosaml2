@@ -181,6 +181,10 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponseRedirect(
 		return nil, err
 	}
 
+	if err := sp.validateLogoutResponseInResponseTo(ctx, response); err != nil {
+		return nil, err
+	}
+
 	return response, nil
 }
 

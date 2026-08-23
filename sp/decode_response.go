@@ -494,5 +494,9 @@ func (sp *ServiceProvider) ValidateEncodedLogoutResponsePOST(ctx context.Context
 		return nil, err
 	}
 
+	if err := sp.validateLogoutResponseInResponseTo(ctx, decodedResponse); err != nil {
+		return nil, err
+	}
+
 	return decodedResponse, nil
 }

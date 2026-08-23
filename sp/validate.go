@@ -381,6 +381,34 @@ func (sp *ServiceProvider) ValidateDecodedLogoutResponse(response *types.LogoutR
 	return nil
 }
 
+// validateLogoutResponseInResponseTo binds a LogoutResponse to a LogoutRequest
+// this service provider actually issued, and consumes the request ID so the
+// same response cannot complete a logout flow twice.
+//
+// This mirrors the login contract exactly: the application stores the ID of
+// each request it sends (the library generates but does not store them), and
+// the library consumes it when the matching response arrives. Without it a
+// LogoutResponse was accepted on the strength of its signature alone, so a
+// captured one -- or one naming a request that was never sent -- could complete
+// a pending logout flow.
+//
+// Doing nothing when no RequestTracker is configured keeps the same posture as
+// the login path, where correlation is likewise only possible with one.
+func (sp *ServiceProvider) validateLogoutResponseInResponseTo(ctx context.Context, response *types.LogoutResponse) error {
+	if sp.RequestTracker == nil {
+		return nil
+	}
+
+	if response.InResponseTo == "" {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrReplay,
+			Detail: "LogoutResponse has no InResponseTo to correlate with a pending LogoutRequest",
+		}
+	}
+
+	return sp.RequestTracker.ConsumeRequest(ctx, response.InResponseTo)
+}
+
 // ValidateDecodedLogoutRequest validates a previously decoded and
 // signature-verified LogoutRequest, checking issuer, destination, version,
 // and NotOnOrAfter expiry.
