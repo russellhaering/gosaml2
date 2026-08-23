@@ -122,10 +122,26 @@ func TestEnforce_Audience_AcceptedWhenMatchesAnyConfiguredURI(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEnforce_Audience_SkippedWhenNoAudienceURIsConfigured(t *testing.T) {
+// An unset AudienceURIs is a missing control, not a policy of "nothing to
+// check": the zero value used to disable audience validation silently, with no
+// error and no opt-in, while the documented default claimed enforcement.
+func TestEnforce_Audience_RejectedWhenNoAudienceURIsConfigured(t *testing.T) {
 	sp := setupSPWithTracker(t)
 	encoded := signAndEncode(t, buildCustomResponse(sp, replaceAudience(sp, "https://anything.example.com")), sp)
-	sp.AudienceURIs = nil // no configured audiences => check is skipped by design
+	sp.AudienceURIs = nil
+
+	_, err := sp.ValidateEncodedResponse(context.Background(), encoded)
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
+}
+
+// The escape hatch is explicit and named, for deployments relying on
+// SubjectConfirmationData.Recipient alone.
+func TestEnforce_Audience_SkippedOnlyWithExplicitOptIn(t *testing.T) {
+	sp := setupSPWithTracker(t)
+	encoded := signAndEncode(t, buildCustomResponse(sp, replaceAudience(sp, "https://anything.example.com")), sp)
+	sp.AudienceURIs = nil
+	sp.InsecureSkipAudienceValidation = true
 
 	_, err := sp.ValidateEncodedResponse(context.Background(), encoded)
 	require.NoError(t, err)

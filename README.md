@@ -130,10 +130,12 @@ gosaml2 v2 is secure by default:
 |---------|---------|----------|
 | SHA-1 signatures | **Rejected** | `AllowSHA1: true` |
 | Response/assertion signatures | **Required** | `InsecureSkipSignatureValidation: true` |
-| IDP-initiated SSO | **Rejected** | `AllowIDPInitiated: true` |
-| Unsigned logout requests | **Rejected** | `InsecureSkipSignatureValidation: true` |
+| IDP-initiated SSO | **Rejected** | `AllowIDPInitiated: true` (requires `AssertionReplayCache`) |
+| Assertion replay | **Rejected** (with `AssertionReplayCache`) | `InsecureAllowIDPInitiatedReplay: true` |
+| Unsigned logout requests (SP) | **Rejected** | `InsecureSkipSignatureValidation: true` |
+| Unsigned logout requests (IdP) | **Rejected** | `SPConfig.AllowUnsignedLogoutRequests: true` |
 | Conditions (NotBefore/NotOnOrAfter) | **Hard errors** | Not overridable |
-| Audience restriction | **Enforced** | Configure `AudienceURIs` |
+| Audience restriction | **Required** (set `AudienceURIs`) | `InsecureSkipAudienceValidation: true` |
 | Clock skew tolerance | **60 seconds** | `ClockSkew: duration` |
 
 ## Examples

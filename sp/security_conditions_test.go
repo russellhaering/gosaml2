@@ -456,8 +456,10 @@ func TestSecurityConditions_NoAudienceRestrictionRejected(t *testing.T) {
 	require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
 }
 
-// Test 17: SP has empty AudienceURIs slice - should skip audience validation.
-func TestSecurityConditions_EmptyAudienceURIsSkipsValidation(t *testing.T) {
+// Test 17: SP has an empty AudienceURIs slice. The zero value must not
+// silently disable the check -- an assertion naming a foreign audience is
+// rejected because the SP cannot verify it is an intended audience at all.
+func TestSecurityConditions_EmptyAudienceURIsRejected(t *testing.T) {
 	sp := setupSPWithTracker(t)
 
 	// Build the response first (before clearing AudienceURIs, since buildCustomResponse uses it)
@@ -474,7 +476,8 @@ func TestSecurityConditions_EmptyAudienceURIsSkipsValidation(t *testing.T) {
 
 	encoded := signAndEncode(t, responseXML, sp)
 	_, err := sp.RetrieveAssertionInfo(context.Background(), encoded)
-	require.NoError(t, err, "Empty AudienceURIs should skip audience validation entirely")
+	require.Error(t, err)
+	require.ErrorIs(t, err, saml2.ErrAudienceMismatch)
 }
 
 // Test 18: Multiple AudienceRestriction elements - AND semantics.

@@ -121,6 +121,10 @@ func TestEncryptedAssertion(t *testing.T) {
 		Clock:                           func() time.Time { return fakeTime },
 		AllowIDPInitiated:               true,
 		InsecureAllowIDPInitiatedReplay: true,
+		// Exercises decryption/compression against a captured fixture, not
+		// audience scoping, so it opts out explicitly rather than asserting a
+		// fixture audience.
+		InsecureSkipAudienceValidation: true,
 	}
 
 	bs, err := ioutil.ReadFile("../testdata/saml.post")
@@ -184,6 +188,10 @@ func TestCompressedResponse(t *testing.T) {
 		AllowSHA1:                       true,
 		AllowIDPInitiated:               true,
 		InsecureAllowIDPInitiatedReplay: true,
+		// Exercises decryption/compression against a captured fixture, not
+		// audience scoping, so it opts out explicitly rather than asserting a
+		// fixture audience.
+		InsecureSkipAudienceValidation: true,
 	}
 
 	_, err = sp.RetrieveAssertionInfo(context.Background(), string(bs))

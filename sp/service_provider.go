@@ -57,9 +57,18 @@ type ServiceProvider struct {
 	// AssertionReplayCache instead; this exists for deployments that knowingly
 	// accept that risk.
 	InsecureAllowIDPInitiatedReplay bool
-	AllowSHA1                       bool
-	ValidateEncryptionCert          bool
-	AllowIDPInitiated               bool
+
+	// InsecureSkipAudienceValidation accepts assertions without checking that
+	// this service provider is a named audience. Audience restriction is what
+	// scopes an assertion to a relying party, so skipping it means an assertion
+	// the IdP issued for a different party is accepted wherever the bearer
+	// confirmation's Recipient still matches -- notably a multi-tenant SP whose
+	// tenants share one ACS URL. Set AudienceURIs instead; this exists for
+	// deployments that knowingly rely on Recipient alone.
+	InsecureSkipAudienceValidation bool
+	AllowSHA1                      bool
+	ValidateEncryptionCert         bool
+	AllowIDPInitiated              bool
 
 	// Signing
 	SignAuthnRequests              bool

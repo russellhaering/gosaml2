@@ -1,6 +1,6 @@
 # Security Test Case Tracking Document
 
-This document tracks 335 security test cases for the gosaml2 library, organized across 7 categories. It was audited against the `v2` test suite after the original tracking effort. Each test case is classified by its current coverage:
+This document tracks 336 security test cases for the gosaml2 library, organized across 7 categories. It was audited against the `v2` test suite after the original tracking effort. Each test case is classified by its current coverage:
 
 - **Exists** -- A test that predates the tracking effort covers this scenario (or substantially overlaps).
 - **Implemented** -- A deterministic test added during the tracking effort exercises the scenario. This describes test coverage, not necessarily rejection: some tests intentionally assert supported or configurable behavior.
@@ -710,7 +710,7 @@ File references identify the test that provides the coverage. Rows may overlap w
 
 ---
 
-## Category 7: Algorithmic Complexity & Replay Hardening (25 tests)
+## Category 7: Algorithmic Complexity & Replay Hardening (26 tests)
 
 Cases added while auditing pre-authentication CPU cost and replay bounds. Every
 row is **Implemented**: each has a deterministic test, and each perf case was
@@ -751,7 +751,7 @@ Regression cover for the scope-sharing refactors that the cost fixes required.
 | 17 | Expired / not-yet-valid SP certificate rejected on redirect | Implemented | idp/post_signature_test.go (TestRedirectRejectsExpiredSPCertificate, TestRedirectRejectsNotYetValidSPCertificate) |
 | 18 | SigAlg bound to certificate key family | Implemented | idp/post_signature_test.go (TestRedirectRejectsKeyTypeMismatch) |
 
-### Replay bounds (19-25)
+### Replay bounds (19-26)
 
 | # | Name | Status | File |
 |---|------|--------|------|
@@ -762,6 +762,7 @@ Regression cover for the scope-sharing refactors that the cost fixes required.
 | 23 | Stale logout messages rejected on both sides | Implemented | sp/logout_freshness_test.go, idp/post_signature_test.go (TestIdPLogoutRequest*) |
 | 24 | Example code does not bootstrap trust over cleartext HTTP | Implemented | examples_transport_test.go |
 | 25 | LogoutResponse correlated to a pending LogoutRequest, consumed once | Implemented | sp/logout_response_correlation_test.go |
+| 26 | Unconfigured AudienceURIs fails closed rather than skipping the check | Implemented | sp/enforce_conditions_test.go (TestEnforce_Audience_RejectedWhenNoAudienceURIsConfigured), sp/security_conditions_test.go |
 
 ---
 
@@ -775,5 +776,5 @@ Regression cover for the scope-sharing refactors that the cost fixes required.
 | 4. Encryption / Decryption | 50 | 14 | 36 | 0 | 0 | 0 |
 | 5. Protocol / Binding | 50 | 20 | 19 | 3 | 8 | 0 |
 | 6. Edge Cases & Novel Attacks | 50 | 15 | 30 | 2 | 3 | 0 |
-| 7. Algorithmic Complexity & Replay Hardening | 25 | 0 | 25 | 0 | 0 | 0 |
-| **Total** | **335** | **104** | **192** | **23** | **16** | **0** |
+| 7. Algorithmic Complexity & Replay Hardening | 26 | 0 | 26 | 0 | 0 | 0 |
+| **Total** | **336** | **104** | **193** | **23** | **16** | **0** |

@@ -72,36 +72,50 @@ func (sp *ServiceProvider) validateAssertionConditions(assertion *types.Assertio
 		}
 	}
 
-	if len(sp.AudienceURIs) > 0 {
-		// An assertion with no AudienceRestriction at all is not scoped to any
-		// service provider. Treating that as "no restriction to check" would
-		// let an assertion the IdP never bound to this SP satisfy a configured
-		// audience policy, so require at least one restriction to be present.
-		if len(conditions.AudienceRestrictions) == 0 {
+	// Audience restriction is what scopes an assertion to a relying party, so
+	// an unset AudienceURIs is a missing security control rather than a policy
+	// of "nothing to check". Leaving it silently unenforced meant the zero
+	// value disabled the check with no error and no opt-in.
+	if len(sp.AudienceURIs) == 0 {
+		if !sp.InsecureSkipAudienceValidation {
 			return &saml2.ValidationError{
 				Reason: saml2.ErrAudienceMismatch,
-				Detail: "assertion has no AudienceRestriction",
+				Detail: "AudienceURIs is not configured, so this SP cannot verify it is an " +
+					"intended audience: set AudienceURIs, or InsecureSkipAudienceValidation " +
+					"to rely on SubjectConfirmationData.Recipient alone",
 			}
 		}
+		return nil
+	}
 
-		for _, audienceRestriction := range conditions.AudienceRestrictions {
-			matched := false
+	// An assertion with no AudienceRestriction at all is not scoped to any
+	// service provider. Treating that as "no restriction to check" would
+	// let an assertion the IdP never bound to this SP satisfy a configured
+	// audience policy, so require at least one restriction to be present.
+	if len(conditions.AudienceRestrictions) == 0 {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrAudienceMismatch,
+			Detail: "assertion has no AudienceRestriction",
+		}
+	}
 
-			for _, audience := range audienceRestriction.Audiences {
-				for _, uri := range sp.AudienceURIs {
-					if audience.Value == uri {
-						matched = true
-						break
-					}
-				}
-				if matched {
+	for _, audienceRestriction := range conditions.AudienceRestrictions {
+		matched := false
+
+		for _, audience := range audienceRestriction.Audiences {
+			for _, uri := range sp.AudienceURIs {
+				if audience.Value == uri {
+					matched = true
 					break
 				}
 			}
-
-			if !matched {
-				return &saml2.ValidationError{Reason: saml2.ErrAudienceMismatch}
+			if matched {
+				break
 			}
+		}
+
+		if !matched {
+			return &saml2.ValidationError{Reason: saml2.ErrAudienceMismatch}
 		}
 	}
 
