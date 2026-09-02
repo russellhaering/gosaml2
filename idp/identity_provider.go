@@ -107,6 +107,26 @@ func (idp *IdentityProvider) maxIssueInstantAge() time.Duration {
 	return 5 * time.Minute
 }
 
+// wantAuthnRequestsSigned reports what this IdP's published metadata should
+// advertise as WantAuthnRequestsSigned.
+//
+// Enforcement is per service provider (SPConfig.RequireSignedAuthnRequests), so
+// the only IdP-wide claim that cannot overstate it is "every SP I know of must
+// sign". This was previously hardcoded to true while nothing required a
+// signature by default, telling every SP that read the metadata its requests
+// would be authenticated when they would not be.
+func (idp *IdentityProvider) wantAuthnRequestsSigned() bool {
+	if len(idp.ServiceProviders) == 0 {
+		return false
+	}
+	for _, sp := range idp.ServiceProviders {
+		if sp == nil || !sp.RequireSignedAuthnRequests {
+			return false
+		}
+	}
+	return true
+}
+
 func (idp *IdentityProvider) assertionLifetime() time.Duration {
 	if idp.AssertionLifetime != 0 {
 		return idp.AssertionLifetime
@@ -208,6 +228,14 @@ func ConfigureFromSPMetadata(ed *types.EntityDescriptor) (*SPConfig, error) {
 
 	sp := &SPConfig{
 		EntityID: ed.EntityID,
+
+		// AuthnRequestsSigned is the SP's own declaration that it signs every
+		// AuthnRequest it issues. Dropping it left RequireSignedAuthnRequests
+		// at false, so an SP onboarded from metadata that promised signed
+		// requests -- and relies on that promise being checked -- had
+		// signatures treated as optional, and an attacker could strip them to
+		// choose the ACS endpoint, RelayState and request ID.
+		RequireSignedAuthnRequests: ed.SPSSODescriptor.AuthnRequestsSigned,
 	}
 
 	for _, acs := range ed.SPSSODescriptor.AssertionConsumerServices {

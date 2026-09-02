@@ -66,7 +66,7 @@ func (idp *IdentityProvider) Metadata() (*types.EntityDescriptor, error) {
 		EntityID:   idp.EntityID,
 		IDPSSODescriptor: &types.IDPSSODescriptor{
 			ProtocolSupportEnumeration: saml2.SAMLProtocolNamespace,
-			WantAuthnRequestsSigned:    true,
+			WantAuthnRequestsSigned:    idp.wantAuthnRequestsSigned(),
 			KeyDescriptors:             keyDescriptors,
 			NameIDFormats:              formats,
 			SingleSignOnServices:       ssoServices,

@@ -207,8 +207,37 @@ func TestConfigureFromSPMetadata(t *testing.T) {
 	require.Equal(t, "https://sp.test/metadata", spConfig.EntityID)
 	require.Equal(t, []string{"https://sp.test/acs"}, spConfig.ACSURLs)
 	require.Equal(t, []string{"https://sp.test/slo"}, spConfig.SLOURLs)
+	require.False(t, spConfig.RequireSignedAuthnRequests)
 
 	_ = certBytes
+}
+
+// TestConfigureFromSPMetadata_AuthnRequestsSigned covers the SP's declared
+// signing guarantee reaching the enforced configuration. Dropping it meant an
+// SP that published AuthnRequestsSigned="true" was onboarded with signatures
+// optional, so an attacker could strip them.
+func TestConfigureFromSPMetadata_AuthnRequestsSigned(t *testing.T) {
+	ed := &types.EntityDescriptor{
+		EntityID: "https://sp.test/metadata",
+		SPSSODescriptor: &types.SPSSODescriptor{
+			AuthnRequestsSigned: true,
+			AssertionConsumerServices: []types.IndexedEndpoint{
+				{Binding: saml2.BindingHttpPost, Location: "https://sp.test/acs", Index: 1},
+			},
+		},
+	}
+
+	xmlBytes, err := xml.Marshal(ed)
+	require.NoError(t, err)
+
+	var parsed types.EntityDescriptor
+	err = xml.Unmarshal(xmlBytes, &parsed)
+	require.NoError(t, err)
+	require.True(t, parsed.SPSSODescriptor.AuthnRequestsSigned)
+
+	spConfig, err := ConfigureFromSPMetadata(&parsed)
+	require.NoError(t, err)
+	require.True(t, spConfig.RequireSignedAuthnRequests)
 }
 
 func TestConfigureFromSPMetadata_NoSPDescriptor(t *testing.T) {
@@ -226,7 +255,12 @@ func TestIdentityProvider_Metadata(t *testing.T) {
 	require.Equal(t, "https://idp.test/metadata", md.EntityID)
 	require.NotNil(t, md.IDPSSODescriptor)
 	require.Equal(t, saml2.SAMLProtocolNamespace, md.IDPSSODescriptor.ProtocolSupportEnumeration)
-	require.True(t, md.IDPSSODescriptor.WantAuthnRequestsSigned)
+
+	// WantAuthnRequestsSigned reports what is actually enforced. The fixture's
+	// only SP does not require signed AuthnRequests, so advertising true would
+	// promise SPs a check that does not happen.
+	require.False(t, md.IDPSSODescriptor.WantAuthnRequestsSigned)
+
 	require.Len(t, md.IDPSSODescriptor.KeyDescriptors, 1)
 	require.Equal(t, "signing", md.IDPSSODescriptor.KeyDescriptors[0].Use)
 	require.Len(t, md.IDPSSODescriptor.SingleSignOnServices, 2)
@@ -238,6 +272,31 @@ func TestIdentityProvider_Metadata(t *testing.T) {
 
 	// ValidUntil should be 7 days from testTime
 	require.Equal(t, testTime.UTC().Add(7*24*time.Hour), md.ValidUntil)
+}
+
+// TestIdentityProvider_Metadata_WantAuthnRequestsSigned covers the advertisement
+// tracking enforcement. It was previously hardcoded to true while nothing
+// required a signature by default.
+func TestIdentityProvider_Metadata_WantAuthnRequestsSigned(t *testing.T) {
+	idp, _ := testIdentityProvider(t)
+
+	for _, sp := range idp.ServiceProviders {
+		sp.RequireSignedAuthnRequests = true
+	}
+
+	md, err := idp.Metadata()
+	require.NoError(t, err)
+	require.True(t, md.IDPSSODescriptor.WantAuthnRequestsSigned)
+
+	// A single SP that is not enforced makes the IdP-wide claim untrue again.
+	idp.ServiceProviders["https://lax.test/metadata"] = &SPConfig{
+		EntityID: "https://lax.test/metadata",
+		ACSURLs:  []string{"https://lax.test/acs"},
+	}
+
+	md, err = idp.Metadata()
+	require.NoError(t, err)
+	require.False(t, md.IDPSSODescriptor.WantAuthnRequestsSigned)
 }
 
 func TestIdentityProvider_Metadata_CustomNameIDFormats(t *testing.T) {
