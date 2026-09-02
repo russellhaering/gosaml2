@@ -68,11 +68,8 @@ func (sp *ServiceProvider) validateResponseAttributes(response *types.Response) 
 // validateLogoutResponseAttributes validates a SAML Response's tag and attributes. It does
 // not inspect child elements of the Response at all.
 func (sp *ServiceProvider) validateLogoutResponseAttributes(response *types.LogoutResponse) error {
-	if response.Destination != "" && response.Destination != sp.SLOURL {
-		return &saml2.ValidationError{
-			Reason: saml2.ErrBadDestination,
-			Detail: fmt.Sprintf("expected %s, got %s", sp.SLOURL, response.Destination),
-		}
+	if err := sp.validateLogoutDestination("LogoutResponse", response.Destination, response.SignatureValidated); err != nil {
+		return err
 	}
 
 	if response.Version != "2.0" {

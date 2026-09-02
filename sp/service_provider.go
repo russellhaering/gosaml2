@@ -66,9 +66,22 @@ type ServiceProvider struct {
 	// tenants share one ACS URL. Set AudienceURIs instead; this exists for
 	// deployments that knowingly rely on Recipient alone.
 	InsecureSkipAudienceValidation bool
-	AllowSHA1                      bool
-	ValidateEncryptionCert         bool
-	AllowIDPInitiated              bool
+
+	// InsecureAllowMissingLogoutDestination accepts a signed logout message
+	// that carries no Destination attribute. SAML requires a signed protocol
+	// message delivered through the user agent to name the endpoint it was sent
+	// to, so that a message signed for one endpoint cannot be forwarded to
+	// another; on the redirect binding the signature covers only the query
+	// parameters and not the URL the message arrived at, which leaves
+	// Destination as the only thing binding it to this SP. Without it a
+	// LogoutRequest the IdP signed for a sibling service provider in the same
+	// federation validates here as well. This exists for IdPs that omit the
+	// attribute.
+	InsecureAllowMissingLogoutDestination bool
+
+	AllowSHA1              bool
+	ValidateEncryptionCert bool
+	AllowIDPInitiated      bool
 
 	// Signing
 	SignAuthnRequests              bool

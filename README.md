@@ -134,6 +134,7 @@ gosaml2 v2 is secure by default:
 | Assertion replay | **Rejected** (with `AssertionReplayCache`) | `InsecureAllowIDPInitiatedReplay: true` |
 | Unsigned logout requests (SP) | **Rejected** | `InsecureSkipSignatureValidation: true` |
 | Unsigned logout requests (IdP) | **Rejected** | `SPConfig.AllowUnsignedLogoutRequests: true` |
+| Destination on signed logout messages | **Required** (must equal `SLOURL`) | `InsecureAllowMissingLogoutDestination: true` |
 | Conditions (NotBefore/NotOnOrAfter) | **Hard errors** | Not overridable |
 | Audience restriction | **Required** (set `AudienceURIs`) | `InsecureSkipAudienceValidation: true` |
 | Clock skew tolerance | **60 seconds** | `ClockSkew: duration` |

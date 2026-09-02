@@ -396,9 +396,11 @@ func TestVuln_SignatureBypassPartialParams(t *testing.T) {
 // VULNERABILITY 4: Missing Destination validation edge cases
 // ===========================================================================
 
-// TestVuln_RedirectLogoutResponse_EmptyDestination tests that a LogoutResponse
-// with an empty Destination is accepted. Per SAML spec, Destination is
-// recommended but the library only validates when it's non-empty.
+// TestVuln_RedirectLogoutResponse_EmptyDestination requires a signed
+// LogoutResponse to name the endpoint it was sent to. Per SAML Bindings
+// §3.4.5.2 Destination is REQUIRED on a signed message, and the redirect
+// signature covers only the query parameters, so without it nothing stops a
+// response signed for another SP being presented here.
 func TestVuln_RedirectLogoutResponse_EmptyDestination(t *testing.T) {
 	sp, key := redirectTestSP(t)
 
@@ -407,17 +409,19 @@ func TestVuln_RedirectLogoutResponse_EmptyDestination(t *testing.T) {
 	encoded := deflateAndEncode(t, xmlMsg)
 	sigAlg, sig := signRedirectParams(t, key, crypto.SHA256, "SAMLResponse", encoded, "")
 
-	resp, err := sp.ValidateEncodedLogoutResponseRedirect(
+	_, err := sp.ValidateEncodedLogoutResponseRedirect(
 		context.Background(), encoded, "", sigAlg, sig,
 	)
 
-	if err == nil {
-		t.Logf("WARNING: LogoutResponse with empty Destination was accepted. "+
-			"Per SAML Bindings §3.4.5.2, Destination is REQUIRED for signed messages. "+
-			"Accepting empty Destination allows message replay to other SPs. Resp=%+v", resp)
-	} else {
-		t.Logf("Rejected empty Destination: %v", err)
-	}
+	require.Error(t, err, "signed LogoutResponse with empty Destination should be rejected")
+	require.Contains(t, err.Error(), "no Destination attribute")
+
+	// The opt-out is available for IdPs that omit the attribute.
+	sp.InsecureAllowMissingLogoutDestination = true
+	_, err = sp.ValidateEncodedLogoutResponseRedirect(
+		context.Background(), encoded, "", sigAlg, sig,
+	)
+	require.NoError(t, err)
 }
 
 // TestVuln_RedirectLogoutResponse_WrongDestination tests that a wrong
@@ -438,7 +442,11 @@ func TestVuln_RedirectLogoutResponse_WrongDestination(t *testing.T) {
 	t.Logf("Correctly rejected wrong Destination: %v", err)
 }
 
-// TestVuln_RedirectLogoutRequest_EmptyDestination tests empty Destination on requests.
+// TestVuln_RedirectLogoutRequest_EmptyDestination requires a signed
+// LogoutRequest to name the endpoint it was sent to. This is the more damaging
+// direction: a validated LogoutRequest names a session the application then
+// terminates, so a request the IdP signed for a sibling SP must not validate
+// here.
 func TestVuln_RedirectLogoutRequest_EmptyDestination(t *testing.T) {
 	sp, key := redirectTestSP(t)
 
@@ -446,16 +454,18 @@ func TestVuln_RedirectLogoutRequest_EmptyDestination(t *testing.T) {
 	encoded := deflateAndEncode(t, xmlMsg)
 	sigAlg, sig := signRedirectParams(t, key, crypto.SHA256, "SAMLRequest", encoded, "")
 
-	req, err := sp.ValidateEncodedLogoutRequestRedirect(
+	_, err := sp.ValidateEncodedLogoutRequestRedirect(
 		context.Background(), encoded, "", sigAlg, sig,
 	)
 
-	if err == nil {
-		t.Logf("WARNING: LogoutRequest with empty Destination was accepted. "+
-			"This could allow message replay to other SPs. Req=%+v", req)
-	} else {
-		t.Logf("Rejected empty Destination: %v", err)
-	}
+	require.Error(t, err, "signed LogoutRequest with empty Destination should be rejected")
+	require.Contains(t, err.Error(), "no Destination attribute")
+
+	sp.InsecureAllowMissingLogoutDestination = true
+	_, err = sp.ValidateEncodedLogoutRequestRedirect(
+		context.Background(), encoded, "", sigAlg, sig,
+	)
+	require.NoError(t, err)
 }
 
 // ===========================================================================

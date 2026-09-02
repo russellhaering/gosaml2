@@ -350,6 +350,44 @@ func (sp *ServiceProvider) validateIssueInstant(kind string, issueInstant time.T
 	return nil
 }
 
+// validateLogoutDestination binds a logout message to this service provider's
+// SLO endpoint.
+//
+// SAML Core requires a signed protocol message delivered through the user agent
+// to carry a Destination attribute naming the endpoint it was sent to, and the
+// recipient to verify it matches, precisely so a signed message cannot be
+// forwarded to a different endpoint. Comparing Destination only when it was
+// present left nothing binding a signed logout message to this SP: on the
+// redirect binding the signature covers only SAMLRequest/RelayState/SigAlg and
+// not the URL the message was delivered to, so a message the IdP signed for a
+// sibling SP in the same federation validated here too, and a LogoutRequest
+// names the session the application then terminates.
+//
+// An unsigned message is left to the caller's own trust decision -- there is no
+// signature to forward in the first place.
+func (sp *ServiceProvider) validateLogoutDestination(kind, destination string, signatureValidated bool) error {
+	if destination == "" {
+		if !signatureValidated || sp.InsecureAllowMissingLogoutDestination {
+			return nil
+		}
+		return &saml2.ValidationError{
+			Reason: saml2.ErrBadDestination,
+			Detail: fmt.Sprintf("signed %s has no Destination attribute, so nothing binds it to this "+
+				"service provider's SLO endpoint %q (set InsecureAllowMissingLogoutDestination to accept it)",
+				kind, sp.SLOURL),
+		}
+	}
+
+	if destination != sp.SLOURL {
+		return &saml2.ValidationError{
+			Reason: saml2.ErrBadDestination,
+			Detail: fmt.Sprintf("expected %s, got %s", sp.SLOURL, destination),
+		}
+	}
+
+	return nil
+}
+
 // ValidateDecodedLogoutResponse validates a previously decoded and
 // signature-verified LogoutResponse, checking issuer, status, destination,
 // and version.

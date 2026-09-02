@@ -23,11 +23,8 @@ import (
 )
 
 func (sp *ServiceProvider) validateLogoutRequestAttributes(request *saml2.LogoutRequest) error {
-	if request.Destination != "" && request.Destination != sp.SLOURL {
-		return &saml2.ValidationError{
-			Reason: saml2.ErrBadDestination,
-			Detail: fmt.Sprintf("expected %s, got %s", sp.SLOURL, request.Destination),
-		}
+	if err := sp.validateLogoutDestination("LogoutRequest", request.Destination, request.SignatureValidated); err != nil {
+		return err
 	}
 
 	if request.Version != "2.0" {
